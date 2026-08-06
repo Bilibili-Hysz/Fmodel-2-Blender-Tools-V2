@@ -1,0 +1,7 @@
+step	area	status	evidence	finding
+baseline	workspace-navigation	observed	D:\~Vibe-Coding\Projects\Fmodel_Edited_UEformat\PROJECT_RELATIONSHIP_GRAPH.md; PROJECT_MAP.md	New relationship graph supersedes older map for repository and protocol boundaries.
+baseline	protocol-scope	observed	D:\~Vibe-Coding\Projects\Fmodel_Edited_UEformat\PROJECT_RELATIONSHIP_GRAPH.md	UEMODEL, UEANIM, and UEPose share portable skeleton identity; UEScene V1 still lacks a complete skeletal-resource graph.
+baseline	new-material-writer	observed	Fmodel_Edited_ueformat\CUE4Parse\CUE4Parse-Conversion\UEFormat\MaterialLinks; Materials\MaterialExporter2.cs	New UEMODEL material links include typed parameters, URI/embedded texture resources, source-slot mapping, and PBR interface roles.
+baseline	new-blender-reader	observed	io_scene_ueformat-fmodel\plugins\blender\io_scene_ueformat\importer\classes.py; fmodel.py; material_builder.py	Canonical Blender reader validates and consumes material links, texture locations, embedded data, and authoritative PBR roles.
+baseline	current-addon	observed	vendor\io_scene_ueformat\importer\classes.py; logic.py; Universal_tools\material	Current addon creates/reuses materials from LOD names and performs separate post-import JSON/filename inference; it does not consume material-link chunks.
+baseline	compatibility-risk	open	Current repository versus edited external repository	Replacing only the bundled vendor reader is insufficient; FModel wrapper, options, provenance, image ownership, rollback, and tests must be upgraded together.

@@ -1,0 +1,42 @@
+{
+    "version": "2.0",
+    "library_name": "Task7Probe",
+    "library_id": "65a16145-4e89-5025-b9a9-16f03c57342c",
+    "library_path": "F:\\Blender Scripts Github\\FModel-2-Blender-Tools\\investigation\\task7_verification\\output",
+    "blend_files": [
+        "Task7Probe_Hero.blend"
+    ],
+    "catalog_entries": [
+        {
+            "uuid": "33978063-9b57-5832-82f8-e42601c95282",
+            "path": "Hero/Locomotion",
+            "skeleton": "Hero",
+            "action_count": 1
+        }
+    ],
+    "assets": [
+        {
+            "action_name": "Idle",
+            "catalog_id": "33978063-9b57-5832-82f8-e42601c95282",
+            "skeleton": "Hero",
+            "blend_file": "Task7Probe_Hero.blend",
+            "thumbnail_path": ""
+        }
+    ],
+    "skeletons": [
+        "Hero"
+    ],
+    "bundles": [
+        {
+            "blend_file": "Task7Probe_Hero.blend",
+            "sidecar_file": "Task7Probe_Hero_manifest.json",
+            "skeletons": [
+                "Hero"
+            ],
+            "processed_sources": [
+                "Hero::Idle.ueanim"
+            ],
+            "completion_state": "completed"
+        }
+    ]
+}

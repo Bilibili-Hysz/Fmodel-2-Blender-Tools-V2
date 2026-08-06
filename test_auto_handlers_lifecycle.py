@@ -1,0 +1,333 @@
+"""Lifecycle ownership contracts for host-Python auto handlers."""
+
+import importlib.util
+import os
+import sys
+import types
+import unittest
+import builtins
+from unittest import mock
+
+
+ROOT = os.path.dirname(__file__)
+LIFECYCLE_REGISTRY_KEY = "_fmodel_tools_next_auto_handler_lifecycle"
+
+
+class FakeTimers:
+    def __init__(self):
+        self.registered = []
+        self.unregistered = []
+        self.callbacks = set()
+
+    def register(self, callback, *, first_interval):
+        self.registered.append((callback, first_interval))
+        self.callbacks.add(callback)
+
+    def unregister(self, callback):
+        self.unregistered.append(callback)
+        self.callbacks.remove(callback)
+
+    def fire(self, callback):
+        if callback not in self.callbacks:
+            return None
+        self.callbacks.remove(callback)
+        return callback()
+
+
+class FakeApp:
+    __slots__ = ("driver_namespace", "handlers", "timers")
+
+    def __init__(self, handlers, timers):
+        self.driver_namespace = {}
+        self.handlers = handlers
+        self.timers = timers
+
+
+class AutoHandlerLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        builtins.__dict__.pop(LIFECYCLE_REGISTRY_KEY, None)
+        self.previous_modules = {
+            name: sys.modules.get(name) for name in ("bpy", "bpy.app", "bpy.app.handlers")
+        }
+        self.timers = FakeTimers()
+        self.load_post = []
+        self.depsgraph_update_post = []
+        bpy = types.ModuleType("bpy")
+        handlers = types.ModuleType("bpy.app.handlers")
+        handlers.persistent = lambda callback: callback
+        handlers.load_post = self.load_post
+        handlers.depsgraph_update_post = self.depsgraph_update_post
+        bpy.app = FakeApp(handlers, self.timers)
+        bpy.context = types.SimpleNamespace(
+            scene=types.SimpleNamespace(), preferences=types.SimpleNamespace(addons={})
+        )
+        bpy.data = types.SimpleNamespace(objects={})
+        bpy.ops = types.SimpleNamespace(fmodel=types.SimpleNamespace(scan_anims=mock.Mock()))
+        bpy.types = types.SimpleNamespace()
+        sys.modules["bpy"] = bpy
+        sys.modules["bpy.app"] = types.ModuleType("bpy.app")
+        sys.modules["bpy.app.handlers"] = handlers
+        spec = importlib.util.spec_from_file_location("test_auto_handlers", os.path.join(ROOT, "auto_handlers.py"))
+        self.module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.module)
+
+    def tearDown(self):
+        builtins.__dict__.pop(LIFECYCLE_REGISTRY_KEY, None)
+        for name, module in self.previous_modules.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+
+    def test_register_replaces_stale_callbacks_and_unregisters_owned_timers(self):
+        stale = lambda _: None
+        unrelated = lambda _: None
+        stale._fmodel_owner = "fmodel_auto_handler"
+        self.load_post.extend([stale, unrelated])
+        self.module.register_handlers()
+        dependency_timer = self.timers.registered[-1][0]
+        self.module.on_file_load_post(None)
+        load_timer = self.timers.registered[-1][0]
+        self.module.unregister_handlers()
+        self.assertNotIn(stale, self.load_post)
+        self.assertIn(unrelated, self.load_post)
+        self.assertIn(dependency_timer, self.timers.unregistered)
+        self.assertIn(load_timer, self.timers.unregistered)
+
+    def test_register_persists_lifecycle_state_in_builtins_registry(self):
+        with self.assertRaises(AttributeError):
+            self.module.bpy.app.unsupported_lifecycle_state = object()
+
+        self.module.register_handlers()
+
+        state = builtins.__dict__[LIFECYCLE_REGISTRY_KEY]
+        self.assertEqual(state["generation"], self.module._lifecycle_generation)
+        self.assertIs(state["registered_timers"], self.module._registered_timers)
+        self.assertIs(state["vendor_registered"], self.module._vendor_registered)
+        self.assertIs(state["added_paths"], self.module._added_paths)
+        self.assertNotIn(LIFECYCLE_REGISTRY_KEY, self.module.bpy.app.driver_namespace)
+
+    def test_stale_timer_cannot_run_after_unregister_or_reload(self):
+        self.module.register_handlers()
+        stale_timer = self.timers.registered[-1][0]
+        self.module.unregister_handlers()
+        stale_timer()
+        self.module.bpy.ops.fmodel.scan_anims.assert_not_called()
+
+        spec = importlib.util.spec_from_file_location("reloaded_auto_handlers", os.path.join(ROOT, "auto_handlers.py"))
+        reloaded = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(reloaded)
+        reloaded.register_handlers()
+        stale_timer()
+        self.module.bpy.ops.fmodel.scan_anims.assert_not_called()
+
+    def test_reload_register_cancels_prior_generation_timers(self):
+        self.module.register_handlers()
+        old_timer = self.timers.registered[-1][0]
+
+        spec = importlib.util.spec_from_file_location(
+            "reloaded_auto_handlers", os.path.join(ROOT, "auto_handlers.py")
+        )
+        reloaded = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(reloaded)
+        reloaded.register_handlers()
+
+        dependency_timer = self.timers.registered[-1][0]
+        self.assertIn(old_timer, self.timers.unregistered)
+        self.assertEqual(reloaded._registered_timers, {dependency_timer})
+        self.assertEqual(self.timers.callbacks, {dependency_timer})
+
+    def test_reload_unregisters_prior_owned_timers_and_vendors_only(self):
+        self.module.register_handlers()
+        old_timer = self.timers.registered[-1][0]
+        vendor_path = os.path.join(ROOT, "vendor", "io_scene_ueformat")
+        vendor = types.SimpleNamespace(
+            __file__=os.path.join(vendor_path, "__init__.py"), unregister=mock.Mock()
+        )
+        self.module._vendor_registered["io_scene_ueformat"] = (vendor, vendor_path)
+        external_vendor = types.SimpleNamespace(unregister=mock.Mock())
+
+        spec = importlib.util.spec_from_file_location(
+            "reloaded_auto_handlers", os.path.join(ROOT, "auto_handlers.py")
+        )
+        reloaded = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(reloaded)
+        reloaded.unregister_handlers()
+
+        self.assertIn(old_timer, self.timers.unregistered)
+        vendor.unregister.assert_called_once_with()
+        external_vendor.unregister.assert_not_called()
+
+    def test_reload_unregisters_prior_owned_paths_only(self):
+        owned_path = os.path.join(ROOT, "owned-vendor-parent")
+        third_party_path = os.path.join(ROOT, "third-party-path")
+        sys.path.insert(0, third_party_path)
+        vendor = types.SimpleNamespace(
+            __name__="io_scene_ueformat", register=mock.Mock(), unregister=mock.Mock()
+        )
+        original_import = __import__
+        original_dirname = self.module.os.path.dirname
+        with (
+            mock.patch.object(
+                self.module.os.path,
+                "isdir",
+                side_effect=lambda path: path.endswith("io_scene_ueformat"),
+            ),
+            mock.patch.object(
+                self.module.os.path,
+                "dirname",
+                side_effect=lambda path: (
+                    owned_path if path.endswith("io_scene_ueformat")
+                    else original_dirname(path)
+                ),
+            ),
+            mock.patch.object(self.module, "_install_vendor_wheels"),
+            mock.patch(
+                "builtins.__import__",
+                side_effect=lambda name, *args, **kwargs: (
+                    vendor if name == "io_scene_ueformat" else
+                    original_import(name, *args, **kwargs)
+                ),
+            ),
+        ):
+            self.module._ensure_dependency_addons()
+        self.assertIn(owned_path, sys.path)
+
+        spec = importlib.util.spec_from_file_location(
+            "reloaded_auto_handlers", os.path.join(ROOT, "auto_handlers.py")
+        )
+        reloaded = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(reloaded)
+        reloaded.unregister_handlers()
+
+        self.assertNotIn(owned_path, sys.path)
+        self.assertIn(third_party_path, sys.path)
+        self.assertEqual(reloaded._added_paths, set())
+        sys.path.remove(third_party_path)
+
+    def test_register_is_idempotent_and_resets_debounce_state(self):
+        self.module._pending_scan = True
+        self.module.register_handlers()
+        generation = self.module._lifecycle_generation
+        timer = self.timers.registered[-1][0]
+        self.module.register_handlers()
+        self.assertFalse(self.module._pending_scan)
+        self.assertEqual(generation, self.module._lifecycle_generation)
+        self.assertEqual({timer}, self.timers.callbacks)
+
+    def test_preexisting_vendor_is_observed_not_unregistered(self):
+        vendor_path = os.path.join(ROOT, "vendor", "io_scene_ueformat")
+        vendor = types.SimpleNamespace(
+            __name__="io_scene_ueformat",
+            __file__=os.path.join(vendor_path, "__init__.py"),
+            register=mock.Mock(),
+            unregister=mock.Mock(),
+        )
+        self.module._vendor_already_in_registry = mock.Mock(return_value=True)
+        self.module._install_vendor_wheels = mock.Mock()
+        original_import = __import__
+        with (
+            mock.patch.object(self.module.os.path, "isdir", side_effect=lambda path: path == vendor_path),
+            mock.patch("builtins.__import__", side_effect=lambda name, *args, **kwargs: vendor if name == "io_scene_ueformat" else original_import(name, *args, **kwargs)),
+        ):
+            self.module._ensure_dependency_addons()
+            self.module._unregister_vendor_addons()
+        vendor.register.assert_not_called()
+        vendor.unregister.assert_not_called()
+        self.assertIn("io_scene_ueformat", self.module._vendor_observed)
+        self.assertNotIn("io_scene_ueformat", self.module._vendor_registered)
+
+    def test_external_same_name_vendor_is_never_owned(self):
+        vendor_path = os.path.join(ROOT, "vendor", "io_scene_ueformat")
+        vendor = types.SimpleNamespace(
+            __name__="io_scene_ueformat",
+            __file__=os.path.join(ROOT, "external-vendor", "io_scene_ueformat", "__init__.py"),
+            register=mock.Mock(),
+            unregister=mock.Mock(),
+        )
+        self.module._vendor_already_in_registry = mock.Mock(return_value=False)
+        self.module._install_vendor_wheels = mock.Mock()
+        original_import = __import__
+
+        with (
+            mock.patch.object(self.module.os.path, "isdir", side_effect=lambda path: path == vendor_path),
+            mock.patch(
+                "builtins.__import__",
+                side_effect=lambda name, *args, **kwargs: vendor if name == "io_scene_ueformat" else original_import(name, *args, **kwargs),
+            ),
+        ):
+            self.module._ensure_dependency_addons()
+            self.module._unregister_vendor_addons()
+
+        vendor.register.assert_not_called()
+        vendor.unregister.assert_not_called()
+        self.assertNotIn("io_scene_ueformat", self.module._vendor_registered)
+        self.assertNotIn("io_scene_ueformat", self.module._vendor_observed)
+
+    def test_reload_after_driver_namespace_clear_cleans_prior_lifecycle(self):
+        vendor_path = os.path.join(ROOT, "vendor", "io_scene_ueformat")
+        owned_path = os.path.join(ROOT, "owned-vendor-parent")
+        vendor = types.SimpleNamespace(
+            __name__="io_scene_ueformat",
+            __file__=os.path.join(vendor_path, "__init__.py"),
+            register=mock.Mock(),
+            unregister=mock.Mock(),
+        )
+        original_import = __import__
+        self.module.register_handlers()
+        module1_timer = self.timers.registered[-1][0]
+        original_dirname = self.module.os.path.dirname
+        with (
+            mock.patch.object(self.module.os.path, "isdir", side_effect=lambda path: path == vendor_path),
+            mock.patch.object(
+                self.module.os.path,
+                "dirname",
+                side_effect=lambda path: owned_path if path == vendor_path else original_dirname(path),
+            ),
+            mock.patch.object(self.module, "_install_vendor_wheels"),
+            mock.patch(
+                "builtins.__import__",
+                side_effect=lambda name, *args, **kwargs: vendor if name == "io_scene_ueformat" else original_import(name, *args, **kwargs),
+            ),
+        ):
+            self.module._ensure_dependency_addons()
+
+        self.module.bpy.app.driver_namespace.clear()
+        spec = importlib.util.spec_from_file_location(
+            "reloaded_auto_handlers", os.path.join(ROOT, "auto_handlers.py")
+        )
+        module2 = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module2)
+        module2.register_handlers()
+        module2.unregister_handlers()
+
+        self.assertIn(module1_timer, self.timers.unregistered)
+        vendor.unregister.assert_called_once_with()
+        self.assertNotIn(owned_path, sys.path)
+
+    def test_teardown_uses_original_bundled_vendor_object_after_name_substitution(self):
+        vendor_path = os.path.join(ROOT, "vendor", "io_scene_ueformat")
+        bundled_vendor = types.SimpleNamespace(
+            __name__="io_scene_ueformat",
+            __file__=os.path.join(vendor_path, "__init__.py"),
+            register=mock.Mock(),
+            unregister=mock.Mock(),
+        )
+        external_vendor = types.SimpleNamespace(
+            __name__="io_scene_ueformat",
+            __file__=os.path.join(ROOT, "external-vendor", "io_scene_ueformat", "__init__.py"),
+            unregister=mock.Mock(),
+        )
+        self.module._vendor_registered["io_scene_ueformat"] = (bundled_vendor, vendor_path)
+        previous_vendor = sys.modules.get("io_scene_ueformat")
+        sys.modules["io_scene_ueformat"] = external_vendor
+        try:
+            self.module._unregister_vendor_addons()
+        finally:
+            if previous_vendor is None:
+                sys.modules.pop("io_scene_ueformat", None)
+            else:
+                sys.modules["io_scene_ueformat"] = previous_vendor
+
+        bundled_vendor.unregister.assert_called_once_with()
+        external_vendor.unregister.assert_not_called()

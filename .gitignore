@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Blender
+*.blend1
+*.blend2
+
+# Temp
+*.tmp
+temp/
+
+# V2 local/recovery state (not source)
+.mimocode/
+backups/
+_pipeline_tmp/
+.pytest_cache/
+investigation/task7_verification/output/
+
+

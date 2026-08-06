@@ -1,0 +1,42 @@
+{
+    "version": "2.0",
+    "library_name": "Task7Probe",
+    "library_id": "65a16145-4e89-5025-b9a9-16f03c57342c",
+    "library_path": "F:\\Blender Scripts Github\\FModel-2-Blender-Tools\\investigation\\task7_verification\\repair_copy",
+    "blend_files": [
+        "Task7Probe_Hero.blend"
+    ],
+    "catalog_entries": [
+        {
+            "uuid": "15e49fe3-f23f-59d2-a456-1f57c7b73822",
+            "path": "Hero/Metadata Missing",
+            "skeleton": "Hero",
+            "action_count": 1
+        }
+    ],
+    "assets": [
+        {
+            "action_name": "WrongFallback",
+            "catalog_id": "15e49fe3-f23f-59d2-a456-1f57c7b73822",
+            "skeleton": "Hero",
+            "blend_file": "Task7Probe_Hero.blend",
+            "thumbnail_path": ""
+        }
+    ],
+    "skeletons": [
+        "Hero"
+    ],
+    "bundles": [
+        {
+            "blend_file": "Task7Probe_Hero.blend",
+            "sidecar_file": "Task7Probe_Hero_manifest.json",
+            "skeletons": [
+                "Hero"
+            ],
+            "processed_sources": [
+                "Hero::Idle.ueanim"
+            ],
+            "completion_state": "completed"
+        }
+    ]
+}

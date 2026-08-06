@@ -1,0 +1,65 @@
+{
+    "version": "1.0",
+    "library_name": "AnimLibrary",
+    "library_path": "G:\\Game assets\\UE AssetFiles\\SilverPalace（白银之城）\\SilverPalace\\Assets\\",
+    "blend_files": [
+        "AnimLibrary_SK_AlfDefault_U_Body01_Skeleton.blend"
+    ],
+    "catalog_entries": [
+        {
+            "uuid": "67cebfce-9324-5c55-93a8-9295cfd58e6a",
+            "path": "SK_AlfDefault_U_Body01_Skeleton/ArtRes/AnimRes/NPC/CustomizeNPC/Alf",
+            "action_count": 8
+        }
+    ],
+    "assets": [
+        {
+            "action_name": "AN_ActorAlf_N_remove_loop",
+            "catalog_id": "67cebfce-9324-5c55-93a8-9295cfd58e6a",
+            "blend_file": "AnimLibrary_SK_AlfDefault_U_Body01_Skeleton.blend",
+            "thumbnail_path": ".thumbnails/SK_AlfDefault_U_Body01_Skeleton/AN_ActorAlf_N_remove_loop_ba6f8715.webp"
+        },
+        {
+            "action_name": "AN_ActorAlf_N_search1",
+            "catalog_id": "67cebfce-9324-5c55-93a8-9295cfd58e6a",
+            "blend_file": "AnimLibrary_SK_AlfDefault_U_Body01_Skeleton.blend",
+            "thumbnail_path": ".thumbnails/SK_AlfDefault_U_Body01_Skeleton/AN_ActorAlf_N_search1_8d7659e7.webp"
+        },
+        {
+            "action_name": "AN_ActorAlf_N_think1",
+            "catalog_id": "67cebfce-9324-5c55-93a8-9295cfd58e6a",
+            "blend_file": "AnimLibrary_SK_AlfDefault_U_Body01_Skeleton.blend",
+            "thumbnail_path": ".thumbnails/SK_AlfDefault_U_Body01_Skeleton/AN_ActorAlf_N_think1_7f568b68.webp"
+        },
+        {
+            "action_name": "AN_ActorAlf_N_worry1",
+            "catalog_id": "67cebfce-9324-5c55-93a8-9295cfd58e6a",
+            "blend_file": "AnimLibrary_SK_AlfDefault_U_Body01_Skeleton.blend",
+            "thumbnail_path": ".thumbnails/SK_AlfDefault_U_Body01_Skeleton/AN_ActorAlf_N_worry1_f55535c3.webp"
+        },
+        {
+            "action_name": "AN_ActorAlf_N_remove_loop",
+            "catalog_id": "67cebfce-9324-5c55-93a8-9295cfd58e6a",
+            "blend_file": "AnimLibrary_SK_AlfDefault_U_Body01_Skeleton.blend",
+            "thumbnail_path": ".thumbnails/SK_AlfDefault_U_Body01_Skeleton/AN_ActorAlf_N_remove_loop_ba6f8715.webp"
+        },
+        {
+            "action_name": "AN_ActorAlf_N_search1",
+            "catalog_id": "67cebfce-9324-5c55-93a8-9295cfd58e6a",
+            "blend_file": "AnimLibrary_SK_AlfDefault_U_Body01_Skeleton.blend",
+            "thumbnail_path": ".thumbnails/SK_AlfDefault_U_Body01_Skeleton/AN_ActorAlf_N_search1_8d7659e7.webp"
+        },
+        {
+            "action_name": "AN_ActorAlf_N_think1",
+            "catalog_id": "67cebfce-9324-5c55-93a8-9295cfd58e6a",
+            "blend_file": "AnimLibrary_SK_AlfDefault_U_Body01_Skeleton.blend",
+            "thumbnail_path": ".thumbnails/SK_AlfDefault_U_Body01_Skeleton/AN_ActorAlf_N_think1_7f568b68.webp"
+        },
+        {
+            "action_name": "AN_ActorAlf_N_worry1",
+            "catalog_id": "67cebfce-9324-5c55-93a8-9295cfd58e6a",
+            "blend_file": "AnimLibrary_SK_AlfDefault_U_Body01_Skeleton.blend",
+            "thumbnail_path": ".thumbnails/SK_AlfDefault_U_Body01_Skeleton/AN_ActorAlf_N_worry1_f55535c3.webp"
+        }
+    ]
+}

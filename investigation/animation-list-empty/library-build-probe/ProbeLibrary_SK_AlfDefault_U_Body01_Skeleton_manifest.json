@@ -1,0 +1,17 @@
+{
+    "__processed_sources__": [
+        "SK_AlfDefault_U_Body01_Skeleton/ArtRes/Probe/Walk"
+    ],
+    "SK_AlfDefault_U_Body01_Skeleton": {
+        "ArtRes": {
+            "Probe": {
+                "__actions__": [
+                    [
+                        "AN_ActorAlf_N_worry1",
+                        ""
+                    ]
+                ]
+            }
+        }
+    }
+}
