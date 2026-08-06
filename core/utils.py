@@ -12,7 +12,9 @@ try:
     from .ueformat_bridge import (
         UEFormatCapabilityError,
         build_model_option_kwargs,
+        build_uescene_settings_kwargs,
         derive_fmodel_roots,
+        parse_uescene_import_status,
         resolve_ueformat_bridge,
     )
 except (ImportError, ValueError):
@@ -33,7 +35,9 @@ except (ImportError, ValueError):
     _bridge_spec.loader.exec_module(_bridge_module)
     UEFormatCapabilityError = _bridge_module.UEFormatCapabilityError
     build_model_option_kwargs = _bridge_module.build_model_option_kwargs
+    build_uescene_settings_kwargs = _bridge_module.build_uescene_settings_kwargs
     derive_fmodel_roots = _bridge_module.derive_fmodel_roots
+    parse_uescene_import_status = _bridge_module.parse_uescene_import_status
     resolve_ueformat_bridge = _bridge_module.resolve_ueformat_bridge
 
 

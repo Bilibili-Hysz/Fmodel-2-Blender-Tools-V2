@@ -5,6 +5,7 @@ import bpy
 import importlib
 from . import model
 from . import animation
+from . import scene
 from . import export
 
 if "bpy" in locals():
@@ -16,10 +17,12 @@ if "bpy" in locals():
 def register():
     model.register()
     animation.register()
+    scene.register()
     export.register()
 
 
 def unregister():
     export.unregister()
+    scene.unregister()
     animation.unregister()
     model.unregister()

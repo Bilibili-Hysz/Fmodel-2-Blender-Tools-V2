@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -308,4 +309,55 @@ def build_model_option_kwargs(
         "fmodel_bundle_root": str(bundle_root) if bundle_root else "",
     }
 
+def build_uescene_settings_kwargs(
+    *,
+    scene_path: str | Path,
+    bundle_root: str | Path = "",
+    strict_required_models: bool = True,
+    flatten_hierarchy: bool = True,
+    flatten_instances: bool = False,
+) -> dict[str, object]:
+    """Build canonical UFSettings values for the V2 UEScene operator."""
 
+    export_root, inferred_bundle_root = derive_fmodel_roots(scene_path)
+    explicit_bundle_root = str(bundle_root) if bundle_root else ""
+    return {
+        "scale_factor": 0.01,
+        "bone_length": 4.0,
+        "reorient_bones": False,
+        "target_lod": 0,
+        "import_collision": False,
+        "import_morph_targets": True,
+        "import_sockets": True,
+        "import_virtual_bones": False,
+        "import_fmodel_materials": True,
+        "build_fmodel_material_nodes": True,
+        "load_fmodel_embedded_textures": True,
+        "load_fmodel_external_textures": True,
+        "keep_fmodel_unmapped_parameters": True,
+        "fmodel_ue_export_root": str(export_root) if export_root else "",
+        "fmodel_bundle_root": explicit_bundle_root or (
+            str(inferred_bundle_root) if inferred_bundle_root else ""
+        ),
+        "flatten_uescene_hierarchy": flatten_hierarchy,
+        "flatten_uescene_instances": flatten_instances,
+        "strict_uescene_models": strict_required_models,
+    }
+
+
+def parse_uescene_import_status(raw_status: str | None) -> dict[str, object]:
+    """Parse canonical scene status without making Blender properties authoritative."""
+
+    if not raw_status:
+        return {"outcome": "unknown", "required_model_failures": []}
+    try:
+        payload = json.loads(raw_status)
+    except (TypeError, ValueError):
+        return {"outcome": "unknown", "required_model_failures": []}
+    if not isinstance(payload, dict):
+        return {"outcome": "unknown", "required_model_failures": []}
+    outcome = str(payload.get("outcome") or "unknown").casefold()
+    failures = payload.get("required_model_failures")
+    if not isinstance(failures, list):
+        failures = []
+    return {"outcome": outcome, "required_model_failures": failures}

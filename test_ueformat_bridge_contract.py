@@ -11,8 +11,10 @@ import pytest
 from core.ueformat_bridge import (
     UEFormatCapabilityError,
     build_model_option_kwargs,
+    build_uescene_settings_kwargs,
     derive_fmodel_roots,
     inspect_ueformat_module,
+    parse_uescene_import_status,
     resolve_ueformat_bridge,
 )
 
@@ -143,4 +145,25 @@ def test_model_option_builder_passes_current_fmodel_roots_and_material_flags():
     assert options["build_fmodel_material_nodes"] is True
     assert options["load_fmodel_external_textures"] is True
 
+def test_uescene_settings_forward_bundle_and_strict_scene_contract():
+    settings = build_uescene_settings_kwargs(
+        scene_path=r"D:\Output\Game\Content\Maps\Login\Login.uescene",
+        strict_required_models=True,
+        flatten_hierarchy=False,
+        flatten_instances=True,
+    )
+    assert settings["fmodel_ue_export_root"] == r"D:\Output\Game"
+    assert settings["fmodel_bundle_root"] == r"D:\Output\Game"
+    assert settings["strict_uescene_models"] is True
+    assert settings["flatten_uescene_hierarchy"] is False
+    assert settings["flatten_uescene_instances"] is True
+    assert settings["import_fmodel_materials"] is True
 
+
+def test_uescene_status_parser_preserves_required_model_diagnostics():
+    status = parse_uescene_import_status(
+        '{"outcome":"partial","required_model_failures":[{"code":"missing","uri":"Models/A.uemodel"}]}'
+    )
+    assert status["outcome"] == "partial"
+    assert status["required_model_failures"][0]["code"] == "missing"
+    assert parse_uescene_import_status("not-json")["outcome"] == "unknown"
