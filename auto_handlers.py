@@ -2,6 +2,7 @@
 # 自动处理器 — 文件加载时自动挂载资产库 + vendor依赖注册
 
 import builtins
+import inspect
 
 import bpy
 import os
@@ -241,6 +242,8 @@ def _ensure_dependency_addons():
             if not _is_bundled_vendor_module(mod, bundle_path):
                 print(f"[FModel] {module_id} 已由外部模块提供，跳过")
                 continue
+            if module_id == "io_scene_ueformat" and not _is_current_ueformat_addon(mod):
+                print("[FModel] 内置 io_scene_ueformat 是 legacy 版本；当前 FModel 材质/UEScene 工作流需要外部 canonical addon 1.1.4+")
             if hasattr(mod, "register"):
                 pre_check = _vendor_already_in_registry(mod)
                 if pre_check:
@@ -257,9 +260,82 @@ def _ensure_dependency_addons():
     return None
 
 
+def _addon_version(module):
+    """Return a normalized addon version tuple for diagnostics."""
+    info = getattr(module, "bl_info", {}) or {}
+    value = info.get("version")
+    if not isinstance(value, (tuple, list)):
+        return None
+    try:
+        return tuple(int(part) for part in value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _ueformat_submodule(module, suffix):
+    """Resolve an already-loaded or importable UEFormat submodule safely."""
+    direct = getattr(module, suffix.rsplit(".", 1)[-1], None)
+    if direct is not None:
+        return direct
+    module_name = getattr(module, "__name__", "")
+    if not module_name:
+        return None
+    qualified_name = f"{module_name}.{suffix}"
+    existing = sys.modules.get(qualified_name)
+    if existing is not None:
+        return existing
+    try:
+        return __import__(qualified_name, fromlist=["*"])
+    except Exception:
+        return None
+
+
+def _constructor_fields(cls):
+    if cls is None:
+        return set()
+    try:
+        return set(inspect.signature(cls).parameters)
+    except (TypeError, ValueError):
+        return set()
+
+
+def _is_current_ueformat_addon(module) -> bool:
+    """Require the current FModel-aware UEFormat surface for new workflows."""
+    version = _addon_version(module)
+    if version is None or version < (1, 1, 4):
+        return False
+    if not (
+        getattr(module, "__file__", None)
+        and getattr(module, "bl_info", {}).get("name")
+    ):
+        return False
+
+    # The version number alone is not enough: a same-name legacy addon can be
+    # repackaged with a newer version. Check the concrete model/material/scene
+    # surfaces that the V2 bridge relies on before calling it current.
+    op_module = _ueformat_submodule(module, "op")
+    if getattr(op_module, "UFImportUEScene", None) is None:
+        return False
+
+    options_module = _ueformat_submodule(module, "options")
+    model_options = getattr(options_module, "UEModelOptions", None)
+    anim_options = getattr(options_module, "UEAnimOptions", None)
+    pose_options = getattr(options_module, "UEPoseOptions", None)
+    model_fields = _constructor_fields(model_options)
+    skeleton_fields = _constructor_fields(anim_options) | _constructor_fields(pose_options)
+    return (
+        {
+            "import_fmodel_materials",
+            "build_fmodel_material_nodes",
+            "load_fmodel_embedded_textures",
+            "load_fmodel_external_textures",
+        }.issubset(model_fields)
+        and "strict_fmodel_skeleton" in skeleton_fields
+    )
+
 _KNOWN_VENDOR_CLASSES = {
     "io_scene_psk_psa": ["PSK_OT_import", "PSA_OT_export"],
-    "io_scene_ueformat": ["UFImportUEModel", "UFImportUEAnim", "UFImportUEPose"],
+    "io_scene_ueformat": ["UFImportUEModel", "UFImportUEAnim", "UFImportUEPose", "UFImportUEScene"],
 }
 
 

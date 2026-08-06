@@ -36,6 +36,9 @@ from .multi_import import (
 
 from .utils import (
     get_or_create_catalog_uuid,
+    get_ueformat_bridge,
+    build_model_option_kwargs,
+    derive_fmodel_roots,
     ensure_dir,
     safe_relpath,
     normalize_path,

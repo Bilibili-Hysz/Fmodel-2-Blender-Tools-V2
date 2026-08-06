@@ -5,6 +5,37 @@ import os
 import uuid
 import bpy
 
+# ``core.utils`` is normally imported as part of the Blender package. A number of
+# contract tests and maintenance scripts load this file directly, however, so keep
+# a sibling-file fallback instead of making the bridge import package-context-only.
+try:
+    from .ueformat_bridge import (
+        UEFormatCapabilityError,
+        build_model_option_kwargs,
+        derive_fmodel_roots,
+        resolve_ueformat_bridge,
+    )
+except (ImportError, ValueError):
+    import importlib.util as _importlib_util
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _bridge_path = _Path(__file__).with_name("ueformat_bridge.py")
+    _bridge_spec = _importlib_util.spec_from_file_location(
+        "_fmodel_ueformat_bridge_standalone", _bridge_path
+    )
+    if _bridge_spec is None or _bridge_spec.loader is None:
+        raise ImportError(f"Unable to load UEFormat bridge: {_bridge_path}")
+    _bridge_module = _importlib_util.module_from_spec(_bridge_spec)
+    # Dataclasses with postponed annotations resolve their class module through
+    # sys.modules, which importlib does not populate for spec-only execution.
+    _sys.modules[_bridge_spec.name] = _bridge_module
+    _bridge_spec.loader.exec_module(_bridge_module)
+    UEFormatCapabilityError = _bridge_module.UEFormatCapabilityError
+    build_model_option_kwargs = _bridge_module.build_model_option_kwargs
+    derive_fmodel_roots = _bridge_module.derive_fmodel_roots
+    resolve_ueformat_bridge = _bridge_module.resolve_ueformat_bridge
+
 
 # Process-local records for preferences entries this module created.
 _DYNAMIC_LIBRARY_OWNERS = []
@@ -179,35 +210,28 @@ def safe_invert_matrix(m):
         return Matrix()
 
 
-def get_ueformat_api():
-    """获取 UEFormat 插件的 API
-    
-    Returns:
-        tuple: (UEFormatImport, UEModelOptions, UEAnimOptions, UEPoseOptions)
-               如果未找到插件，返回 (None, None, None, None)
-    """
-    import sys
-    import importlib
-    
-    try:
-        from io_scene_ueformat.importer.logic import UEFormatImport
-        from io_scene_ueformat.options import UEModelOptions, UEAnimOptions, UEPoseOptions
-        return UEFormatImport, UEModelOptions, UEAnimOptions, UEPoseOptions
-    except ImportError:
-        pass
-        
-    for mod_name in list(sys.modules.keys()):
-        if mod_name.endswith(".importer.logic"):
-            base_name = mod_name.split(".importer.logic")[0]
-            try:
-                logic_mod = importlib.import_module(f"{base_name}.importer.logic")
-                options_mod = importlib.import_module(f"{base_name}.options")
-                return logic_mod.UEFormatImport, options_mod.UEModelOptions, options_mod.UEAnimOptions, options_mod.UEPoseOptions
-            except Exception:
-                pass
-                
-    return None, None, None, None
+def get_ueformat_bridge(*, require_current: bool = False, allow_legacy: bool = True):
+    """Resolve the UEFormat addon through the capability-aware bridge."""
 
+    try:
+        return resolve_ueformat_bridge(
+            require_current=require_current,
+            allow_legacy=allow_legacy,
+        )
+    except UEFormatCapabilityError:
+        if require_current:
+            raise
+        return None
+
+
+def get_ueformat_api(*, require_current: bool = False, allow_legacy: bool = True):
+    """Backward-compatible tuple API backed by the capability-aware bridge."""
+
+    bridge = get_ueformat_bridge(
+        require_current=require_current,
+        allow_legacy=allow_legacy,
+    )
+    return bridge.as_api_tuple() if bridge is not None else (None, None, None, None)
 
 def register():
     """Core utils不需要注册Blender类"""

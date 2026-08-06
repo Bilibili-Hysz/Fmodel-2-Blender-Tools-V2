@@ -13,6 +13,41 @@ ROOT = os.path.dirname(__file__)
 LIFECYCLE_REGISTRY_KEY = "_fmodel_tools_next_auto_handler_lifecycle"
 
 
+def _fake_ueformat_module(*, version=(1, 1, 4), include_scene=True):
+    class UEModelOptions:
+        def __init__(
+            self,
+            import_fmodel_materials=True,
+            build_fmodel_material_nodes=True,
+            load_fmodel_embedded_textures=True,
+            load_fmodel_external_textures=True,
+        ):
+            pass
+
+    class UEAnimOptions:
+        def __init__(self, strict_fmodel_skeleton=True):
+            pass
+
+    class UEPoseOptions:
+        def __init__(self, strict_fmodel_skeleton=True):
+            pass
+
+    op = types.SimpleNamespace()
+    if include_scene:
+        op.UFImportUEScene = object()
+    return types.SimpleNamespace(
+        __name__="io_scene_ueformat",
+        __file__=os.path.join(ROOT, "vendor", "io_scene_ueformat", "__init__.py"),
+        bl_info={"name": "UE Format", "version": version},
+        op=op,
+        options=types.SimpleNamespace(
+            UEModelOptions=UEModelOptions,
+            UEAnimOptions=UEAnimOptions,
+            UEPoseOptions=UEPoseOptions,
+        ),
+    )
+
+
 class FakeTimers:
     def __init__(self):
         self.registered = []
@@ -236,6 +271,21 @@ class AutoHandlerLifecycleTests(unittest.TestCase):
         vendor.unregister.assert_not_called()
         self.assertIn("io_scene_ueformat", self.module._vendor_observed)
         self.assertNotIn("io_scene_ueformat", self.module._vendor_registered)
+
+    def test_current_ueformat_requires_fmodel_material_and_scene_surfaces(self):
+        current = _fake_ueformat_module()
+        self.assertTrue(self.module._is_current_ueformat_addon(current))
+
+        no_scene = _fake_ueformat_module(include_scene=False)
+        self.assertFalse(self.module._is_current_ueformat_addon(no_scene))
+
+        legacy = _fake_ueformat_module(version=(1, 0, 0))
+        self.assertFalse(self.module._is_current_ueformat_addon(legacy))
+
+    def test_current_ueformat_rejects_missing_material_option_surface(self):
+        current = _fake_ueformat_module()
+        current.options.UEModelOptions = type("UEModelOptions", (), {"__init__": lambda self: None})
+        self.assertFalse(self.module._is_current_ueformat_addon(current))
 
     def test_external_same_name_vendor_is_never_owned(self):
         vendor_path = os.path.join(ROOT, "vendor", "io_scene_ueformat")
