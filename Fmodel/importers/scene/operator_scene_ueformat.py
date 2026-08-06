@@ -125,7 +125,7 @@ class SCENE_OT_ImportUEScene(bpy.types.Operator, ImportHelper):
             backup_before("UEScene导入", [safe_path])
 
         try:
-            bridge = get_ueformat_bridge(require_current=True, allow_legacy=False)
+            bridge = get_ueformat_bridge(require_current=True, allow_legacy=False, capability="scene")
         except Exception as exc:
             log_error(OperationType.PIPELINE, f"当前 UEFormat addon 不支持 UEScene: {exc}")
             self.report({"ERROR"}, "需要 UEFormat addon 1.1.4+（含 UEScene 能力）")

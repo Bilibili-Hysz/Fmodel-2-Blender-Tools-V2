@@ -102,6 +102,35 @@ def test_current_addon_capabilities_include_fmodel_and_scene_contracts():
     assert bridge.capabilities.supports_strict_skeleton
 
 
+def test_model_capability_does_not_require_uescene_capability():
+    root, modules = _fake_modules()
+
+    def model_only_importer(name):
+        if name.endswith(".op.import_helpers"):
+            raise ImportError(name)
+        return modules[name]
+
+    bridge = inspect_ueformat_module(root, importer=model_only_importer)
+    assert bridge is not None
+    assert bridge.capabilities.supports_current_model
+    assert not bridge.capabilities.is_current
+    resolved = resolve_ueformat_bridge(
+        require_current=True,
+        allow_legacy=False,
+        capability="model",
+        importer=model_only_importer,
+    )
+    assert resolved is not None
+    assert resolved.capabilities.supports_current_model
+    with pytest.raises(UEFormatCapabilityError):
+        resolve_ueformat_bridge(
+            require_current=True,
+            allow_legacy=False,
+            capability="scene",
+            importer=model_only_importer,
+        )
+
+
 def test_legacy_addon_is_rejected_when_current_contract_is_required():
     root, modules = _fake_modules(version=(1, 0, 0))
     with pytest.raises(UEFormatCapabilityError):

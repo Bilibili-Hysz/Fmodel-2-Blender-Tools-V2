@@ -214,13 +214,19 @@ def safe_invert_matrix(m):
         return Matrix()
 
 
-def get_ueformat_bridge(*, require_current: bool = False, allow_legacy: bool = True):
+def get_ueformat_bridge(
+    *,
+    require_current: bool = False,
+    allow_legacy: bool = True,
+    capability: str = "full",
+):
     """Resolve the UEFormat addon through the capability-aware bridge."""
 
     try:
         return resolve_ueformat_bridge(
             require_current=require_current,
             allow_legacy=allow_legacy,
+            capability=capability,
         )
     except UEFormatCapabilityError:
         if require_current:

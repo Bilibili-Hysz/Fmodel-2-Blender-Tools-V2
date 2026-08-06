@@ -47,7 +47,7 @@ def _resolve_model_import_contract():
     if callable(resolver):
         # The canonical addon is required whenever the capability-aware bridge is
         # available; do not silently downgrade a real current host to legacy code.
-        return resolver(require_current=True, allow_legacy=False)
+        return resolver(require_current=True, allow_legacy=False, capability="model")
 
     legacy_resolver = globals().get("get_ueformat_api")
     if not callable(legacy_resolver):
@@ -95,9 +95,9 @@ class MODEL_OT_ImportUEModel(bpy.types.Operator, ImportHelper):
     bone_length: bpy.props.FloatProperty(name="骨骼显示长度", default=4.0, min=0.1) # type: ignore
 
     auto_link_mat: bpy.props.BoolProperty(
-        name="导入后自动链接材质", 
-        description="自动寻找并链接贴图",
-        default=True
+        name="启用 Legacy 材质后处理",
+        description="canonical FModel 材质由 UEFormat importer 独立处理；此项只控制旧 JSON/启发式材质 fallback",
+        default=True,
     ) # type: ignore
     
     auto_backup: bpy.props.BoolProperty(
@@ -124,7 +124,7 @@ class MODEL_OT_ImportUEModel(bpy.types.Operator, ImportHelper):
         box_bone.prop(self, "import_virtual_bones")
 
         box_mat = layout.box()
-        box_mat.label(text="自动化工具", icon="MATERIAL")
+        box_mat.label(text="材质后处理", icon="MATERIAL")
         box_mat.prop(self, "auto_link_mat")
         box_mat.prop(self, "auto_backup")
 
@@ -151,7 +151,7 @@ class MODEL_OT_ImportUEModel(bpy.types.Operator, ImportHelper):
             bridge = _resolve_model_import_contract()
         except Exception as exc:
             log_error(OperationType.IMPORT_MODEL, f"当前 UEFormat addon 能力不足: {exc}")
-            self.report({'ERROR'}, "需要 UEFormat addon 1.1.4+（含 FModel 材质和 UEScene 能力）")
+            self.report({'ERROR'}, "需要 UEFormat addon 1.1.4+（含 FModel 材质和纹理能力）")
             return {'CANCELLED'}
         if bridge is None:
             log_error(OperationType.IMPORT_MODEL, "未检测到当前 UEFormat 插件")

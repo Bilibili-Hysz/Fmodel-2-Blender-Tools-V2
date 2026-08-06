@@ -126,6 +126,7 @@ class FMODEL_PT_Toolbox(bpy.types.Panel):
             col_in.operator("fmodel.import_model_uemodel", text=t("模型 (.uemodel)"), icon='MESH_DATA')
             col_in.operator("fmodel.import_anim_ueanim", text=t("动画 (.ueanim)"), icon='ANIM_DATA')
             col_in.operator("fmodel.import_anim_uepose", text=t("姿势 (.uepose)"), icon='ARMATURE_DATA')
+            col_in.operator("fmodel.import_uescene", text=t("场景 (.uescene)"), icon='SCENE_DATA')
             col_out.label(text=t("导出暂不支持"))
         elif props.active_pipeline == 'GLTF':
             col_in.operator("fmodel.import_model_gltf", text=t("导入 glTF"), icon='IMPORT')

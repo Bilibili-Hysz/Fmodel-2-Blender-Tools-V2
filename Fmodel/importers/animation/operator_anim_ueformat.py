@@ -18,7 +18,7 @@ def get_ueformat_api():
     """Resolve current UEFormat for animation while preserving the old tuple API."""
 
     if callable(_core_get_ueformat_bridge):
-        bridge = _core_get_ueformat_bridge(require_current=True, allow_legacy=False)
+        bridge = _core_get_ueformat_bridge(require_current=True, allow_legacy=False, capability="animation")
         return bridge.as_api_tuple() if bridge is not None else (None, None, None, None)
     if callable(_core_get_ueformat_api):
         return _core_get_ueformat_api()

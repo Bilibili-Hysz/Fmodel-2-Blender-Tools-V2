@@ -42,16 +42,103 @@ class UEFormatCapabilities:
     def version_text(self) -> str:
         return ".".join(str(part) for part in self.version) if self.version else "unknown"
 
+    def _meets_min_version(self) -> bool:
+        return self.version is not None and self.version >= CURRENT_ADDON_MIN_VERSION
+
     @property
-    def is_current(self) -> bool:
+    def supports_current_model(self) -> bool:
+        """Whether the canonical model/material/texture contract is available."""
         return (
-            self.version is not None
-            and self.version >= CURRENT_ADDON_MIN_VERSION
+            self._meets_min_version()
+            and self.has_model_api
             and self.supports_fmodel_materials
             and self.supports_fmodel_textures
-            and self.supports_uescene
+        )
+
+    @property
+    def supports_current_animation(self) -> bool:
+        return (
+            self._meets_min_version()
+            and self.has_animation_api
             and self.supports_strict_skeleton
         )
+
+    @property
+    def supports_current_pose(self) -> bool:
+        return (
+            self._meets_min_version()
+            and self.has_pose_api
+            and self.supports_strict_skeleton
+        )
+
+    @property
+    def supports_current_scene(self) -> bool:
+        return (
+            self._meets_min_version()
+            and self.supports_uescene
+            and self.supports_current_model
+        )
+
+    @property
+    def is_current(self) -> bool:
+        """Whether the addon satisfies the complete V2 UEFormat contract."""
+        return (
+            self.supports_current_model
+            and self.supports_current_animation
+            and self.supports_current_pose
+            and self.supports_current_scene
+        )
+
+    def supports_capability(self, capability: str) -> bool:
+        normalized = capability.casefold()
+        if normalized in {"full", "current", "pipeline"}:
+            return self.is_current
+        if normalized in {"model", "uemodel"}:
+            return self.supports_current_model
+        if normalized in {"animation", "anim", "ueanim"}:
+            return self.supports_current_animation
+        if normalized in {"pose", "uepose"}:
+            return self.supports_current_pose
+        if normalized in {"scene", "uescene"}:
+            return self.supports_current_scene
+        raise ValueError(f"Unknown UEFormat capability: {capability}")
+
+    def missing_capability_features(self, capability: str) -> tuple[str, ...]:
+        normalized = capability.casefold()
+        missing: list[str] = []
+        if not self._meets_min_version():
+            missing.append(f"addon_version>={'.'.join(map(str, CURRENT_ADDON_MIN_VERSION))}")
+        if normalized in {"full", "current", "pipeline"}:
+            return self.missing_current_features()
+        if normalized in {"model", "uemodel"}:
+            if not self.has_model_api:
+                missing.append("UEModelOptions/UEFormatImport")
+            if not self.supports_fmodel_materials:
+                missing.append("FMODEL_MATERIALS_v2")
+            if not self.supports_fmodel_textures:
+                missing.append("FMODEL_TEXTURES_v1")
+            return tuple(missing)
+        if normalized in {"animation", "anim", "ueanim"}:
+            if not self.has_animation_api:
+                missing.append("UEAnimOptions")
+            if not self.supports_strict_skeleton:
+                missing.append("strict_fmodel_skeleton")
+            return tuple(missing)
+        if normalized in {"pose", "uepose"}:
+            if not self.has_pose_api:
+                missing.append("UEPoseOptions")
+            if not self.supports_strict_skeleton:
+                missing.append("strict_fmodel_skeleton")
+            return tuple(missing)
+        if normalized in {"scene", "uescene"}:
+            if not self.supports_uescene:
+                missing.append("UEScene")
+            missing.extend(
+                item for item in self.missing_capability_features("model")
+                if item not in missing
+            )
+            return tuple(missing)
+        raise ValueError(f"Unknown UEFormat capability: {capability}")
 
     def missing_current_features(self) -> tuple[str, ...]:
         missing: list[str] = []
@@ -223,6 +310,7 @@ def resolve_ueformat_bridge(
     *,
     require_current: bool = False,
     allow_legacy: bool = True,
+    capability: str = "full",
     importer: Callable[[str], ModuleType] | None = None,
 ) -> UEFormatBridge | None:
     """Resolve the best currently loaded UEFormat addon.
@@ -240,14 +328,17 @@ def resolve_ueformat_bridge(
     if not bridges:
         return None
 
-    current = [bridge for bridge in bridges if bridge.is_current]
+    current = [
+        bridge for bridge in bridges
+        if bridge.capabilities.supports_capability(capability)
+    ]
     if current:
         return current[0]
 
     if require_current or not allow_legacy:
         details = "; ".join(
             f"{bridge.module_name} {bridge.capabilities.version_text}: "
-            f"missing {', '.join(bridge.capabilities.missing_current_features())}"
+            f"missing {', '.join(bridge.capabilities.missing_capability_features(capability))}"
             for bridge in bridges
         )
         raise UEFormatCapabilityError(
