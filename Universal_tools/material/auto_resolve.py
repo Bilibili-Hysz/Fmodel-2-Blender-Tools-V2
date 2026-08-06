@@ -8,12 +8,26 @@ from typing import Optional
 
 from .channel_resolver import ChannelResolver, GameProfile
 from .manifest_builder import _resolve_search_root
+from ...core.material_ownership import should_skip_legacy_material_resolver
 
 
 def auto_resolve_materials_for_import(meshes, model_filepath=""):
     """导入模型后自动运行材质解析。Phase 1+2+3 新架构：JSON 驱动。"""
     props = bpy.context.scene.fmodel_material
     if not props.auto_resolve_on_import:
+        return
+
+    all_materials = [
+        slot.material
+        for obj in meshes
+        for slot in obj.material_slots
+        if getattr(slot, "material", None) is not None
+    ]
+    if all_materials and all(
+        should_skip_legacy_material_resolver(material)
+        for material in all_materials
+    ):
+        print("[FModel] canonical FModel 材质 provenance 已存在，跳过 legacy JSON 材质重建")
         return
 
     tex_dir = bpy.path.abspath(props.umodel_tex_dir) if props.umodel_tex_dir else ""
@@ -96,6 +110,10 @@ def auto_resolve_materials_for_import(meshes, model_filepath=""):
             if not slot.material:
                 continue
             mat = slot.material
+            if should_skip_legacy_material_resolver(mat):
+                print(f"[FModel] 跳过 canonical FModel 材质: {mat.name}")
+                processed_materials.add(mat.name)
+                continue
             if mat.name in processed_materials:
                 continue
             actual_slot = mi_to_slot.get(slot.name, slot.name)
