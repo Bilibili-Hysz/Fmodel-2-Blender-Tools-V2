@@ -4,7 +4,25 @@
 import bpy
 import os
 from bpy_extras.io_utils import ImportHelper
-from ....core.utils import get_ueformat_api
+
+try:
+    from ....core import utils as core_utils
+except ImportError:
+    core_utils = None
+
+_core_get_ueformat_api = getattr(core_utils, "get_ueformat_api", None)
+_core_get_ueformat_bridge = getattr(core_utils, "get_ueformat_bridge", None)
+
+
+def get_ueformat_api():
+    """Resolve current UEFormat for animation while preserving the old tuple API."""
+
+    if callable(_core_get_ueformat_bridge):
+        bridge = _core_get_ueformat_bridge(require_current=True, allow_legacy=False)
+        return bridge.as_api_tuple() if bridge is not None else (None, None, None, None)
+    if callable(_core_get_ueformat_api):
+        return _core_get_ueformat_api()
+    return None, None, None, None
 
 
 class ANIM_OT_ImportUEAnim(bpy.types.Operator, ImportHelper):
@@ -40,17 +58,31 @@ class ANIM_OT_ImportUEAnim(bpy.types.Operator, ImportHelper):
         import_paths = [os.path.join(self.directory, f.name) for f in self.files if f.name] if self.files else [self.filepath]
         if not import_paths: return {'CANCELLED'}
 
-        UEFormatImport, _, UEAnimOptions, _ = get_ueformat_api()
+        try:
+            UEFormatImport, _, UEAnimOptions, _ = get_ueformat_api()
+        except Exception as exc:
+            self.report({'ERROR'}, f"当前 UEFormat addon 不支持严格动画骨架校验: {exc}")
+            return {'CANCELLED'}
         if not UEFormatImport:
-            self.report({'ERROR'}, "未检测到 UEFormat 插件！")
+            self.report({'ERROR'}, "未检测到当前 UEFormat 插件！")
             return {'CANCELLED'}
             
-        options = UEAnimOptions(
-            scale_factor=self.scale_factor,
-            rotation_only=self.rotation_only,
-            import_curves=self.import_curves,
-            override_skeleton=target_arm
-        )
+        try:
+            options = UEAnimOptions(
+                scale_factor=self.scale_factor,
+                rotation_only=self.rotation_only,
+                import_curves=self.import_curves,
+                override_skeleton=target_arm,
+                strict_fmodel_skeleton=True,
+            )
+        except TypeError:
+            # Legacy UEFormat has no strict identity option.
+            options = UEAnimOptions(
+                scale_factor=self.scale_factor,
+                rotation_only=self.rotation_only,
+                import_curves=self.import_curves,
+                override_skeleton=target_arm,
+            )
         importer = UEFormatImport(options)
 
         success_count = 0
@@ -98,12 +130,23 @@ class ANIM_OT_ImportUEPose(bpy.types.Operator, ImportHelper):
         import_paths = [os.path.join(self.directory, f.name) for f in self.files if f.name] if self.files else [self.filepath]
         if not import_paths: return {'CANCELLED'}
 
-        UEFormatImport, _, _, UEPoseOptions = get_ueformat_api()
+        try:
+            UEFormatImport, _, _, UEPoseOptions = get_ueformat_api()
+        except Exception as exc:
+            self.report({'ERROR'}, f"当前 UEFormat addon 不支持严格姿势骨架校验: {exc}")
+            return {'CANCELLED'}
         if not UEFormatImport:
-            self.report({'ERROR'}, "未检测到 UEFormat 插件！")
+            self.report({'ERROR'}, "未检测到当前 UEFormat 插件！")
             return {'CANCELLED'}
             
-        options = UEPoseOptions(scale_factor=self.scale_factor, override_skeleton=target_arm)
+        try:
+            options = UEPoseOptions(
+                scale_factor=self.scale_factor,
+                override_skeleton=target_arm,
+                strict_fmodel_skeleton=True,
+            )
+        except TypeError:
+            options = UEPoseOptions(scale_factor=self.scale_factor, override_skeleton=target_arm)
         importer = UEFormatImport(options)
 
         success_count = 0

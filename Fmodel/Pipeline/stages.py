@@ -1029,13 +1029,15 @@ class AssetImportStage(PipelineStageBase):
                 scale_factor=context.get_config("import_scale", 0.01),
                 rotation_only=context.get_config("rotation_only", False),
                 import_curves=context.get_config("import_curves", False),
-                override_skeleton=target_arm
+                override_skeleton=target_arm,
+                strict_fmodel_skeleton=True,
             )
         except TypeError:
+            # Legacy UEFormat has no strict identity option.
             options = UEAnimOptions(
                 scale_factor=context.get_config("import_scale", 0.01),
                 rotation_only=context.get_config("rotation_only", False),
-                import_curves=context.get_config("import_curves", False)
+                import_curves=context.get_config("import_curves", False),
             )
         importer = UEFormatImport(options)
         
