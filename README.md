@@ -84,3 +84,16 @@ verification boundary.
 
 `vendor/vendor_tree_manifest.json` locks the complete Vendor release tree. Verify it
 with `python scripts/generate_vendor_tree_manifest.py --check` before packaging.
+
+## Development and tests
+
+The complete automated suite is kept under `tests/` and is not part of the
+installable Blender runtime. Run it from the repository root with:
+
+```powershell
+python -B -m pytest tests -q -p no:cacheprovider
+```
+
+The `tests/conftest.py` bootstrap resolves the repository root for source
+contracts, so individual test files can also be invoked through the `tests/`
+path.

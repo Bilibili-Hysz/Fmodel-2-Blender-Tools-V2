@@ -39,6 +39,7 @@ FModel-2-Blender-Tools-V2/
 │   └── README.md                  # Vendor 来源和刷新说明
 ├── Shaders/                       # Shader 资源和 GameProfile 数据
 ├── scripts/                       # 同步、Vendor 完整性和构建辅助脚本
+├── tests/                         # 自动化合同、回归和 Vendor 测试（非运行时）
 ├── investigation/                 # 手动/真实 Blender 验证脚本，不属于运行时
 ├── backups/                       # 本地回滚快照，不打包到 release
 └── docs/                          # 设计、迁移、Vendor 和结构文档

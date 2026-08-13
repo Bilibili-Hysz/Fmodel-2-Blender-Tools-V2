@@ -72,6 +72,8 @@ JSON 仍可作为以下内部或历史状态存在：
 
 该基线是源码同步载荷摘要，不代表已经覆盖用户 Blender 安装目录。
 
+测试脚本统一位于 `tests/`，不会进入 Blender 安装载荷；从仓库根目录使用 `python -B -m pytest tests -q -p no:cacheprovider` 运行。
+
 ## 6. 文档治理
 
 - 当前合同：本文、README、Folder-only 决策文档；
