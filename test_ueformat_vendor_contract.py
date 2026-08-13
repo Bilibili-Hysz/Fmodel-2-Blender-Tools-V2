@@ -1,0 +1,66 @@
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+
+ROOT = Path(__file__).parent
+VENDOR = ROOT / "vendor" / "io_scene_ueformat"
+
+
+def _literal_assignment(path: Path, name: str):
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == name for target in node.targets
+        ):
+            return ast.literal_eval(node.value)
+    raise AssertionError(f"missing assignment {name!r} in {path}")
+
+
+def test_bundled_ueformat_vendor_is_current_fmodel_snapshot():
+    info = _literal_assignment(VENDOR / "__init__.py", "bl_info")
+    assert tuple(info["version"]) == (1, 2, 0)
+    assert tuple(info["blender"]) == (4, 2, 0)
+
+    manifest = (VENDOR / "blender_manifest.toml").read_text(encoding="utf-8")
+    assert 'id = "io_scene_ueformat"' in manifest
+    assert 'version = "1.2.0"' in manifest
+    assert 'blender_version_min = "4.2.0"' in manifest
+    assert 'license = ["SPDX:MIT"]' in manifest
+
+
+def test_bundled_ueformat_vendor_contains_fmodel_surfaces_and_headless_entrypoint():
+    options = (VENDOR / "options.py").read_text(encoding="utf-8")
+    for field in (
+        "import_fmodel_materials",
+        "build_fmodel_material_nodes",
+        "load_fmodel_embedded_textures",
+        "load_fmodel_external_textures",
+        "fmodel_ue_export_root",
+        "fmodel_bundle_root",
+    ):
+        assert field in options
+    assert "strict_fmodel_skeleton" in options
+
+    root = (VENDOR / "__init__.py").read_text(encoding="utf-8")
+    op = (VENDOR / "op" / "__init__.py").read_text(encoding="utf-8")
+    assert "def register_headless" in root
+    assert "def register(*, headless: bool = False)" in op
+    assert "UEFORMAT_PT_Scene" not in op
+    assert "UFImportUEScene" not in op
+    assert "if not headless or operator not in _PANEL_CLASSES" in op
+
+
+def test_bundled_ueformat_vendor_carries_runtime_zstandard_wheels():
+    wheels = {path.name for path in (VENDOR / "wheels").glob("zstandard-*.whl")}
+    assert any("cp311-cp311-win_amd64" in name for name in wheels)
+    assert any("cp312-cp312-win_amd64" in name for name in wheels)
+    assert any("cp313-cp313-win_amd64" in name for name in wheels)
+
+
+def test_legacy_material_resolver_remains_manual_only_in_native_docs():
+    readme = (ROOT / "README_EN.md").read_text(encoding="utf-8")
+    assert "remains registered as a" in readme
+    assert "not part of the" in readme
+    assert "UEFormat-only native import path" in readme

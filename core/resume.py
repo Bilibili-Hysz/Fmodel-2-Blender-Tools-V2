@@ -9,7 +9,8 @@ from .enums import PipelineStage, StageStatus
 
 
 IMPORT_SETTING_KEYS = (
-    "import_scale", "rotation_only", "import_curves", "clean_after_import",
+    "import_scale", "rotation_only", "import_curves", "skeleton_compatibility_mode",
+    "clean_after_import",
     "clean_threshold", "clean_flat_channels",
 )
 BUILD_SETTING_KEYS = (
@@ -41,11 +42,20 @@ def source_revision(path: str, content_hash: str = "") -> str:
     if content_hash:
         return _digest({"path": normalized, "hash": content_hash})
     try:
-        stat = os.stat(path)
+        stat = os.stat(_filesystem_path(path))
         revision = {"path": normalized, "size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
     except OSError:
         revision = {"path": normalized, "missing": True}
     return _digest(revision)
+
+
+def _filesystem_path(path: str) -> str:
+    """Return an extended Windows path for filesystem calls when required."""
+
+    value = os.fspath(path)
+    if os.name != "nt" or not os.path.isabs(value) or value.startswith("\\\\?\\"):
+        return value
+    return "\\\\?\\UNC\\" + value[2:] if value.startswith("\\\\") else "\\\\?\\" + value
 
 
 def make_manifest_source(index: int, skeleton: str, folder: str, name: str,

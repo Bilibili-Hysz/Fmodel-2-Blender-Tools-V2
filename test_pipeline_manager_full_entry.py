@@ -9,6 +9,7 @@ import tempfile
 import types
 import unittest
 from unittest import mock
+from core.pipeline_activity import is_pipeline_active
 
 
 class FakeText:
@@ -99,6 +100,22 @@ class PipelineManagerFullEntryTests(unittest.TestCase):
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = module
+
+    def test_full_pipeline_marks_activity_for_nested_stage_callbacks(self):
+        context = self.core.PipelineContext()
+        manager = self.manager_module.PipelineManager()
+        active_states = []
+
+        def run_stage(pipeline_context, stage_name):
+            active_states.append(is_pipeline_active())
+            return True
+
+        manager.run_stage = run_stage
+
+        self.assertTrue(manager.run_full_pipeline(context))
+        self.assertTrue(active_states)
+        self.assertTrue(all(active_states))
+        self.assertFalse(is_pipeline_active())
 
     def test_full_entry_runs_two_skeleton_plan_as_isolated_tasks(self):
         manifest = {"skeletons": {
@@ -242,8 +259,18 @@ class PipelineManagerFullEntryTests(unittest.TestCase):
             "Hero": {"Moves": {"__animations__": {"Idle": {"source_file": "Hero/Idle.ueanim"}}}},
             "Enemy": {"Moves": {"__animations__": {"Idle": {"source_file": "Enemy/Idle.ueanim"}}}},
         }}
+        target_identities = {
+            obj.name: self.core.armature_identity(obj)
+            for obj in self.bpy.data.objects if obj.type == "ARMATURE"
+        }
+        target_provenances = {
+            obj.name: self.core.skeleton_provenance_from_owner(obj).to_dict()
+            for obj in self.bpy.data.objects if obj.type == "ARMATURE"
+        }
         plan, _ = self.core.build_multi_import_plan(
-            manifest, {"Hero": "HeroRig", "Enemy": "EnemyRig"}
+            manifest, {"Hero": "HeroRig", "Enemy": "EnemyRig"},
+            target_armature_identities=target_identities,
+            target_armature_provenances=target_provenances,
         )
         plan.tasks[0].status = "completed"
         plan.tasks[0].progress = 1.0
@@ -468,6 +495,7 @@ class PipelineManagerFullEntryTests(unittest.TestCase):
         ])
         self.assertEqual(state.scan_anim_count, 1)
 
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
     def test_wizard_scan_manual_mode_ignores_auto_project_selection(self):
         step3 = self._load_wizard_step3()
         calls = []
@@ -502,6 +530,7 @@ class PipelineManagerFullEntryTests(unittest.TestCase):
         self.assertEqual(state.indexed_selection_mode, "NONE")
         self.assertEqual(state.indexed_selected_paths, "[]")
 
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
     def test_wizard_scan_indexed_state_projects_manifest_without_raw_stages(self):
         step3 = self._load_wizard_step3()
         with tempfile.TemporaryDirectory() as project_dir:
@@ -540,6 +569,7 @@ class PipelineManagerFullEntryTests(unittest.TestCase):
         )
         self.assertIn("PipelineContext", self.bpy.data.texts)
 
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
     def test_project_default_step3_builds_manifest_without_directory_stages(self):
         step3 = self._load_wizard_step3()
         with tempfile.TemporaryDirectory() as project_dir:
@@ -553,18 +583,15 @@ class PipelineManagerFullEntryTests(unittest.TestCase):
                 side_effect=AssertionError("raw stages must not run")
             )
             state = self._wizard_state(
-                source_mode="PROJECT", source_dir=root, output_dir=self.output_dir,
-                skeleton_filter="Hero",
+                source_mode="PROJECT", project_root=root, source_dir=root,
+                output_dir=self.output_dir, skeleton_filter="Hero",
             )
-            project = types.SimpleNamespace(root_path=root, index_state="ready")
             operator = step3.PIPELINE_OT_WizardStep3()
             operator.report = lambda *args: None
 
             self.assertEqual(
                 operator.execute(types.SimpleNamespace(
-                    scene=types.SimpleNamespace(
-                        pipeline_wizard=state, fmodel_project=project,
-                    ),
+                    scene=types.SimpleNamespace(pipeline_wizard=state),
                     active_object=None,
                 )),
                 {"FINISHED"},
@@ -579,33 +606,39 @@ class PipelineManagerFullEntryTests(unittest.TestCase):
         self.assertEqual(state.indexed_skeleton, "Hero")
         self.assertEqual(state.indexed_selected_paths, json.dumps([os.path.abspath(animation)]))
 
-    def test_project_default_step3_reports_project_settings_scan_error_without_stages(self):
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
+    def test_project_default_step3_creates_missing_index_automatically(self):
         step3 = self._load_wizard_step3()
         step3.run_wizard_stage = mock.Mock(
             side_effect=AssertionError("raw stages must not run")
         )
-        step3._project_default_indexed_selection = mock.Mock(
-            side_effect=ValueError("Project Settings Scan is required")
-        )
-        state = self._wizard_state(source_mode="PROJECT", skeleton_filter="Hero")
-        reports = []
-        operator = step3.PIPELINE_OT_WizardStep3()
-        operator.report = lambda level, message: reports.append((level, message))
+        with tempfile.TemporaryDirectory() as project_dir:
+            root = os.path.join(project_dir, "project")
+            animation = os.path.join(root, "Hero", "Moves", "Run.ueanim")
+            os.makedirs(os.path.dirname(animation))
+            with open(animation, "wb") as handle:
+                handle.write(b"animation")
+            database = os.path.join(root, ".fmodel", "project-assets.sqlite")
+            self.assertFalse(os.path.exists(database))
+            state = self._wizard_state(
+                source_mode="PROJECT", project_root=root, source_dir=root,
+                output_dir=self.output_dir, skeleton_filter="Hero",
+            )
+            operator = step3.PIPELINE_OT_WizardStep3()
+            operator.report = lambda *args: None
 
-        self.assertEqual(
-            operator.execute(types.SimpleNamespace(
-                scene=types.SimpleNamespace(
-                    pipeline_wizard=state, fmodel_project=object(),
-                ),
+            result = operator.execute(types.SimpleNamespace(
+                scene=types.SimpleNamespace(pipeline_wizard=state),
                 active_object=None,
-            )),
-            {"CANCELLED"},
-        )
+            ))
 
-        self.assertFalse(step3.run_wizard_stage.called)
-        self.assertTrue(any("Project Settings" in message and "Scan" in message
-                            for _, message in reports))
+            self.assertEqual(result, {"FINISHED"})
+            self.assertTrue(os.path.isfile(database))
+            self.assertEqual(state.indexed_selection_mode, "AUTO_PROJECT")
+            self.assertEqual(state.scan_anim_count, 1)
+            self.assertFalse(step3.run_wizard_stage.called)
 
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
     def test_project_default_step3_rejects_stale_indexed_file_without_stages(self):
         step3 = self._load_wizard_step3()
         with tempfile.TemporaryDirectory() as project_dir:
@@ -620,7 +653,8 @@ class PipelineManagerFullEntryTests(unittest.TestCase):
                 side_effect=AssertionError("raw stages must not run")
             )
             state = self._wizard_state(
-                source_mode="PROJECT", source_dir=root, skeleton_filter="Hero",
+                source_mode="PROJECT", project_root=root, source_dir=root,
+                skeleton_filter="Hero",
             )
             reports = []
             operator = step3.PIPELINE_OT_WizardStep3()
@@ -628,21 +662,17 @@ class PipelineManagerFullEntryTests(unittest.TestCase):
 
             self.assertEqual(
                 operator.execute(types.SimpleNamespace(
-                    scene=types.SimpleNamespace(
-                        pipeline_wizard=state,
-                        fmodel_project=types.SimpleNamespace(
-                            root_path=root, index_state="ready",
-                        ),
-                    ),
+                    scene=types.SimpleNamespace(pipeline_wizard=state),
                     active_object=None,
                 )),
                 {"CANCELLED"},
             )
 
         self.assertFalse(step3.run_wizard_stage.called)
-        self.assertTrue(any("Project Settings" in message and "Scan" in message
+        self.assertTrue(any("No indexed animations match skeleton" in message
                             for _, message in reports))
 
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
     def test_wizard_scan_partial_indexed_state_errors_without_raw_stages(self):
         step3 = self._load_wizard_step3()
         step3.run_wizard_stage = mock.Mock(side_effect=AssertionError("raw stages must not run"))
@@ -664,8 +694,9 @@ class PipelineManagerFullEntryTests(unittest.TestCase):
         )
 
         self.assertFalse(step3.run_wizard_stage.called)
-        self.assertTrue(any("索引选择" in message for _, message in reports))
+        self.assertTrue(any("indexed selected paths" in message for _, message in reports))
 
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
     def test_wizard_scan_indexed_selection_reconciles_and_replaces_saved_manifest(self):
         step3 = self._load_wizard_step3()
         with tempfile.TemporaryDirectory() as project_dir:
@@ -712,10 +743,65 @@ class PipelineManagerFullEntryTests(unittest.TestCase):
             {"Run"},
         )
 
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
+    def test_async_step3_finalizer_persists_the_same_checkpoint_contract(self):
+        step3 = self._load_wizard_step3()
+        prepared_type = importlib.import_module(
+            "core.project_index_service"
+        ).PreparedAnimationSelection
+        snapshot_type = importlib.import_module(
+            "core.project_index_service"
+        ).ProjectIndexSnapshot
+        with tempfile.TemporaryDirectory() as project_dir:
+            root = os.path.abspath(project_dir)
+            animation = os.path.join(root, "Hero", "Moves", "Idle.ueanim")
+            manifest = {
+                "skeletons": {
+                    "Hero": {
+                        "Moves": {
+                            "__animations__": {
+                                "Idle": {"source_file": animation}
+                            }
+                        }
+                    }
+                }
+            }
+            prepared = prepared_type(
+                root=root,
+                skeleton="Hero",
+                paths=(animation,),
+                manifest=manifest,
+                snapshot=snapshot_type(
+                    root=root, state="ready", schema_version=3,
+                    generation=2, last_scan_ns=1, animation_count=1,
+                    matching_count=1, message="Animation index ready",
+                ),
+            )
+            state = self._wizard_state(
+                source_mode="PROJECT", project_root=root, source_dir=root,
+                output_dir=self.output_dir, skeleton_filter="Hero",
+                indexed_selection_mode="AUTO_PROJECT",
+                project_index_message="",
+            )
+            context = types.SimpleNamespace(
+                scene=types.SimpleNamespace(pipeline_wizard=state),
+                active_object=None,
+            )
+
+            totals = step3._async_prepare_complete(state, prepared, context)
+
+        self.assertEqual(totals, (1, 1))
+        self.assertTrue(state.scan_completed)
+        self.assertEqual(state.scan_anim_count, 1)
+        saved = self.core.PipelineContext.load_from_checkpoint(self.output_dir)
+        self.assertEqual(saved.config["indexed_selection_mode"], "AUTO_PROJECT")
+        self.assertEqual(saved.config["indexed_selected_paths"], [animation])
+        self.assertEqual(saved.dictionary_manifest, manifest)
     def _load_wizard_step3(self):
         module_names = (
-            "addon.core.project_index", "addon.Fmodel.Pipeline.steps",
-            "addon.Fmodel.Pipeline.steps.runner",
+            "addon.core.project_index", "addon.core.project_index_service",
+            "addon.Fmodel.Pipeline.project_index_controller",
+            "addon.Fmodel.Pipeline.steps", "addon.Fmodel.Pipeline.steps.runner",
             "addon.Fmodel.Pipeline.steps.step3_scan",
         )
         saved = {name: sys.modules.get(name) for name in module_names}
@@ -760,23 +846,9 @@ class PipelineManagerFullEntryTests(unittest.TestCase):
             return root, skeleton, paths
 
         runner._indexed_selection_from_state = indexed_selection_from_state
-        runner._validate_auto_project_selection = lambda state, settings: (
-            indexed_selection_from_state(state)
+        runner._indexed_selection_mode = lambda state: getattr(
+            state, "indexed_selection_mode", "EXPLICIT"
         )
-        def project_default_indexed_selection(state, project_settings):
-            if getattr(state, "source_mode", None) != "PROJECT":
-                return None
-            root = project_settings.root_path
-            skeleton = state.skeleton_filter
-            if project_settings.index_state != "ready":
-                raise ValueError("Project Settings Scan is required")
-            paths = importlib.import_module("core.project_index").ProjectIndex(root)
-            paths = paths.animations_for_skeleton(skeleton, raise_on_error=True)
-            if not paths:
-                raise ValueError("Project Settings Scan found no animations")
-            return root, skeleton, paths
-
-        runner._project_default_indexed_selection = project_default_indexed_selection
         def load_or_create_context(config):
             pipeline_context = (
                 self.core.PipelineContext.load_from_checkpoint(config["output_dir"])
@@ -792,9 +864,20 @@ class PipelineManagerFullEntryTests(unittest.TestCase):
         runner.run_wizard_stage = lambda context, state, stage: True
         sys.modules.update({
             "addon.core.project_index": importlib.import_module("core.project_index"),
+            "addon.core.project_index_service": importlib.import_module("core.project_index_service"),
             "addon.Fmodel.Pipeline.steps": steps,
             "addon.Fmodel.Pipeline.steps.runner": runner,
         })
+        controller_path = os.path.join(
+            os.path.dirname(__file__), "Fmodel", "Pipeline", "project_index_controller.py"
+        )
+        controller_spec = importlib.util.spec_from_file_location(
+            "addon.Fmodel.Pipeline.project_index_controller", controller_path
+        )
+        controller = importlib.util.module_from_spec(controller_spec)
+        sys.modules[controller_spec.name] = controller
+        controller_spec.loader.exec_module(controller)
+
         path = os.path.join(
             os.path.dirname(__file__), "Fmodel", "Pipeline", "steps", "step3_scan.py"
         )

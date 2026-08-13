@@ -1,6 +1,4 @@
-import json
 import os
-import sqlite3
 import sys
 
 import bpy
@@ -10,14 +8,8 @@ from ....core import (
     DictionaryManifest, ImportMode, MultiImportCheckpoint, PipelineConfig,
     PipelineContext, PipelineStage, SourceType, build_multi_import_plan,
     restore_checkpoint, run_pending_tasks, validate_generated_output_filenames,
-    armature_identity, import_settings_fingerprint,
+    armature_identity, import_settings_fingerprint, skeleton_provenance_from_owner,
 )
-from ....core.project_index import ProjectIndex
-
-
-_AUTO_PROJECT = "AUTO_PROJECT"
-_EXPLICIT = "EXPLICIT"
-_SCAN_INSTRUCTION = "Project Settings Scan is required before preparing this import plan"
 
 
 def _load_or_create_context(config_dict: dict) -> PipelineContext:
@@ -32,8 +24,8 @@ def _load_or_create_context(config_dict: dict) -> PipelineContext:
 
 
 def _build_config_from_wizard(state, context) -> dict:
-    source_type = SourceType.FMODEL_UEANIM.value if state.flow_type == 'FMODEL' else SourceType.UNITY_ANIM.value
-    import_mode = ImportMode.UEANIM_DIRECT.value if state.flow_type == 'FMODEL' else ImportMode.FBX_MATCH.value
+    source_type = SourceType.FMODEL_UEANIM.value
+    import_mode = ImportMode.UEANIM_DIRECT.value
 
     cfg = PipelineConfig(
         source_dir=state.source_dir,
@@ -59,6 +51,9 @@ def _build_config_from_wizard(state, context) -> dict:
         clean_after_import=bool(getattr(state, "clean_after_import", False)),
         clean_threshold=float(getattr(state, "clean_threshold", 0.001)),
         clean_flat_channels=bool(getattr(state, "clean_flat_channels", True)),
+        skeleton_compatibility_mode=getattr(
+            state, "skeleton_compatibility_mode", "strict"
+        ),
     ).to_dict()
 
     handoff_target = getattr(state, "import_target_skeleton", "")
@@ -68,130 +63,22 @@ def _build_config_from_wizard(state, context) -> dict:
     elif obj and obj.type == 'ARMATURE':
         cfg["target_armature"] = obj.name
 
-    indexed_selection = _indexed_selection_from_state(state)
-    indexed_mode = _indexed_selection_mode(state)
-    if indexed_mode == _AUTO_PROJECT:
-        indexed_selection = _validate_auto_project_selection(
-            state, getattr(getattr(context, "scene", None), "fmodel_project", None)
-        )
-    if indexed_selection:
-        indexed_root, indexed_skeleton, indexed_paths = indexed_selection
-        cfg.update({
-            "indexed_project_root": indexed_root,
-            "indexed_skeleton": indexed_skeleton,
-            "indexed_selected_paths": indexed_paths,
-            "indexed_selection_mode": indexed_mode,
-        })
-
     return cfg
-
-
-def _indexed_selection_from_state(state):
-    """Return a complete indexed selection or reject incomplete indexed intent."""
-    mode = _indexed_selection_mode(state)
-    if mode == "NONE":
-        return None
-    if mode == _AUTO_PROJECT and getattr(state, "source_mode", None) != "PROJECT":
-        _clear_auto_project_selection(state)
-        return None
-    root = getattr(state, "indexed_project_root", "")
-    skeleton = getattr(state, "indexed_skeleton", "")
-    paths = getattr(state, "indexed_selected_paths", "[]")
-    if root == "" and skeleton == "" and paths == "[]":
-        return None
-    if not isinstance(root, str) or not root:
-        raise ValueError("indexed project root is required")
-    if not isinstance(skeleton, str) or not skeleton:
-        raise ValueError("indexed skeleton is required")
-    if isinstance(paths, str):
-        try:
-            paths = json.loads(paths)
-        except json.JSONDecodeError as error:
-            raise ValueError("indexed selected paths must be valid JSON") from error
-    if not isinstance(paths, list) or not paths or not all(isinstance(path, str) and path for path in paths):
-        raise ValueError("indexed selected paths must be a non-empty list")
-    return root, skeleton, paths
-
-
-def _indexed_selection_mode(state):
-    mode = getattr(state, "indexed_selection_mode", None)
-    if mode in ("NONE", _AUTO_PROJECT, _EXPLICIT):
-        return mode
-    # Selections saved before provenance existed were explicit selector input.
-    return _EXPLICIT
-
-
-def _clear_auto_project_selection(state):
-    state.indexed_selection_mode = "NONE"
-    state.indexed_project_root = ""
-    state.indexed_skeleton = ""
-    state.indexed_selected_paths = "[]"
-
-
-def _validate_auto_project_selection(state, project_settings):
-    """Confirm persisted Project Default input still matches current project state."""
-    persisted = _indexed_selection_from_state(state)
-    if not persisted:
-        return None
-    root, skeleton, _paths = persisted
-    current = _project_default_indexed_selection(state, project_settings)
-    if not current or current[0] != root or current[1] != skeleton:
-        raise ValueError(_SCAN_INSTRUCTION)
-    # Project Default means every current indexed animation, so a successful
-    # Project Settings Scan can replace paths removed from the prior plan.
-    return current
-
-
-def _project_default_indexed_selection(state, project_settings):
-    """Return all ready indexed animations for the Project Default skeleton."""
-    if getattr(state, "source_mode", None) != "PROJECT":
-        return None
-
-    root = getattr(project_settings, "root_path", "")
-    source = getattr(state, "source_dir", "")
-    skeleton = getattr(state, "skeleton_filter", "")
-    root = root.strip() if isinstance(root, str) else ""
-    source = source.strip() if isinstance(source, str) else ""
-    skeleton = skeleton.strip() if isinstance(skeleton, str) else ""
-    scan_instruction = _SCAN_INSTRUCTION
-    if (
-        not root
-        or not source
-        or os.path.normcase(os.path.abspath(source)) != os.path.normcase(os.path.abspath(root))
-        or getattr(project_settings, "index_state", "") != "ready"
-        or not skeleton
-    ):
-        raise ValueError(scan_instruction)
-
-    try:
-        index = ProjectIndex(root)
-        if index.status()["state"] != "ready":
-            raise ValueError(scan_instruction)
-        paths = index.animations_for_skeleton(skeleton, raise_on_error=True)
-    except (OSError, sqlite3.Error, ValueError) as error:
-        if str(error) == scan_instruction:
-            raise
-        raise ValueError(scan_instruction) from error
-    if not paths:
-        raise ValueError(
-            f"Project Settings Scan found no animations for skeleton: {skeleton}"
-        )
-    return root, skeleton, paths
-
-
-def _indexed_manifest_from_config(config):
-    root = config.get("indexed_project_root")
-    if not root:
-        return None
-    return ProjectIndex(root).dictionary_manifest(
-        config.get("indexed_skeleton"), config.get("indexed_selected_paths")
-    )
 
 
 def _mapping_dict(state) -> dict:
     return {
         item.source_skeleton: item.target_armature.name
         for item in state.skeleton_mappings if item.target_armature
+    }
+
+
+def _mapping_compatibility_dict(state) -> dict:
+    default_mode = getattr(state, "skeleton_compatibility_mode", "strict")
+    return {
+        item.source_skeleton: getattr(item, "compatibility_mode", default_mode)
+        for item in state.skeleton_mappings
+        if item.target_armature
     }
 
 
@@ -223,6 +110,14 @@ def populate_skeleton_mappings(state, pipeline_context, active_object=None):
         if len(manifest.skeletons) == 1 and not target_name:
             target_name = active_armature
         item.target_armature = bpy.data.objects.get(target_name) if target_name else None
+        restored_task = next(
+            (task for task in saved_tasks if task.source_skeleton == source_skeleton),
+            None,
+        )
+        item.compatibility_mode = getattr(
+            restored_task, "compatibility_mode",
+            getattr(state, "skeleton_compatibility_mode", "strict"),
+        )
     state.unmapped_skeletons = ", ".join(
         item.source_skeleton for item in state.skeleton_mappings
         if not item.target_armature
@@ -261,6 +156,16 @@ def build_plan_from_wizard(state, pipeline_context, active_object=None):
             obj.name: armature_identity(obj)
             for obj in bpy.data.objects if obj.type == 'ARMATURE'
         },
+        target_armature_provenances={
+            obj.name: skeleton_provenance_from_owner(obj).to_dict()
+            for obj in bpy.data.objects if obj.type == 'ARMATURE'
+        },
+        skeleton_compatibility_modes=(
+            _mapping_compatibility_dict(state) if len(skeletons) > 1 else {}
+        ),
+        default_compatibility_mode=getattr(
+            state, "skeleton_compatibility_mode", "strict"
+        ),
     )
     validate_generated_output_filenames(
         state.library_name,
@@ -279,16 +184,8 @@ def run_wizard_import_plan(
 ) -> tuple[bool, list[str]]:
     """Run import and library construction independently for each mapped task."""
     cfg = _build_config_from_wizard(state, context)
-    try:
-        indexed_manifest = _indexed_manifest_from_config(cfg)
-    except (OSError, sqlite3.Error, ValueError) as error:
-        if cfg.get("indexed_selection_mode") == _AUTO_PROJECT:
-            raise ValueError(_SCAN_INSTRUCTION) from error
-        raise
     manager = PipelineManager()
     pipeline_context = _load_or_create_context(cfg)
-    if indexed_manifest is not None:
-        pipeline_context.dictionary_manifest = indexed_manifest
     checkpoint, unmapped = build_plan_from_wizard(
         state, pipeline_context, context.active_object
     )
@@ -310,6 +207,9 @@ def run_wizard_import_plan(
         pipeline_context.set_config("target_armature", task.target_armature)
         pipeline_context.set_config("source_skeleton", task.source_skeleton)
         pipeline_context.set_config("source_subset", list(task.source_subset))
+        pipeline_context.set_config(
+            "skeleton_compatibility_mode", task.compatibility_mode
+        )
         if not manager.run_stage(pipeline_context, PipelineStage.ASSET_IMPORT.value):
             return False
         pipeline_context.persist_checkpoint()
@@ -320,6 +220,9 @@ def run_wizard_import_plan(
         return True
 
     persist(checkpoint)
+    initial_compatibility_mode = pipeline_context.get_config(
+        "skeleton_compatibility_mode", "strict"
+    )
     try:
         success = bool(checkpoint.plan.tasks) and run_pending_tasks(
             checkpoint, process, persist
@@ -331,6 +234,7 @@ def run_wizard_import_plan(
         pipeline_context.set_config("source_subset", [])
         pipeline_context.set_config("source_skeleton", "")
         pipeline_context.set_config("target_armature", "")
+        pipeline_context.set_config("skeleton_compatibility_mode", initial_compatibility_mode)
         task_error_active = sys.exc_info()[0] is not None
         try:
             pipeline_context.persist_checkpoint()

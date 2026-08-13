@@ -7,6 +7,7 @@ import json
 import tempfile
 import types
 import unittest
+from pathlib import Path
 
 
 ROOT = os.path.dirname(__file__)
@@ -765,13 +766,13 @@ class AnimationLoaderContractTests(unittest.TestCase):
             UI: ("FMODEL_OT_RemoveLibrary",),
         }
         for path, class_names in sources.items():
-            module = ast.parse(open(path, encoding="utf-8").read())
+            module = ast.parse(Path(path).read_text(encoding="utf-8"))
             for class_name in class_names:
                 operator = next(node for node in module.body if isinstance(node, ast.ClassDef) and node.name == class_name)
                 source = ast.unparse(operator)
                 self.assertIn("0 <= props.active_lib_index < len(props.project_libs)", source)
 
-        ui_module = ast.parse(open(UI, encoding="utf-8").read())
+        ui_module = ast.parse(Path(UI).read_text(encoding="utf-8"))
         select_operator = next(
             node for node in ui_module.body
             if isinstance(node, ast.ClassDef) and node.name == "FMODEL_OT_SelectTreeNode"
@@ -779,7 +780,7 @@ class AnimationLoaderContractTests(unittest.TestCase):
         self.assertIn("0 <= self.lib_index < len(props.project_libs)", ast.unparse(select_operator))
 
     def test_removing_last_library_clamps_active_index_to_zero(self):
-        module = ast.parse(open(UI, encoding="utf-8").read())
+        module = ast.parse(Path(UI).read_text(encoding="utf-8"))
         operator = next(
             node for node in module.body
             if isinstance(node, ast.ClassDef) and node.name == "FMODEL_OT_RemoveLibrary"

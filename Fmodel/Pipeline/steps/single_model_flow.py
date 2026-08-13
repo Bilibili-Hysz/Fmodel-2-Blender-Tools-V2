@@ -10,25 +10,30 @@ logger = logging.getLogger(__name__)
 
 
 def resolve_animation_source(wizard, project_root=""):
-    """Resolve the animation source directory based on source mode.
+    """Resolve the active animation folder.
 
-    Args:
-        wizard: WizardState instance (or duck-typed equivalent) with
-            source_mode and manual_source_dir fields.
-        project_root: fmodel_project.root_path string (may be empty).
-
-    Returns:
-        Resolved source directory string, or empty string when unresolvable.
+    Folder is the only active source mode. The legacy project-root and source
+    fallbacks are limited to old states that still advertise PROJECT (or
+    pre-mode schemas); a current MANUAL state with an empty folder resolves to
+    an empty path instead of silently reusing stale project data.
     """
-    if wizard.source_mode == 'MANUAL':
-        manual = getattr(wizard, "manual_source_dir", "")
-        stripped = manual.strip() if manual else ""
-        if stripped:
-            return stripped
+    has_manual_field = hasattr(wizard, "manual_source_dir")
+    manual = getattr(wizard, "manual_source_dir", "")
+    stripped = manual.strip() if manual else ""
+    if stripped:
+        return stripped
+
+    mode = str(getattr(wizard, "source_mode", "") or "").upper()
+    if mode == "MANUAL" and has_manual_field:
         return ""
-    if project_root and project_root.strip():
-        return project_root.strip()
-    return ""
+
+    # Migration-only compatibility for older .blend files and callers.
+    legacy_source = getattr(wizard, "source_dir", "")
+    stripped = legacy_source.strip() if legacy_source else ""
+    if stripped:
+        return stripped
+    legacy_root = project_root or getattr(wizard, "project_root", "")
+    return legacy_root.strip() if legacy_root else ""
 
 
 def _handoff_armature(wizard, armature, project_root="", advance_to_step=True):
@@ -40,7 +45,7 @@ def _handoff_armature(wizard, armature, project_root="", advance_to_step=True):
     Args:
         wizard: object with mutable WizardState fields.
         armature: active Blender Object (or None / non-armature).
-        project_root: fmodel_project.root_path value.
+        project_root: legacy project-root value accepted only for migration callers.
         advance_to_step: Preserve manual handoff navigation when true. Auto
             handoff uses false to leave the wizard on its current step.
 
@@ -73,7 +78,8 @@ def _handoff_armature(wizard, armature, project_root="", advance_to_step=True):
                 desired["flow_type"] = "FMODEL"
                 if root_path.strip():
                     desired.update({
-                        "source_mode": "PROJECT", "source_dir": root_path.strip(),
+                        "source_mode": "MANUAL", "manual_source_dir": root_path.strip(),
+                        "source_dir": root_path.strip(),
                         "output_dir": os.path.join(root_path.strip(), ".fmodel", "animation-libraries", skeleton),
                         "library_name": skeleton,
                     })
@@ -105,10 +111,8 @@ def prepare_imported_armature_for_animation(context, armature):
             logger.warning("Skipping animation handoff: Pipeline Wizard is unavailable")
             return {'CANCELLED'}
 
-        project = getattr(scene, "fmodel_project", None)
-        project_root = getattr(project, "root_path", "") or ""
         return _handoff_armature(
-            wizard, armature, project_root, advance_to_step=False
+            wizard, armature, "", advance_to_step=False
         )
     except Exception:
         logger.exception("Skipping non-fatal imported-model animation handoff")
@@ -123,7 +127,7 @@ class FMODEL_OT_UseActiveArmatureForAnimation(bpy.types.Operator):
     wizard configuration — never invokes scan or import operators.
     """
     bl_idname = "fmodel.use_active_armature_for_animation"
-    bl_label = "Use Active Armature for Animation"
+    bl_label = "使用当前骨架进行动画管线"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -134,16 +138,11 @@ class FMODEL_OT_UseActiveArmatureForAnimation(bpy.types.Operator):
     def execute(self, context):
         armature = context.active_object
         if armature is None or armature.type != 'ARMATURE':
-            self.report({'ERROR'}, "Select an Armature for animation")
+            self.report({'ERROR'}, "请选择用于动画的骨架")
             return {'CANCELLED'}
 
-        project_root = ""
-        fmodel_project = getattr(context.scene, "fmodel_project", None)
-        if fmodel_project is not None:
-            project_root = getattr(fmodel_project, "root_path", "") or ""
-
         state = context.scene.pipeline_wizard
-        return _handoff_armature(state, armature, project_root)
+        return _handoff_armature(state, armature, "")
 
 
 def register():

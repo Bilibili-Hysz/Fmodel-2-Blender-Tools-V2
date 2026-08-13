@@ -4,6 +4,19 @@
 
 import bpy
 
+try:
+    from ....core import (
+        SKELETON_COMPATIBILITY_ITEMS,
+        SKELETON_COMPATIBILITY_STRICT,
+    )
+except (ImportError, AttributeError):
+    # Keep isolated unit-test imports and older checkpoints loadable.
+    SKELETON_COMPATIBILITY_STRICT = "strict"
+    SKELETON_COMPATIBILITY_ITEMS = (
+        ("strict", "严格身份", "要求 UEFormat 骨架身份完全一致"),
+        ("name_retarget", "按名称兼容", "显式绑定同名骨骼"),
+    )
+
 
 _handoff_in_progress = set()
 
@@ -13,17 +26,21 @@ def _armature_poll(self, obj):
 
 
 def _sync_animation_source(self, context):
-    """Keep the legacy scan source current when the source choice changes."""
+    """Keep the active animation source synchronized with the Folder field.
+
+    Indexed Project is retired from the active UI/pipeline.  The old project
+    fields remain only so older .blend files can still be opened safely.
+    """
     from .single_model_flow import resolve_animation_source
 
     if id(self) in _handoff_in_progress:
         return
-    project = getattr(context.scene, "fmodel_project", None)
-    project_root = getattr(project, "root_path", "") if project else ""
-    source_dir = resolve_animation_source(self, project_root)
+    source_dir = resolve_animation_source(self, "")
     if source_dir != getattr(self, "source_dir", ""):
         self.source_dir = source_dir
     clear_workflow_results(self)
+
+
 
 
 def clear_workflow_results(state):
@@ -54,7 +71,8 @@ def handoff_armature(state, armature, project_root="", automatic=False):
     }
     if automatic and root:
         desired.update({
-            "source_mode": "PROJECT",
+            "source_mode": "MANUAL",
+            "manual_source_dir": root,
             "source_dir": root,
             "output_dir": __import__("os").path.join(
                 root, ".fmodel", "animation-libraries", skeleton_name
@@ -79,49 +97,83 @@ def handoff_armature(state, armature, project_root="", automatic=False):
 # ============================================================
 
 class WizardSkeletonMapping(bpy.types.PropertyGroup):
-    source_skeleton: bpy.props.StringProperty(name="Source skeleton")
+    source_skeleton: bpy.props.StringProperty(name="源骨架")
     target_armature: bpy.props.PointerProperty(
         name="Target armature", type=bpy.types.Object, poll=_armature_poll
     )
-    source_count: bpy.props.IntProperty(name="Animations", default=0)
-    status: bpy.props.StringProperty(name="Status", default="pending")
+    compatibility_mode: bpy.props.EnumProperty(
+        name="兼容策略", items=SKELETON_COMPATIBILITY_ITEMS,
+        default=SKELETON_COMPATIBILITY_STRICT,
+    )
+    source_count: bpy.props.IntProperty(name="动画", default=0)
+    status: bpy.props.StringProperty(name="状态", default="pending")
 
 
 class WizardState(bpy.types.PropertyGroup):
     """向导状态"""
     current_step: bpy.props.IntProperty(name="当前步骤", default=1, min=1, max=4)
 
-    # Step 1: 流程选择
+    # Step 1: UEFormat-only workflow. The property is retained so older .blend
+    # files can be normalized without changing the surrounding wizard schema.
     flow_type: bpy.props.EnumProperty(
         name="流程类型",
         items=[
-            ('FMODEL', "FModel 流程", "处理 FModel 导出的 .ueanim 文件"),
-            ('UNITY', "Unity 流程", "处理 Unity 导出的 .anim 文件"),
+            ('FMODEL', "FModel / UEFormat", "处理 UEFormat 导出的 .ueanim / .uepose 文件"),
         ],
-        default='FMODEL'
+        default='FMODEL',
     )
 
-    # Step 2: 项目选择
+    # Step 2: 动画文件夹
     source_mode: bpy.props.EnumProperty(
         name="源目录模式",
         items=[
-            ('PROJECT', "Project Default", "使用项目设置中的根目录"),
-            ('MANUAL', "Manual Directory", "手动选择源目录"),
+            ('MANUAL', "Folder", "直接扫描一个动画文件夹"),
         ],
-        default='PROJECT',
+        default='MANUAL',
         update=_sync_animation_source,
+    )
+    # Legacy Indexed Project fields are retained only so old .blend files
+    # can be opened and normalized; they are not read by the active pipeline.
+    project_root: bpy.props.StringProperty(
+        name="项目根目录", subtype='DIR_PATH', update=_sync_animation_source
+    )
+    project_index_state: bpy.props.StringProperty(name="动画索引状态", default="missing")
+    project_index_schema_version: bpy.props.IntProperty(name="动画索引架构", default=0)
+    project_index_generation: bpy.props.IntProperty(name="动画索引生成", default=0)
+    project_index_animation_count: bpy.props.IntProperty(name="已索引动画", default=0)
+    project_index_match_count: bpy.props.IntProperty(name="匹配动画", default=0)
+    project_index_last_scan_ns: bpy.props.StringProperty(name="动画索引上次扫描", default="")
+    project_index_message: bpy.props.StringProperty(name="动画索引消息", default="")
+    project_index_job_id: bpy.props.StringProperty(
+        name="动画索引任务", default="", options={'SKIP_SAVE'}
+    )
+    project_index_request_generation: bpy.props.IntProperty(
+        name="动画索引请求代次", default=0, options={'SKIP_SAVE'}
+    )
+    project_index_progress: bpy.props.FloatProperty(
+        name="动画索引进度", default=0.0, min=0.0, max=1.0,
+        subtype='FACTOR', options={'SKIP_SAVE'},
+    )
+    project_index_progress_phase: bpy.props.StringProperty(
+        name="动画索引进度阶段", default="", options={'SKIP_SAVE'}
+    )
+    project_index_progress_path: bpy.props.StringProperty(
+        name="动画索引进度路径", default="", options={'SKIP_SAVE'}
+    )
+    project_index_cancel_requested: bpy.props.BoolProperty(
+        name="已请求取消动画索引", default=False, options={'SKIP_SAVE'}
     )
     manual_source_dir: bpy.props.StringProperty(
         name="手动源目录", subtype='DIR_PATH', update=_sync_animation_source
     )
-    source_dir: bpy.props.StringProperty(name="项目目录", subtype='DIR_PATH')
+    source_dir: bpy.props.StringProperty(name="动画目录", subtype='DIR_PATH')
     output_dir: bpy.props.StringProperty(name="输出目录", subtype='DIR_PATH')
     library_name: bpy.props.StringProperty(name="资产库名称", default="AnimLibrary")
     skeleton_filter: bpy.props.StringProperty(
         name="骨架过滤", default="", update=_sync_animation_source
     )
 
-    # Records whether the indexed selection came from Project Default or the selector.
+    # Legacy indexed-selection fields; inactive in Folder-only mode.
     indexed_selection_mode: bpy.props.EnumProperty(
         name="索引选择来源",
         items=[
@@ -147,6 +199,14 @@ class WizardState(bpy.types.PropertyGroup):
     # Step 4: 导入状态
     import_target_skeleton: bpy.props.StringProperty(name="目标骨架")
     import_completed: bpy.props.BoolProperty(default=False)
+    skeleton_compatibility_mode: bpy.props.EnumProperty(
+        name="骨架兼容策略", items=SKELETON_COMPATIBILITY_ITEMS,
+        default=SKELETON_COMPATIBILITY_STRICT,
+        description=(
+            "严格身份是默认模式。按名称兼容是"
+            "显式的部分重定向路径，不等同于 Unreal Retarget Manager。"
+        ),
+    )
 
     # Step 4: 导入参数（从Operator移到PropertyGroup）
     import_scale: bpy.props.FloatProperty(

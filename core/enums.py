@@ -3,6 +3,16 @@
 
 from enum import Enum
 
+from .skeleton_compatibility import (
+    SKELETON_COMPATIBILITY_STRICT,
+    SKELETON_COMPATIBILITY_NAME_RETARGET,
+    SKELETON_COMPATIBILITY_MODES,
+    SKELETON_COMPATIBILITY_ITEMS,
+    skeleton_names_match,
+    normalize_skeleton_compatibility_mode,
+    is_name_based_compatibility,
+)
+
 
 class PipelineStage(Enum):
     """管线阶段枚举"""
@@ -35,6 +45,44 @@ class ImportMode(Enum):
     FBX_MATCH = "fbx_match"
     UEANIM_DIRECT = "ueanim_direct"
     LINK_EXISTING = "link_existing"
+
+
+# UEFormat-only runtime contract. Legacy enum values remain as read-only
+# migration tokens until the physical cleanup phase removes the old source code.
+UEFORMAT_SOURCE_TYPE = SourceType.FMODEL_UEANIM.value
+UEFORMAT_IMPORT_MODE = ImportMode.UEANIM_DIRECT.value
+UEFORMAT_IMPORT_MODES = frozenset({
+    UEFORMAT_IMPORT_MODE,
+    ImportMode.LINK_EXISTING.value,
+})
+
+
+def normalize_ueformat_pipeline_config(config):
+    """Normalize persisted pipeline settings to the native UEFormat route.
+
+    Old .blend/checkpoint data may contain Unity or FBX-match values. They are
+    not reused as if they were equivalent: the values are replaced with the
+    native route and a migration record is returned so callers can invalidate
+    stale scan/import state before continuing.
+    """
+
+    normalized = dict(config or {})
+    migration = {}
+    source_type = normalized.get("source_type", UEFORMAT_SOURCE_TYPE)
+    if source_type != UEFORMAT_SOURCE_TYPE:
+        migration["source_type"] = source_type
+        normalized["source_type"] = UEFORMAT_SOURCE_TYPE
+
+    import_mode = normalized.get("import_mode", UEFORMAT_IMPORT_MODE)
+    if import_mode not in UEFORMAT_IMPORT_MODES:
+        migration["import_mode"] = import_mode
+        normalized["import_mode"] = UEFORMAT_IMPORT_MODE
+
+    if migration:
+        previous = dict(normalized.get("ueformat_migration", {}))
+        previous.update({"from": migration, "reason": "legacy format route disabled"})
+        normalized["ueformat_migration"] = previous
+    return normalized, migration
 
 
 class ItemType(Enum):

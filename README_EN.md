@@ -23,6 +23,8 @@ Thumbnails:
 - Deterministic hash naming — rebaking overwrites old thumbnails
 - "Rebake Thumbnails" button for updating without re-importing
 
+Animation Pipeline is now Folder-only: Step 2 selects an animation folder, output directory, and library name; Step 3 directly scans .ueanim / .uepose files from that folder. Indexed Project, Project Root, the SQLite animation index, and background index-maintenance controls are removed from the active UI and execution path. Legacy state fields remain only so older .blend files can be opened safely.
+
 ---
 
 ### 2. Material Tools
@@ -90,35 +92,66 @@ Edit GameProfile presets in the Shader Editor:
 
 ## FModel Export Guide
 
-To ensure the material resolver and animation import work correctly, keep these JSON files on export:
+### Native UEFormat (recommended)
+Current canonical UEFormat resources carry the model/animation skeleton identity
+needed by V2. For `.uemodel`, `.ueanim`, and `.uepose`:
 
-### Models
 ```
-✅ .uemodel file
-✅ Model JSON (same-name .json with SkeletalMesh / MaterialInterface data)
-✅ Material Instance JSON (MaterialInstanceConstant with TextureParameterValues)
-```
-
-### Textures
-```
-✅ All textures (.png / .tga / .dds)
-✅ Preserve directory structure (Content/Textures/...)
+✅ Native binary resource
+✅ Preserve the original UE directory layout
+⭕ Same-name JSON: not required for native skeleton discovery
+⭕ Dictionary manifest JSON: not required by Folder scanning
 ```
 
-### Animations
-```
-✅ .ueanim files
-✅ Animation JSON (with AnimSequence structure)
-✅ Dictionary manifest JSON (with skeleton references and folder hierarchy)
-```
+V2 reads the binary skeleton path, optional GUID, bone-layout hash, and provenance
+fingerprint first. The UEFormat-only line no longer exposes the JSON fallback in its
+user-facing import path; the fallback remains only as a temporary migration component.
 
-### Recommended FModel Settings
-- Export mode: **Single File + JSON**
+### Materials and textures
+The canonical UEFormat importer handles native model materials/textures when the
+current FModel capability bridge is available. The former `Universal_tools/material` JSON resolver remains registered as a
+manual migration and repair tool for old projects, but it is not part of the
+UEFormat-only native import path.
+Keep external textures (`.png`, `.tga`, `.dds`, etc.) and preserve their
+`Content/Textures/...` relative layout whenever the selected importer needs them.
+
+### JSON that remains intentional
+JSON is not removed globally. It remains an explicit compatibility or state format for:
+
+- V2 checkpoints, reports, library manifests, shader presets, and other internal state;
+- read-only migration inputs for old projects during the transition window.
+
+### Recommended settings
+- Export native canonical UEFormat; do not add JSON for the normal UEFormat-only workflow
 - Texture format: PNG (preserve alpha for WebP thumbnails)
-- Material export: **Keep MaterialInstanceConstant texture parameters**
-- Directory structure: **Preserve UE4 original hierarchy**
+- Directory structure: **Preserve the original UE hierarchy**
 
 ---
+
+## User-visible reports
+
+The Toolbox now keeps a persistent **Last Operation** section. It reports the
+latest UEFormat import status, source, created Datablocks and actionable
+failures, and provides **Copy Report** and **Open Source** actions. The copied
+report also includes the active runtime path and verified Vendor tree digest.
+
+Choose one Blender installation mode: use the V2 bundled runtime, or install the
+standalone `io_scene_ueformat` addon. Do not enable both in one session.
+
+## Bundled UEFormat Vendor
+
+The release includes the FModel-aware `io_scene_ueformat` **1.2.0** vendor. It
+imports `.uemodel`, `.ueanim`, and `.uepose` and carries the FModel
+material/texture and strict skeleton surfaces used by V2.
+
+V2 registers this dependency in **headless mode**. The operators, file handlers,
+settings, and import implementation are active, but the canonical UEFormat
+panels and **File > Import** menu entries are not created, so users see only
+the V2 FModel UI. A standalone UEFormat add-on still uses normal registration
+and keeps its canonical UI.
+
+Windows x64 `zstandard` wheels for CPython 3.11/3.12/3.13 are bundled and
+selected according to the running Blender Python.
 
 ## Installation
 
@@ -135,7 +168,8 @@ Enable **FModel Tools** in Blender Preferences.
 ## Requirements
 
 - Blender 5.0+
-- Bundled vendors: `io_scene_ueformat` / `io_scene_psk_psa` (auto-detect user-installed versions)
+- Bundled runtime dependency: `io_scene_ueformat` 1.2.0 (headless registration)
+- PSK/PSA/glTF/FBX support is disabled in the UEFormat-only line
 
 ---
 

@@ -12,14 +12,16 @@ class PIPELINE_OT_WizardStep1(bpy.types.Operator):
 
     flow: bpy.props.EnumProperty(
         items=[
-            ('FMODEL', "FModel", ""),
-            ('UNITY', "Unity", ""),
-        ]
+            ('FMODEL', "FModel / UEFormat", "使用 UEFormat 原生资源"),
+        ],
+        default='FMODEL',
     )
 
     def execute(self, context):
         state = context.scene.pipeline_wizard
-        state.flow_type = self.flow
+        # The old Unity value is intentionally not accepted by the native
+        # workflow. Keep the operator ID stable but normalize any stale caller.
+        state.flow_type = 'FMODEL'
         state.current_step = 2
         # 重置后续步骤
         state.scan_completed = False

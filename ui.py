@@ -8,7 +8,7 @@ import json
 import re
 from bpy_extras.io_utils import ExportHelper
 
-from .core.i18n import t
+from .core.i18n import localize_status_message, t
 from .Assets.Anims.anim_manager import (
     _sync_manager_library_index, get_custom_icon, inspect_action_metadata,
 )
@@ -47,12 +47,13 @@ class FMODEL_AddonPreferences(bpy.types.AddonPreferences):
 
 
 class FMODEL_CoreProperties(bpy.types.PropertyGroup):
+    # Compatibility state retained for existing .blend files. The product
+    # surface is now native UEFormat-only, so there are no alternate format
+    # choices to expose in the UI.
     active_pipeline: bpy.props.EnumProperty(
         name="格式",
         items=[
-            ('UEFORMAT', "UE", "UEFormat 原生格式"),
-            ('GLTF', "glTF", "标准 glTF 格式"),
-            ('PSK', "PSK", "原始 UE 格式")
+            ('UEFORMAT', "UEFormat", "UEFormat 原生格式"),
         ],
         default='UEFORMAT'
     )
@@ -64,12 +65,212 @@ class FMODEL_CoreProperties(bpy.types.PropertyGroup):
     fix_meshes: bpy.props.BoolProperty(name="修复网格撕裂", default=True)
 
 
+def _last_operation_modules():
+    if __package__:
+        from .core.operation_report import format_last_operation, load_last_operation
+    else:
+        from core.operation_report import format_last_operation, load_last_operation
+    return load_last_operation, format_last_operation
+
+
+def _last_operation_report(context):
+    load_last_operation, _format_last_operation = _last_operation_modules()
+    scene = getattr(context, "scene", None)
+    return load_last_operation(scene) if scene is not None else None
+
+
+def _last_operation_text(context):
+    load_last_operation, format_last_operation = _last_operation_modules()
+    scene = getattr(context, "scene", None)
+    report = load_last_operation(scene) if scene is not None else None
+    if report is None:
+        return ""
+    return format_last_operation(report, _ueformat_runtime_status())
+
+
+class FMODEL_OT_CopyLastOperationReport(bpy.types.Operator):
+    bl_idname = "fmodel.copy_last_operation_report"
+    bl_label = "复制最近操作报告"
+    bl_description = "复制统一的 FModel 导入与 UEFormat 运行时报告"
+
+    @classmethod
+    def poll(cls, context):
+        try:
+            report = _last_operation_report(context)
+            return bool(report and report.available)
+        except Exception:
+            return False
+
+    def execute(self, context):
+        text = _last_operation_text(context)
+        if not text:
+            self.report({'WARNING'}, "没有可用的 FModel 操作报告")
+            return {'CANCELLED'}
+        context.window_manager.clipboard = text
+        self.report({'INFO'}, "FModel 操作报告已复制")
+        return {'FINISHED'}
+
+
+def _open_directory(directory: str) -> None:
+    path_open = getattr(getattr(bpy.ops, "wm", None), "path_open", None)
+    if callable(path_open):
+        path_open(filepath=directory)
+    elif hasattr(os, "startfile"):
+        os.startfile(directory)
+    else:
+        raise RuntimeError("没有可用的平台文件夹打开器")
+
+
+class FMODEL_OT_OpenLastOperationSource(bpy.types.Operator):
+    bl_idname = "fmodel.open_last_operation_source"
+    bl_label = "打开操作来源"
+    bl_description = "打开包含主要源资产的文件夹"
+
+    @classmethod
+    def poll(cls, context):
+        try:
+            report = _last_operation_report(context)
+            return bool(report and report.source_directory)
+        except Exception:
+            return False
+
+    def execute(self, context):
+        report = _last_operation_report(context)
+        directory = report.source_directory if report is not None else ""
+        if not directory or not os.path.isdir(directory):
+            self.report({'ERROR'}, "源文件夹不可用")
+            return {'CANCELLED'}
+        try:
+            _open_directory(directory)
+        except (OSError, RuntimeError) as exc:
+            self.report({'ERROR'}, f"无法打开源文件夹: {exc}")
+            return {'CANCELLED'}
+        return {'FINISHED'}
+
+
+
+
+def _draw_last_operation(layout, context):
+    try:
+        report = _last_operation_report(context)
+    except Exception as exc:
+        layout.label(text=f"{t('报告不可用')}: {str(exc)[:120]}", icon='ERROR')
+        return
+    if report is None or not report.available:
+        layout.label(text=t("没有记录 UEFormat 操作"), icon='INFO')
+        return
+
+    icon = {
+        "success": 'CHECKMARK',
+        "partial": 'ERROR',
+        "failed": 'CANCEL',
+        "cancelled": 'CANCEL',
+        "running": 'TIME',
+    }.get(report.status, 'INFO')
+    headline = report.summary or f"{report.asset_kind or 'Operation'}: {report.status}"
+    layout.label(text=headline[:160], icon=icon)
+    if report.primary_source_path:
+        layout.label(text=os.path.basename(report.primary_source_path)[:120], icon='FILE')
+    if report.created_counts:
+        counts = "  ".join(f"{name}: {count}" for name, count in report.created_counts.items())
+        layout.label(text=counts[:160], icon='OUTLINER_OB_GROUP_INSTANCE')
+    if report.failures:
+        failure = report.failures[0]
+        detail = failure.get("message") or failure.get("detail") or failure.get("path") or t("未知失败")
+        code = failure.get("code", "import_failed")
+        layout.label(text=f"[{code}] {str(detail)[:130]}", icon='ERROR')
+        if len(report.failures) > 1:
+            layout.label(text=f"{t('其他失败')}: {len(report.failures) - 1}", icon='INFO')
+    if report.parse_warning:
+        layout.label(text=report.parse_warning[:150], icon='ERROR')
+    if report.export_operation_id:
+        layout.label(text=f"{t('FModel 导出')}: {report.export_operation_id}", icon='LINKED')
+    if report.import_policy:
+        layout.label(text=f"{t('导入策略')}: {report.import_policy.title()}", icon='OPTIONS')
+    row = layout.row(align=True)
+    row.operator("fmodel.copy_last_operation_report", text=t("复制报告"), icon='COPYDOWN')
+    source = row.row(align=True)
+    source.enabled = bool(report.source_directory)
+    source.operator("fmodel.open_last_operation_source", text=t("打开来源"), icon='FILE_FOLDER')
+
+
+def _ueformat_runtime_status():
+    """Read Vendor state without importing auto_handlers during module load."""
+    try:
+        if __package__:
+            from . import auto_handlers
+        else:
+            import auto_handlers
+        getter = getattr(auto_handlers, "get_vendor_status", None)
+        return getter() if callable(getter) else {"state": "pending", "message": "UEFormat 运行时正在加载"}
+    except Exception as exc:
+        return {"state": "unknown", "message": str(exc)}
+
+
+
+
+def _runtime_state_label(value):
+    return t({
+        "ready": "已就绪",
+        "observed": "已检测",
+        "external": "外部运行时",
+        "failed": "失败",
+        "pending": "等待中",
+        "unknown": "未知",
+    }.get(str(value or ""), str(value or "未知")))
+
+
+def _draw_ueformat_runtime_status(layout):
+    status = _ueformat_runtime_status()
+    state = status.get("state", "unknown")
+    icon = {
+        "ready": "CHECKMARK",
+        "observed": "CHECKMARK",
+        "external": "LINKED",
+        "failed": "ERROR",
+        "pending": "TIME",
+    }.get(state, "INFO")
+    version = status.get("version")
+    suffix = f" ({version})" if version else ""
+    row = layout.row(align=True)
+    row.label(text=f"UEFormat {t('运行时')}: {_runtime_state_label(state)}{suffix}", icon=icon)
+    capabilities = status.get("capabilities") or {}
+    external_incompatible = (
+        state == "external"
+        and isinstance(capabilities, dict)
+        and capabilities.get("current") is False
+    )
+    if state == "external":
+        layout.label(
+            text=str(status.get("message", "已选择外部 UEFormat 运行时"))[:160],
+            icon="ERROR" if external_incompatible else "INFO",
+        )
+        source_path = str(status.get("source_path", "") or "")
+        if source_path:
+            layout.label(text=f"{t('外部来源')}: {source_path}"[:160], icon='FILE_SCRIPT')
+        remediation = str(status.get("remediation", "") or "")
+        if remediation:
+            layout.label(text=remediation[:160], icon='INFO')
+    elif state in {"failed", "unknown"}:
+        layout.label(
+            text=str(status.get("message", "UEFormat 运行时不可用"))[:160],
+            icon="ERROR",
+        )
+        remediation = str(status.get("remediation", "") or "")
+        if remediation:
+            layout.label(text=remediation[:160], icon='INFO')
+    tree_sha256 = str(status.get("tree_sha256", "") or "")
+    if state in {"ready", "observed"} and tree_sha256:
+        layout.label(text=f"{t('Vendor 树')}: {tree_sha256[:12]}", icon='FILE_TICK')
+
+
 # ============================================================
 # 1. 主面板
 # ============================================================
 
 class FMODEL_PT_ProjectSettings(bpy.types.Panel):
-    bl_label = "Project Settings"
+    """Legacy placeholder; intentionally not registered in the active UI."""
+    bl_label = "项目设置"
     bl_idname = "FMODEL_PT_project_settings"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -78,23 +279,8 @@ class FMODEL_PT_ProjectSettings(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        if not hasattr(context.scene, "fmodel_project"):
-            layout.label(text="Project controls are unavailable", icon='INFO')
-            return
-        settings = context.scene.fmodel_project
-        index_state = "missing" if not settings.root_path.strip() else settings.index_state
-        layout.prop(settings, "root_path", text="Root")
-        layout.label(text=f"Index: {index_state}", icon='FILE_CACHE')
-        if settings.index_schema_version:
-            layout.label(text=f"Schema: v{settings.index_schema_version}")
-        layout.label(
-            text=f"Animations: {settings.animation_count}  Models: {settings.model_count}",
-            icon='ASSET_MANAGER',
-        )
-        row = layout.row(align=True)
-        row.operator("fmodel.open_project_index", text="Open", icon='FILE_FOLDER')
-        row.operator("fmodel.scan_project_index", text="Scan", icon='FILE_REFRESH')
-        row.operator("fmodel.rebuild_project_index", text="Rebuild", icon='RECOVER_LAST')
+        layout.label(text=t("Indexed Project 已停用"), icon='INFO')
+        layout.label(text=t("请在动画管线中选择动画文件夹"), icon='FILE_FOLDER')
 
 class FMODEL_PT_Toolbox(bpy.types.Panel):
     bl_label = "FModel 工具箱"
@@ -109,39 +295,40 @@ class FMODEL_PT_Toolbox(bpy.types.Panel):
         props = context.scene.fmodel_core
 
         row = layout.row(align=True)
-        row.prop(props, "active_pipeline", expand=True)
+        row.label(text=t("UEFormat 原生管线"), icon='MESH_DATA')
+        status_drawer = globals().get("_draw_ueformat_runtime_status")
+        if callable(status_drawer):
+            status_drawer(layout)
         layout.separator()
-        layout.label(text="Animation Handoff", icon='ARMATURE_DATA')
-        layout.label(text="Prepare selected Armature for Animation Pipeline", icon='INFO')
+        layout.label(text=t("动画交接"), icon='ARMATURE_DATA')
+        layout.label(text=t("准备选中的骨架用于动画管线"), icon='INFO')
         layout.operator(
             "fmodel.use_active_armature_for_animation",
-            text="Use Active Armature",
+            text=t("使用当前骨架"),
             icon='ARMATURE_DATA',
         )
         layout.separator()
         split = layout.split(factor=0.5, align=True)
         col_in = split.column(align=True)
         col_out = split.column(align=True)
-        if props.active_pipeline == 'UEFORMAT':
-            col_in.operator("fmodel.import_model_uemodel", text=t("模型 (.uemodel)"), icon='MESH_DATA')
-            col_in.operator("fmodel.import_anim_ueanim", text=t("动画 (.ueanim)"), icon='ANIM_DATA')
-            col_in.operator("fmodel.import_anim_uepose", text=t("姿势 (.uepose)"), icon='ARMATURE_DATA')
-            col_in.operator("fmodel.import_uescene", text=t("场景 (.uescene)"), icon='SCENE_DATA')
-            col_out.label(text=t("导出暂不支持"))
-        elif props.active_pipeline == 'GLTF':
-            col_in.operator("fmodel.import_model_gltf", text=t("导入 glTF"), icon='IMPORT')
-            col_out.operator("fmodel.export_gltf_batch", text=t("导出 glTF"), icon='EXPORT')
-        elif props.active_pipeline == 'PSK':
-            col_in.operator("fmodel.import_model_psk", text=t("PSK 模型"), icon='MESH_DATA')
-            col_in.operator("fmodel.import_anim_psa", text=t("PSA 动画"), icon='ANIM_DATA')
-            col_out.label(text=t("导出暂不支持"))
+        col_in.operator("fmodel.import_model_uemodel", text=t("模型 (.uemodel)"), icon='MESH_DATA')
+        col_in.operator("fmodel.import_anim_ueanim", text=t("动画 (.ueanim)"), icon='ANIM_DATA')
+        col_in.operator("fmodel.import_anim_uepose", text=t("姿势 (.uepose)"), icon='ARMATURE_DATA')
+        col_out.label(text=t("UEFormat 原生导入；通用格式导出暂不支持"))
 
         material_header, material_body = layout.panel(
             'FMODEL_PT_toolbox_material_tools', default_closed=True,
         )
-        material_header.label(text="Material Tools", icon='MATERIAL')
+        material_header.label(text=t("材质工具"), icon='MATERIAL')
         if material_body:
             _draw_material_tools(material_body, context)
+
+        report_header, report_body = layout.panel(
+            'FMODEL_PT_toolbox_last_operation', default_closed=False,
+        )
+        report_header.label(text=t("最近操作"), icon='INFO')
+        if report_body:
+            _draw_last_operation(report_body, context)
 
 
 # ============================================================
@@ -149,7 +336,7 @@ class FMODEL_PT_Toolbox(bpy.types.Panel):
 # ============================================================
 
 class FMODEL_PT_Pipeline(bpy.types.Panel):
-    bl_label = "Animation Pipeline"
+    bl_label = "动画管线"
     bl_idname = "FMODEL_PT_pipeline"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -194,63 +381,95 @@ class FMODEL_PT_Pipeline(bpy.types.Panel):
 
         elif step == 2:
             col = layout.column(align=True)
-            col.prop(state, "source_mode", text="Animation Source", expand=True)
-            if state.source_mode == 'PROJECT':
-                project = getattr(context.scene, "fmodel_project", None)
-                project_root = getattr(project, "root_path", "") if project else ""
-                col.label(
-                    text=project_root or "No project root configured",
-                    icon='FILE_FOLDER',
-                )
-            else:
-                col.prop(state, "manual_source_dir", text="Animation Directory")
-            col.prop(state, "output_dir", text="输出目录")
-            col.prop(state, "library_name", text="库名称")
+            col.label(
+                text=t("Folder 模式：直接扫描动画文件夹"),
+                icon='FILE_FOLDER',
+            )
+            col.prop(state, "manual_source_dir", text=t("动画文件夹"))
+            col.prop(state, "output_dir", text=t("输出目录"))
+            col.prop(state, "library_name", text=t("库名称"))
             if state.flow_type == 'FMODEL':
                 row = col.row(align=True)
-                row.prop(state, "skeleton_filter", text="骨架过滤")
+                row.prop(state, "skeleton_filter", text=t("骨架过滤"))
                 row.operator("pipeline.pick_skeleton_filter", text="", icon='EYEDROPPER')
 
-            ready = bool(state.source_dir and state.output_dir and state.library_name)
+            source_dir = getattr(state, "manual_source_dir", "")
+            ready = bool(source_dir and state.output_dir and state.library_name)
             layout.separator()
             if ready:
                 layout.operator("pipeline.wizard_step2", text=t("下一步: 扫描"), icon='FORWARD')
             else:
                 box = layout.box()
-                box.label(text=t("请填写以上三项"), icon='INFO')
+                box.label(text=t("请填写动画文件夹、输出目录和库名称"), icon='INFO')
 
         elif step == 3:
-            can_scan = bool(state.source_dir and state.output_dir)
+            source_dir = getattr(state, "manual_source_dir", "")
+            can_scan = bool(source_dir and state.output_dir)
             if not can_scan:
                 layout.label(text=t("需先完成步骤2"), icon='ERROR')
                 return
             if not state.scan_completed:
                 row = layout.row(align=True)
                 row.scale_y = 1.3
-                if state.source_mode == 'PROJECT':
-                    row.operator(
-                        "pipeline.wizard_step3", text="Prepare Import Plan",
-                        icon='CHECKMARK',
-                    )
-                    layout.label(
-                        text="Validates indexed animations for this skeleton",
-                        icon='FILE_CACHE',
-                    )
-                else:
-                    row.operator(
-                        "pipeline.wizard_step3", text="Scan Animation Directory",
-                        icon='VIEWZOOM',
-                    )
+                row.operator(
+                    "pipeline.wizard_step3", text=t("扫描动画文件夹"),
+                    icon='VIEWZOOM',
+                )
+                layout.label(
+                    text=t("扫描当前文件夹中的 UEFormat 动画文件"),
+                    icon='FILE_CACHE',
+                )
             else:
                 col = layout.column(align=True)
-                col.label(text=f"骨架: {state.scan_skeleton_count}", icon='ARMATURE_DATA')
-                col.label(text=f"动画: {state.scan_anim_count}", icon='ANIM_DATA')
-                col.label(text=f"新增: {state.scan_new_count}", icon='ADD')
+                col.label(text=f"{t('骨架')}: {state.scan_skeleton_count}", icon='ARMATURE_DATA')
+                col.label(text=f"{t('动画')}: {state.scan_anim_count}", icon='ANIM_DATA')
+                col.label(text=f"{t('新增')}: {state.scan_new_count}", icon='ADD')
                 layout.separator()
-                op = layout.operator("pipeline.wizard_goto_step", text=t("下一步: 导入并打包"), icon='FORWARD')
+                op = layout.operator(
+                    "pipeline.wizard_goto_step",
+                    text=t("下一步: 导入并打包"),
+                    icon='FORWARD',
+                )
                 op.target_step = 4
 
         elif step == 4:
+            # Once the import/package operation has completed, the full Step 4
+            # editor is no longer actionable.  Keeping every mapping row and
+            # import option live here makes Blender redraw a potentially large
+            # CollectionProperty on every sidebar refresh.  Render a compact
+            # completion view instead; this is the same user-visible state as
+            # collapsing the panel, without requiring manual intervention.
+            if getattr(state, "lib_completed", False):
+                box = layout.box()
+                box.label(text=t("导入并打包已完成"), icon='CHECKMARK')
+                if getattr(state, "scan_anim_count", 0):
+                    box.label(
+                        text=f"{t('动画')}: {state.scan_anim_count}",
+                        icon='ANIM_DATA',
+                    )
+                if getattr(state, "scan_skeleton_count", 0):
+                    box.label(
+                        text=f"{t('骨架')}: {state.scan_skeleton_count}",
+                        icon='ARMATURE_DATA',
+                    )
+                if getattr(state, "unmapped_skeletons", ""):
+                    box.label(
+                        text=f"{t('未映射')}: {state.unmapped_skeletons}",
+                        icon='ERROR',
+                    )
+                row = box.row(align=True)
+                row.operator(
+                    "pipeline.rebake_thumbnails",
+                    text=t("重新生成缩略图"),
+                    icon='RENDER_STILL',
+                )
+                layout.operator(
+                    "pipeline.wizard_reset",
+                    text=t("重新开始"),
+                    icon='FILE_REFRESH',
+                )
+                return
+
             can_import = state.scan_completed
             obj = context.active_object
             has_arm = obj is not None and obj.type == 'ARMATURE'
@@ -276,11 +495,36 @@ class FMODEL_PT_Pipeline(bpy.types.Panel):
                     row = box_mapping.row(align=True)
                     row.label(text=f"{mapping.source_skeleton} ({mapping.source_count})")
                     row.prop(mapping, "target_armature", text="")
+                    row.prop(mapping, "compatibility_mode", text=t("模式"))
                     row.label(text=mapping.status)
                 if state.unmapped_skeletons:
                     box_mapping.label(
                         text=f"未映射: {state.unmapped_skeletons}", icon='ERROR'
                     )
+            elif state.scan_skeleton_count == 1:
+                # A one-skeleton scan still needs an explicit compatibility
+                # choice when Base animations are applied to a differently
+                # named/structured character armature.
+                box_mapping = layout.box()
+                box_mapping.label(text=t("骨架目标与兼容策略"), icon='ARMATURE_DATA')
+                mapping = state.skeleton_mappings[0] if state.skeleton_mappings else None
+                if mapping is not None:
+                    row = box_mapping.row(align=True)
+                    row.label(text=f"源: {mapping.source_skeleton} ({mapping.source_count})")
+                    row.label(text=f"目标: {mapping.target_armature.name if mapping.target_armature else '未指定'}")
+                box_mapping.prop(state, "skeleton_compatibility_mode", text=t("兼容策略"))
+
+            if (
+                getattr(state, "skeleton_compatibility_mode", "strict") == "name_retarget"
+                or any(
+                    getattr(mapping, "compatibility_mode", "strict") == "name_retarget"
+                    for mapping in state.skeleton_mappings
+                )
+            ):
+                warning = layout.box()
+                warning.label(text=t("已显式启用按名称兼容"), icon='ERROR')
+                warning.label(text=t("仅绑定同名骨骼；跳过源骨架独有骨骼。"))
+                warning.label(text=t("这不是完整的 Unreal Retarget Manager/参考姿势重定向。"))
 
             # Import params
             box_import = layout.box()
@@ -352,7 +596,7 @@ class FMODEL_PT_PipelineDebug(bpy.types.Panel):
         if ctx:
             layout.label(text=f"状态: {ctx.current_stage}")
             if ctx.config and ctx.config.get("source_dir"):
-                layout.label(text=f"项目: {ctx.config['source_dir']}")
+                layout.label(text=f"动画目录: {ctx.config['source_dir']}")
 
 
 # ============================================================
@@ -1254,7 +1498,7 @@ class GPEditorState(bpy.types.PropertyGroup):
 
 
 class FMODEL_PT_GameProfileManager(bpy.types.Panel):
-    bl_label = "GameProfile"
+    bl_label = "游戏配置 (GameProfile)"
     bl_idname = "FMODEL_PT_game_profile"
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
@@ -1304,6 +1548,8 @@ class FMODEL_PT_GameProfileManager(bpy.types.Panel):
 _classes = (
     FMODEL_AddonPreferences,
     FMODEL_CoreProperties,
+    FMODEL_OT_CopyLastOperationReport,
+    FMODEL_OT_OpenLastOperationSource,
     FMODEL_OT_ToggleTreeNode,
     FMODEL_OT_SelectTreeNode,
     FMODEL_OT_AddLibrary,
@@ -1312,7 +1558,8 @@ _classes = (
     PIPELINE_OT_ClearContext,
     PIPELINE_OT_ExportContextJson,
     PIPELINE_OT_PickSkeleton,
-    FMODEL_PT_ProjectSettings,
+    # Project Settings is retained only as an unregistered migration notice.
+    # Animation Pipeline exposes Folder as the sole active source mode.
     FMODEL_PT_Toolbox,
     FMODEL_PT_Pipeline,
     FMODEL_PT_PipelineDebug,

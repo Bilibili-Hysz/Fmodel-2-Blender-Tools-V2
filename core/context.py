@@ -5,13 +5,18 @@ import json
 import uuid
 import os
 import tempfile
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
 import bpy
 
-from .enums import PipelineStage, StageStatus
+from .enums import (
+    PipelineStage,
+    StageStatus,
+    normalize_ueformat_pipeline_config,
+    normalize_skeleton_compatibility_mode,
+)
 from .types import MultiImportCheckpoint, MultiImportPlan, PipelineConfig
 from .resume import (
     build_settings_fingerprint, import_settings_fingerprint, reconcile_resume_state,
@@ -41,6 +46,9 @@ class PipelineContext:
     # 各阶段数据 (使用Optional和Dict以便序列化)
     dictionary_manifest: Optional[Dict] = None
     imported_assets: Optional[Dict] = None
+    # Target armature's canonical FModel skeleton provenance.  ``None`` is
+    # retained for old checkpoints and is not interpreted as strict.
+    skeleton_provenance: Optional[Dict] = None
     library_manifest: Optional[Dict] = None
     multi_import_plan: Optional[Dict] = None
     multi_import_checkpoint: Optional[Dict] = None
@@ -65,6 +73,29 @@ class PipelineContext:
             self.pipeline_id = str(uuid.uuid4())
         if not self.created_at:
             self.created_at = datetime.now().isoformat()
+
+        self.config, migration = normalize_ueformat_pipeline_config(self.config)
+        if migration:
+            # Do not reuse a scan/import result created by the disabled Unity or
+            # FBX routes. The next run must begin with a native UEFormat scan.
+            self.dictionary_manifest = None
+            self.imported_assets = None
+            self.skeleton_provenance = None
+            self.library_manifest = None
+            self.multi_import_plan = None
+            self.multi_import_checkpoint = None
+            self.current_stage = PipelineStage.DICTIONARY_ACQUISITION.value
+            self.status = StageStatus.PENDING.value
+            self.stage_status = {
+                stage.value: StageStatus.PENDING.value for stage in PipelineStage
+            }
+            self.logs.append({
+                "timestamp": datetime.now().isoformat(),
+                "stage": "context",
+                "level": "warning",
+                "message": "旧格式管线状态已迁移为 UEFormat 原生管线，旧执行结果不会复用",
+            })
+
         if "resume_fingerprints" not in self.config:
             self.config["resume_fingerprints"] = {
                 "import": import_settings_fingerprint(self.config),
@@ -197,6 +228,7 @@ class PipelineContext:
         if source_changed:
             self.dictionary_manifest = None
             self.imported_assets = None
+            self.skeleton_provenance = None
             self.multi_import_plan = None
             self.multi_import_checkpoint = None
             self.current_stage = PipelineStage.DICTIONARY_ACQUISITION.value
@@ -219,7 +251,8 @@ class PipelineContext:
     def _apply_resume_state(self, state: Dict[str, Any]):
         for key in (
             "config", "stage_status", "dictionary_manifest", "imported_assets",
-            "library_manifest", "multi_import_plan", "multi_import_checkpoint",
+            "skeleton_provenance", "library_manifest", "multi_import_plan",
+            "multi_import_checkpoint",
         ):
             setattr(self, key, state.get(key))
 
@@ -272,6 +305,7 @@ class PipelineContext:
             "status": self.status,
             "dictionary_manifest": self.dictionary_manifest,
             "imported_assets": self.imported_assets,
+            "skeleton_provenance": self.skeleton_provenance,
             "library_manifest": self.library_manifest,
             "multi_import_plan": self.multi_import_plan,
             "multi_import_checkpoint": self.multi_import_checkpoint,
@@ -379,14 +413,35 @@ class PipelineContext:
         if data.get("status", StageStatus.PENDING.value) not in valid_statuses:
             raise ValueError("pipeline checkpoint has an invalid status")
 
-        for key in ("dictionary_manifest", "imported_assets", "library_manifest"):
+        for key in ("dictionary_manifest", "imported_assets", "skeleton_provenance", "library_manifest"):
             if key in data and data[key] is not None and not isinstance(data[key], dict):
                 raise ValueError(f"pipeline checkpoint {key} must be an object")
+        if data.get("skeleton_provenance") is not None:
+            try:
+                from .skeleton_provenance import validate_provenance_record
+                validate_provenance_record(data.get("skeleton_provenance"))
+            except (ImportError, TypeError, ValueError) as error:
+                raise ValueError("pipeline checkpoint skeleton_provenance is invalid") from error
         if "logs" in data and not isinstance(data["logs"], list):
             raise ValueError("pipeline checkpoint logs must be a list")
 
         config = data.get("config", {})
         cls._validate_checkpoint_config(config)
+        normalized_config, migration = normalize_ueformat_pipeline_config(config)
+        if migration:
+            data = dict(data)
+            data["config"] = normalized_config
+            data["dictionary_manifest"] = None
+            data["imported_assets"] = None
+            data["skeleton_provenance"] = None
+            data["library_manifest"] = None
+            data["multi_import_plan"] = None
+            data["multi_import_checkpoint"] = None
+            data["current_stage"] = PipelineStage.DICTIONARY_ACQUISITION.value
+            data["status"] = StageStatus.PENDING.value
+            data["stage_status"] = {
+                stage.value: StageStatus.PENDING.value for stage in PipelineStage
+            }
         stage_status = data.get("stage_status", {})
         if (
             not isinstance(stage_status, dict)
@@ -456,6 +511,13 @@ class PipelineContext:
             )
             if not valid:
                 raise ValueError(f"pipeline checkpoint config {key} has an invalid type")
+        if "skeleton_compatibility_mode" in config:
+            try:
+                normalize_skeleton_compatibility_mode(config["skeleton_compatibility_mode"])
+            except ValueError as error:
+                raise ValueError(
+                    "pipeline checkpoint config skeleton_compatibility_mode is invalid"
+                ) from error
         runtime_types = {
             "source_skeleton": str,
             "source_subset": list,

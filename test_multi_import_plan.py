@@ -189,6 +189,110 @@ class MultiImportPlanTests(unittest.TestCase):
 
             self.assertEqual([task.status for task in restored.plan.tasks], ["completed", "pending"])
 
+    def test_target_skeleton_provenance_roundtrips_and_invalidates_task_id(self):
+        manifest = self._manifest()
+        strict_v1 = {
+            "state": "strict",
+            "fingerprint": "a" * 64,
+            "identity": {"skeleton_path": "/Game/Hero/Skeleton"},
+        }
+        strict_v2 = {**strict_v1, "fingerprint": "b" * 64}
+        first, _ = self.multi_import.build_multi_import_plan(
+            manifest,
+            {"Hero": "HeroRig", "Enemy": "EnemyRig"},
+            target_armature_provenances={
+                "HeroRig": strict_v1,
+                "EnemyRig": strict_v1,
+            },
+        )
+        restored = self.types.MultiImportPlan.from_dict(first.to_dict())
+        changed, _ = self.multi_import.build_multi_import_plan(
+            manifest,
+            {"Hero": "HeroRig", "Enemy": "EnemyRig"},
+            target_armature_provenances={
+                "HeroRig": strict_v2,
+                "EnemyRig": strict_v1,
+            },
+        )
+
+        self.assertEqual(restored.tasks[0].target_skeleton_provenance, strict_v1)
+        self.assertNotEqual(first.tasks[0].task_id, changed.tasks[0].task_id)
+
+    def test_restore_does_not_reuse_completed_task_after_provenance_change(self):
+        manifest = self._manifest()
+        strict_v1 = {
+            "state": "strict",
+            "fingerprint": "a" * 64,
+            "identity": {"skeleton_path": "/Game/Hero/Skeleton"},
+        }
+        strict_v2 = {**strict_v1, "fingerprint": "b" * 64}
+        old_plan, _ = self.multi_import.build_multi_import_plan(
+            manifest,
+            {"Hero": "HeroRig", "Enemy": "EnemyRig"},
+            target_armature_provenances={
+                "HeroRig": strict_v1,
+                "EnemyRig": strict_v1,
+            },
+        )
+        old_plan.tasks[0].status = "completed"
+        old_plan.tasks[0].progress = 1.0
+        checkpoint = self.types.MultiImportCheckpoint(plan=old_plan)
+
+        new_plan, _ = self.multi_import.build_multi_import_plan(
+            manifest,
+            {"Hero": "HeroRig", "Enemy": "EnemyRig"},
+            target_armature_provenances={
+                "HeroRig": strict_v2,
+                "EnemyRig": strict_v1,
+            },
+        )
+        restored = self.multi_import.restore_checkpoint(new_plan, checkpoint.to_dict())
+
+        self.assertEqual(restored.plan.tasks[0].status, "pending")
+        self.assertEqual(restored.plan.tasks[0].progress, 0.0)
+
+    def test_legacy_checkpoint_cannot_cross_into_strict_target_provenance(self):
+        manifest = self._manifest()
+        legacy_plan, _ = self.multi_import.build_multi_import_plan(
+            manifest,
+            {"Hero": "HeroRig", "Enemy": "EnemyRig"},
+        )
+        legacy_plan.tasks[0].status = "completed"
+        legacy_plan.tasks[0].progress = 1.0
+        checkpoint = self.types.MultiImportCheckpoint(plan=legacy_plan)
+        strict = {
+            "state": "strict",
+            "fingerprint": "a" * 64,
+            "identity": {"skeleton_path": "/Game/Hero/Skeleton"},
+        }
+
+        strict_plan, _ = self.multi_import.build_multi_import_plan(
+            manifest,
+            {"Hero": "HeroRig", "Enemy": "EnemyRig"},
+            target_armature_provenances={
+                "HeroRig": strict,
+                "EnemyRig": strict,
+            },
+        )
+        restored = self.multi_import.restore_checkpoint(strict_plan, checkpoint.to_dict())
+
+        self.assertEqual(restored.plan.tasks[0].status, "pending")
+
+    def test_validate_rejects_malformed_persisted_provenance(self):
+        with self.assertRaisesRegex(ValueError, "provenance"):
+            self.types.MultiImportTask.from_dict(
+                {
+                    "source_skeleton": "Hero",
+                    "target_armature": "HeroRig",
+                    "target_skeleton_provenance": {
+                        "state": "strict",
+                        "identity": {"skeleton_path": "/Game/Hero/Skeleton"},
+                        "fingerprint": "f" * 64,
+                    },
+                },
+                validate=True,
+            )
+
     def test_target_rename_keeps_task_id_but_structural_revision_changes_it(self):
         manifest = self._manifest()
         first, _ = self.multi_import.build_multi_import_plan(

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import gzip
+import os
+import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -11,14 +14,30 @@ from bpy_extras import anim_utils
 from mathutils import Matrix, Quaternion, Vector
 from math import *
 
-from ..importer.classes import (
-    MAGIC,
-    MODEL_IDENTIFIER,
-    POSE_IDENTIFIER,
-    ANIM_IDENTIFIER,
+from .reorient_utils import reorient_bones
+from .animation_time import animation_time_provenance, make_source_tick_converter
+from .fmodel import (
+    FModelResourceResolver,
+    material_links_metadata,
+    plan_fmodel_animation_binding,
+    pose_identity_issues,
+    skeleton_identity_metadata,
+    verify_fmodel_target_pose,
+)
+from .material_builder import (
+    FModelMaterialImportOptions,
+    build_fmodel_materials,
+    source_slot_mapping_for_lod_materials,
+)
+from .material_images import FModelImageRepository
+from .creation_tracker import UEFormatImportCapture
+from .mesh_batch import material_indices_for_sections
+from .morph_batch import morph_coordinates
+
+from .protocol import ANIM_IDENTIFIER, EUEFormatVersion, MAGIC, MODEL_IDENTIFIER, POSE_IDENTIFIER
+from .classes import (
     Bone,
     ConvexCollision,
-    EUEFormatVersion,
     Material,
     MorphTarget,
     Socket,
@@ -28,7 +47,7 @@ from ..importer.classes import (
     UEModelSkeleton,
     VertexColor,
     Weight,
-    UEPose
+    UEPose,
 )
 from ..importer.reader import FArchiveReader
 from ..importer.utils import *
@@ -36,17 +55,151 @@ from ..logging import Log
 from ..options import UEAnimOptions, UEFormatOptions, UEModelOptions, UEPoseOptions
 
 
+@dataclass(frozen=True, slots=True)
+class UEMODELPreflight:
+    source_lods: frozenset[int]
+    material_slots: dict[int, str]
+    source_material_mapping_present: bool = False
+
+
+class UEMODELSourceMaterialAmbiguityError(ValueError):
+    code = "mato_source_material_mapping_ambiguous"
+
+
+def _read_compressed_archive(ar: FArchiveReader) -> FArchiveReader:
+    compression_type = ar.read_fstring()
+    uncompressed_size = ar.read_int()
+    compressed_size = ar.read_int()
+    compressed_payload = ar.read_to_end()
+    if len(compressed_payload) != compressed_size:
+        raise ValueError("Compressed payload size does not match header")
+
+    if compression_type == "GZIP":
+        decompressed_payload = gzip.decompress(compressed_payload)
+    elif compression_type == "ZSTD":
+        from .. import zstd_decompressor
+        decompressed_payload = zstd_decompressor.decompress(compressed_payload, uncompressed_size)
+    else:
+        raise ValueError(f"Unknown Compression Type: {compression_type}")
+
+    if len(decompressed_payload) != uncompressed_size:
+        raise ValueError("Decompressed payload size does not match header")
+    return FArchiveReader(decompressed_payload)
+
+
+def read_uemodel_source_lods(path: str | Path) -> UEMODELPreflight:
+    """Read UEMODEL LOD and effective material identities without Blender data."""
+    path = path if isinstance(path, Path) else Path(path)
+    filename = os.fspath(path)
+    if os.name == "nt" and os.path.isabs(filename) and not filename.startswith("\\\\?\\"):
+        filename = "\\\\?\\UNC\\" + filename[2:] if filename.startswith("\\\\") else "\\\\?\\" + filename
+    with open(filename, "rb") as file, FArchiveReader(file.read()) as ar:
+        magic = ar.read_string(len(MAGIC))
+        if magic != MAGIC:
+            raise ValueError("Invalid magic")
+        identifier = ar.read_fstring()
+        file_version = EUEFormatVersion(ar.read_uint8())
+        if identifier != MODEL_IDENTIFIER:
+            raise ValueError(f"Expected UEMODEL, got {identifier}")
+        ar.read_fstring()
+        read_archive = ar
+        if ar.read_bool():
+            read_archive = _read_compressed_archive(ar)
+        read_archive.file_version = file_version
+        read_archive.metadata["scale"] = 1.0
+        data = UEModel.from_archive(read_archive) if file_version >= EUEFormatVersion.LevelOfDetailFormatRestructure else UEModel.from_archive_legacy(read_archive)
+    lods = set()
+    for lod in data.lods:
+        if lod.name.startswith("LOD") and lod.name[3:].isdigit():
+            lods.add(int(lod.name[3:]))
+        else:
+            raise ValueError(f"Invalid UEMODEL source LOD identity {lod.name!r}")
+    material_slots: dict[int, str] = {}
+    material_identities: dict[int, str | None] = {}
+    for slot in data.material_links.slots:
+        source_index = slot.source_material_index
+        if source_index is None:
+            continue
+        identity = _valid_unreal_material_identity(slot.unreal_material_path)
+        if identity is None:
+            raise UEMODELSourceMaterialAmbiguityError(
+                f"mato_source_material_mapping_ambiguous: source material index {source_index} "
+                f"has an invalid identity {slot.unreal_material_path!r}"
+            )
+        if source_index in material_identities and material_identities[source_index] != identity:
+            raise UEMODELSourceMaterialAmbiguityError(
+                f"mato_source_material_mapping_ambiguous: source material index {source_index} "
+                f"has conflicting identities {material_identities[source_index]!r} and {identity!r}"
+            )
+        material_identities[source_index] = identity
+        material_slots[source_index] = identity
+    return UEMODELPreflight(
+        frozenset(lods),
+        material_slots,
+        data.material_links.source_material_mapping_present,
+    )
+
+
+def _valid_unreal_material_identity(path: str | None) -> str | None:
+    if not path:
+        return None
+    if not path.startswith("/"):
+        path = "/" + path
+    if len(path) < 4 or path.startswith("//"):
+        return None
+    slash = path.rfind("/")
+    if slash <= 1:
+        return None
+    package_segments = path[1:slash].split("/")
+    if any(not segment or segment in (".", "..") or "." in segment for segment in package_segments):
+        return None
+    terminal = path[slash + 1:]
+    dot = terminal.find(".")
+    if dot >= 0:
+        if dot == 0 or dot != terminal.rfind(".") or dot == len(terminal) - 1:
+            return None
+        if terminal[:dot] != terminal[dot + 1:]:
+            return None
+        path = path[:slash + 1 + dot]
+    if not path[path.rfind("/") + 1:] or "." in path[path.rfind("/") + 1:]:
+        return None
+    return path
+
+
 class UEFormatImport:
-    def __init__(self, options: UEFormatOptions) -> None:
+    def __init__(
+        self,
+        options: UEFormatOptions,
+        material_options: FModelMaterialImportOptions | None = None,
+        creation_tracker: UEFormatImportCapture | None = None,
+    ) -> None:
         self.options = options
+        self.material_options = material_options
+        self.creation_tracker = creation_tracker
+
+    def _track(self, kind: str, value):
+        if self.creation_tracker is not None:
+            self.creation_tracker.track(kind, value)
+        return value
+
+    def _discard(self, kind: str, value) -> None:
+        if self.creation_tracker is not None:
+            self.creation_tracker.discard(kind, value)
 
     def import_file(self, path: str | Path) -> Object | Action:
         path = path if isinstance(path, Path) else Path(path)
 
         Log.time_start(f"Import {path}")
 
-        with path.open("rb") as file:
-            obj = self.import_data(file.read())
+        self._fmodel_model_path = path
+        try:
+            filename = os.fspath(path)
+            if os.name == "nt" and os.path.isabs(filename) and not filename.startswith("\\\\?\\"):
+                filename = "\\\\?\\UNC\\" + filename[2:] if filename.startswith("\\\\") else "\\\\?\\" + filename
+            with open(filename, "rb") as file:
+                obj = self.import_data(file.read())
+        finally:
+            del self._fmodel_model_path
 
         Log.time_end(f"Import {path}")
 
@@ -62,7 +215,7 @@ class UEFormatImport:
             raise ValueError(msg)
 
         identifier = ar.read_fstring()
-        file_version = EUEFormatVersion(int.from_bytes(ar.read_byte(), byteorder="big"))
+        file_version = EUEFormatVersion(ar.read_uint8())
         if file_version > EUEFormatVersion.LatestVersion:
             msg = f"File Version {file_version} is not supported for this version of the importer."
             Log.error(msg)
@@ -73,31 +226,13 @@ class UEFormatImport:
         read_archive = ar
         is_compressed = ar.read_bool()
         if is_compressed:
-
-            compression_type = ar.read_fstring()
-            uncompressed_size = ar.read_int()
-            _compressed_size = ar.read_int()
-
-            if compression_type == "GZIP":
-                read_archive = FArchiveReader(gzip.decompress(ar.read_to_end()))
-            elif compression_type == "ZSTD":
-                from .. import zstd_decompressor
-                read_archive = FArchiveReader(
-                    zstd_decompressor.decompress(
-                        ar.read_to_end(),
-                        uncompressed_size,
-                    ),
-                )
-            else:
-                msg = f"Unknown Compression Type: {compression_type}"
-                Log.error(msg)
-                raise ValueError(msg)
+            read_archive = _read_compressed_archive(ar)
 
         read_archive.file_version = file_version
         read_archive.metadata["scale"] = self.options.scale_factor
 
         if identifier == MODEL_IDENTIFIER:
-            return self.import_uemodel_data(read_archive, object_name)
+            return self.import_uemodel_data(read_archive, object_name, self.material_options)
         if identifier == ANIM_IDENTIFIER:
             return self.import_ueanim_data(read_archive, object_name)
         if identifier == POSE_IDENTIFIER:
@@ -108,29 +243,51 @@ class UEFormatImport:
         raise ValueError
 
     # TODO: clean up code quality, esp in the skeleton department
-    def import_uemodel_data(self, ar: FArchiveReader, name: str) -> tuple[bpy.types.Object, UEModel]:
+    def import_uemodel_data(
+        self,
+        ar: FArchiveReader,
+        name: str,
+        material_options: FModelMaterialImportOptions | None = None,
+    ) -> tuple[bpy.types.Object, UEModel]:
         assert isinstance(self.options, UEModelOptions)  # noqa: S101
+
+        if material_options is None:
+            material_options = FModelMaterialImportOptions(
+                import_materials=self.options.import_fmodel_materials,
+                build_nodes=self.options.build_fmodel_material_nodes,
+                load_embedded=self.options.load_fmodel_embedded_textures,
+                load_external=self.options.load_fmodel_external_textures,
+                keep_unmapped=self.options.keep_fmodel_unmapped_parameters,
+                ue_export_root=self.options.fmodel_ue_export_root or None,
+                bundle_root=self.options.fmodel_bundle_root or None,
+            )
 
         data: UEModel
         if ar.file_version >= EUEFormatVersion.LevelOfDetailFormatRestructure:
             data = UEModel.from_archive(ar)
+            data.topology_summary()
         else:
             data = UEModel.from_archive_legacy(ar)
 
         # meshes
         return_object = None
-        target_lod = min(self.options.target_lod, len(data.lods) - 1)
+        target_lod_name = f"LOD{self.options.target_lod}"
+        selected_lods = [lod for lod in data.lods if lod.name == target_lod_name]
+        if not selected_lods:
+            available = ", ".join(lod.name for lod in data.lods) or "none"
+            raise ValueError(
+                f"Requested source LOD {self.options.target_lod} is unavailable; available LODs: {available}"
+            )
         created_lods: list[Object] = []
-        for index, lod in enumerate(data.lods):
-            if index != target_lod:
-                continue
-                
+        for lod in selected_lods:
+
             lod_name = f"{name}_{lod.name}"
-            mesh_data = bpy.data.meshes.new(lod_name)
+            mesh_data = self._track("meshes", bpy.data.meshes.new(lod_name))
 
             mesh_data.from_pydata(lod.vertices, [], lod.indices)  # type: ignore[reportArgumentType]
+            mesh_data["fmodel_material_links"] = json.dumps(material_links_metadata(data.material_links))
 
-            mesh_object = bpy.data.objects.new(lod_name, mesh_data)
+            mesh_object = self._track("objects", bpy.data.objects.new(lod_name, mesh_data))
             return_object = mesh_object
             if self.options.link:
                 bpy.context.collection.objects.link(mesh_object)
@@ -157,14 +314,24 @@ class UEFormatImport:
                 if not mesh_object.data.shape_keys:
                     mesh_object.shape_key_add(name="Basis", from_mix=False)
 
+                base_coordinates = np.empty(len(mesh_data.vertices) * 3, dtype=np.float32)
+                if hasattr(mesh_data.vertices, "foreach_get"):
+                    mesh_data.vertices.foreach_get("co", base_coordinates)
+
                 for morph in lod.morphs:
                     key = mesh_object.shape_key_add(from_mix=False)
                     key.name = morph.name
                     key.interpolation = "KEY_LINEAR"
 
-                    for delta in morph.deltas:
-                        key.data[delta.vertex_index].co += Vector(delta.position)
-                        
+                    if hasattr(mesh_data.vertices, "foreach_get") and hasattr(key.data, "foreach_set"):
+                        key.data.foreach_set(
+                            "co",
+                            morph_coordinates(base_coordinates, morph.deltas),
+                        )
+                    else:
+                        for delta in morph.deltas:
+                            key.data[delta.vertex_index].co += Vector(delta.position)
+
                     key.value = 0
 
             squish = lambda array: array.reshape(
@@ -197,22 +364,74 @@ class UEFormatImport:
                 for i, material in enumerate(lod.materials):
                     mat = bpy.data.materials.get(material.material_name)
                     if mat is None:
-                        mat = bpy.data.materials.new(name=material.material_name)
+                        mat = self._track("materials", bpy.data.materials.new(name=material.material_name))
+                        # This temporary slot material belongs to this importer and may be
+                        # rebuilt in place by the FModel material-link pipeline below.
+                        mat["fmodel_importer_owned"] = True
                     mesh_data.materials.append(mat)
 
-                    start_face_index = material.first_index // 3
-                    end_face_index = start_face_index + material.num_faces
-                    for face_index in range(start_face_index, end_face_index):
-                        mesh_data.polygons[face_index].material_index = i
+                mesh_data.polygons.foreach_set(
+                    "material_index",
+                    material_indices_for_sections(lod.materials, len(mesh_data.polygons)),
+                )
+
+                if material_options.import_materials:
+                    model_path = getattr(self, "_fmodel_model_path", Path(name))
+                    ue_export_root = material_options.ue_export_root or None
+                    bundle_root = material_options.bundle_root or None
+                    resolver = FModelResourceResolver(
+                        model_path=model_path,
+                        fmodel_textures=data.textures,
+                        ue_export_root=ue_export_root,
+                        bundle_root=bundle_root,
+                    )
+                    images = FModelImageRepository(
+                        resolver,
+                        model_path,
+                        ue_export_root,
+                        bundle_root,
+                        creation_tracker=self.creation_tracker,
+                    )
+                    material_links = data.material_links
+                    if not material_links.slots:
+                        Log.warn(
+                            "UEMODEL has no FMODEL_MATERIALS links; UEFormat-only import keeps base material slots "
+                            "and does not read JSON material sidecars"
+                        )
+                    build_fmodel_materials(
+                        mesh_data,
+                        lod.materials,
+                        material_links,
+                        images,
+                        Log.warn,
+                        material_options,
+                        source_slot_to_blender_index=source_slot_mapping_for_lod_materials(
+                            lod.materials,
+                            material_links,
+                        ),
+                        creation_tracker=self.creation_tracker,
+                        material_cache=None,
+                    )
 
             created_lods.append(mesh_object)
 
         # skeleton
         if data.skeleton and (data.skeleton.bones or (self.options.import_sockets and data.skeleton.sockets)):
-            armature_data = bpy.data.armatures.new(name=name)
+            armature_data = self._track("armatures", bpy.data.armatures.new(name=name))
             armature_data.display_type = "STICK"
 
-            template_armature_object = bpy.data.objects.new(name + "_Template_Skeleton", armature_data)
+            template_armature_object = self._track("objects", bpy.data.objects.new(name + "_Template_Skeleton", armature_data))
+            if data.skeleton_identity is not None:
+                template_armature_object["fmodel_skeleton_identity"] = json.dumps(
+                    skeleton_identity_metadata(data.skeleton_identity),
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+                template_armature_object["fmodel_skeleton_identity_source"] = (
+                    "standard_skeleton"
+                    if data.skeleton_identity_derived
+                    else "fmodel_extension"
+                )
             template_armature_object.show_in_front = True
             bpy.context.collection.objects.link(template_armature_object)
             bpy.context.view_layer.objects.active = template_armature_object
@@ -299,60 +518,16 @@ class UEFormatImport:
             if data.skeleton.bones and self.options.reorient_bones:
                 bpy.ops.object.mode_set(mode="EDIT")
 
-                for bone in armature_data.edit_bones:
-                    bone: EditBone
-                    if bone.get("is_socket"):
-                        continue
-
-                    children = []
-                    for child in bone.children:  # type: ignore[reportOptionalIterable]
-                        if child.get("is_socket"):
-                            continue
-
-                        children.append(child)
-
-                    if len(children) == 0 and bone.parent is None:
-                        continue
-
-                    target_length = bone.length
-                    if len(children) == 0:
-                        new_rot = Vector(bone.parent["reorient_direction"])
-                        new_rot.rotate(Quaternion(bone["orig_quat"]).conjugated())
-
-                        target_rotation = make_axis_vector(new_rot)
-                    else:
-                        avg_child_pos = Vector()
-                        avg_child_length = 0.0
-                        allowed_children = None
-                        if self.options.allowed_reorient_children is not None:
-                            allowed_children = self.options.allowed_reorient_children.get(bone.name)
-                            
-                        for child in children:
-                            if allowed_children is not None and child.name not in allowed_children:
-                                continue
-                                
-                            pos = Vector(child["orig_loc"])
-                            avg_child_pos += pos
-                            avg_child_length += pos.length
-
-                        avg_child_pos /= len(children)
-                        avg_child_length /= len(children)
-
-                        target_rotation = make_axis_vector(avg_child_pos)
-                        bone["reorient_direction"] = target_rotation
-
-                        target_length = avg_child_length
-
-                    post_quat = Vector((0, 1, 0)).rotation_difference(target_rotation)
-                    bone.matrix @= post_quat.to_matrix().to_4x4()  # type: ignore[reportOperatorIssue]
-                    bone.length = max(0.01, target_length)
-
-                    post_quat.rotate(Quaternion(bone["orig_quat"]).conjugated())
-                    bone["post_quat"] = post_quat
+                reorient_bones(
+                    armature_data,
+                    bone_length=self.options.bone_length * self.options.scale_factor,
+                    allowed_reorient_children=self.options.allowed_reorient_children
+                )
 
                 bpy.ops.object.mode_set(mode="OBJECT")
 
             if created_lods:
+                self._discard("objects", template_armature_object)
                 bpy.data.objects.remove(template_armature_object)
             else:
                 template_armature_object.name = name
@@ -410,10 +585,21 @@ class UEFormatImport:
                         virtual_bone.color.palette = "THEME11"
 
             for lod in created_lods:
-                armature_object = bpy.data.objects.new(
+                armature_object = self._track("objects", bpy.data.objects.new(
                     lod.name + "_Skeleton",
                     armature_data,
-                )
+                ))
+                if data.skeleton_identity is not None:
+                    armature_object["fmodel_skeleton_identity"] = json.dumps(
+                        skeleton_identity_metadata(data.skeleton_identity),
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    )
+                    armature_object["fmodel_skeleton_identity_source"] = (
+                        "standard_skeleton"
+                        if data.skeleton_identity_derived
+                        else "fmodel_extension"
+                    )
                 armature_object.show_in_front = True
                 return_object = armature_object
 
@@ -438,9 +624,10 @@ class UEFormatImport:
 
                 bpy.ops.object.mode_set(mode="POSE")
 
-                # bone colors
+                # bone colors — build weighted group set once (was O(bones × verts))
+                weighted_groups = get_weighted_vertex_group_indices(lod)
                 for bone in armature_object.pose.bones:
-                    if not (vertex_group := lod.vertex_groups.get(bone.name)) or not has_vertex_weights(lod, vertex_group):
+                    if not (vertex_group := lod.vertex_groups.get(bone.name)) or not has_vertex_weights(lod, vertex_group, weighted_groups):
                         bone.color.palette = "THEME14"
                         continue
 
@@ -466,10 +653,10 @@ class UEFormatImport:
             for index, collision in enumerate(data.collisions):
                 collision_name = index if collision.name == "None" else collision.name
                 collision_object_name = f"UCX_{name}_{collision_name}"
-                collision_mesh_data = bpy.data.meshes.new(collision_object_name)
+                collision_mesh_data = self._track("meshes", bpy.data.meshes.new(collision_object_name))
                 collision_mesh_data.from_pydata(collision.vertices, [], collision.indices)  # type: ignore[reportArgumentType]
 
-                collision_mesh_object = bpy.data.objects.new(collision_object_name, collision_mesh_data)
+                collision_mesh_object = self._track("objects", bpy.data.objects.new(collision_object_name, collision_mesh_data))
                 collision_mesh_object.display_type = "WIRE"
                 if self.options.link:
                     bpy.context.collection.objects.link(collision_mesh_object)
@@ -479,16 +666,91 @@ class UEFormatImport:
     def import_ueanim_data(self, ar: FArchiveReader, name: str) -> tuple[bpy.types.Action, UEAnim]:
         assert isinstance(self.options, UEAnimOptions)  # noqa: S101
 
-        data = UEAnim.from_archive(ar)
-
-        action = bpy.data.actions.new(name=name)
+        data = UEAnim.from_archive(
+            ar,
+            strict_fmodel_profile=self.options.strict_fmodel_skeleton,
+        )
 
         armature = self.options.override_skeleton or get_active_armature()
         assert isinstance(armature, bpy.types.Object)  # noqa: S101
-        
+
+        target_identity = (
+            skeleton_identity_metadata(data.target_skeleton_identity)
+            if data.target_skeleton_identity is not None
+            else None
+        )
+        armature_identity = None
+        armature_identity_error = None
+        if "fmodel_skeleton_identity" in armature:
+            try:
+                armature_identity = json.loads(armature["fmodel_skeleton_identity"])
+                if not isinstance(armature_identity, dict):
+                    armature_identity = None
+                    armature_identity_error = "FModel armature skeleton identity is malformed"
+            except (TypeError, ValueError):
+                armature_identity_error = "FModel armature skeleton identity is malformed"
+
+        strict_skeleton = self.options.strict_fmodel_skeleton
+        if armature_identity_error and strict_skeleton:
+            raise ValueError(armature_identity_error)
+        binding_plan = plan_fmodel_animation_binding(
+            target_identity,
+            armature_identity,
+            (track.name for track in data.tracks),
+            (bone.name for bone in armature.pose.bones),
+            strict=strict_skeleton,
+        )
+        render = bpy.context.scene.render
+        effective_blender_fps = render.fps / render.fps_base
+        source_rate = (
+            data.metadata.frames_per_second
+            if data.metadata is not None
+            else effective_blender_fps
+        )
+        convert_source_tick = make_source_tick_converter(
+            source_rate,
+            render.fps,
+            render.fps_base,
+        )
+        time_provenance = animation_time_provenance(
+            source_rate,
+            render.fps,
+            render.fps_base,
+        )
+        binding_issues = ([armature_identity_error] if armature_identity_error else []) + list(binding_plan.issues)
+        if binding_issues:
+            Log.warn(
+                "FModel animation compatibility is permissive: "
+                f"bound={binding_plan.bound_track_count}, skipped={binding_plan.skipped_track_count}, "
+                f"total={binding_plan.total_track_count}; {'; '.join(binding_issues)}"
+            )
+
+        action = self._track("actions", bpy.data.actions.new(name=name))
+        if data.target_skeleton_identity is not None:
+            action["fmodel_target_skeleton_identity"] = json.dumps(
+                skeleton_identity_metadata(data.target_skeleton_identity),
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        action["fmodel_animation_binding"] = json.dumps(
+            {
+                "bound_track_count": binding_plan.bound_track_count,
+                "skipped_track_count": binding_plan.skipped_track_count,
+                "total_track_count": binding_plan.total_track_count,
+                "strict": strict_skeleton,
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        action["fmodel_animation_time"] = json.dumps(
+            time_provenance,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
         if armature_anim_data := armature.animation_data:
             armature_anim_data.action = None
-        
+
         if self.options.link:
             armature.animation_data_create()
             armature.animation_data.action = action
@@ -496,12 +758,12 @@ class UEFormatImport:
         if self.options.link and bpy.app.version >= (4, 4, 0):
             slot = action.slots.new(id_type='OBJECT', name=f"Slot_{armature.name}")
             armature.animation_data.action_slot = slot
-            
+
 
         # bone anim data
         pose_bones = armature.pose.bones
-        for track in data.tracks:
-            bone = get_case_insensitive(pose_bones, track.name)
+        for track, bone_name in zip(data.tracks, binding_plan.bound_bone_names):
+            bone = pose_bones.get(bone_name) if bone_name is not None else None
 
             if bone is None:
                 continue
@@ -529,7 +791,7 @@ class UEFormatImport:
                 curves: list[FCurve],
                 vector: Vector | list[float] | Quaternion,
                 key_index: int,
-                frame: int,
+                frame: float,
             ) -> None:
                 for i in range(len(vector)):
                     curves[i].keyframe_points[key_index].co = frame, vector[i]
@@ -548,10 +810,10 @@ class UEFormatImport:
                     pos -= orig_loc
                     pos.rotate(post_quat.conjugated())
 
-                    add_key(loc_curves, pos, index, key.frame)
+                    add_key(loc_curves, pos, index, convert_source_tick(key.frame))
 
                 for index, key in enumerate(track.scale_keys):
-                    add_key(scale_curves, key.value, index, key.frame)
+                    add_key(scale_curves, key.value, index, convert_source_tick(key.frame))
 
             rot_curves = create_fcurves("rotation_quaternion", 4, len(track.rotation_keys), bone)
             for index, key in enumerate(track.rotation_keys):
@@ -567,7 +829,7 @@ class UEFormatImport:
                 q.rotate(p_quat)
                 quat.rotate(q.conjugated())
 
-                add_key(rot_curves, quat, index, key.frame)
+                add_key(rot_curves, quat, index, convert_source_tick(key.frame))
 
             bone.matrix_basis.identity()  # type: ignore[reportAttributeAccessIssue]
 
@@ -577,37 +839,76 @@ class UEFormatImport:
                 shape_keys.name = "Pose Asset"
                 if shape_key_anim_data := shape_keys.animation_data:
                     shape_key_anim_data.action = None
-    
-                shape_keys_action = bpy.data.actions.new(name=f"{name}_Curves")
-                
+
+                shape_keys_action = self._track("actions", bpy.data.actions.new(name=f"{name}_Curves"))
+                shape_keys_action["fmodel_animation_time"] = json.dumps(
+                    time_provenance,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+
                 if self.options.link:
                     shape_keys.animation_data_create()
                     shape_keys.animation_data.action = shape_keys_action
-    
+
                 key_blocks = shape_keys.key_blocks
                 for key_block in key_blocks:
                     key_block.value = 0
-                    
+
                 for curve in data.curves:
-                    
+
                     if not (shape_key := best(key_blocks, lambda block: block.name.lower(), curve.name.lower())):
                         continue
-                        
+
                     for key in curve.keys:
                         shape_key.value = key.value
-                        shape_key.keyframe_insert(data_path="value", frame=key.frame)
+                        shape_key.keyframe_insert(
+                            data_path="value",
+                            frame=convert_source_tick(key.frame),
+                        )
 
         return action, data
 
     def import_uepose_data(self, ar: FArchiveReader, name: str):
         assert isinstance(self.options, UEPoseOptions)  # noqa: S101
-        
-        data = UEPose.from_archive(ar)
+
+        data = UEPose.from_archive(
+            ar,
+            strict_fmodel_profile=self.options.strict_fmodel_skeleton,
+        )
 
         selected_armature = self.options.override_skeleton or get_active_armature()
         assert isinstance(selected_armature, bpy.types.Object)  # noqa: S101
-        
+
+        target_identity = (
+            skeleton_identity_metadata(data.target_skeleton_identity)
+            if data.target_skeleton_identity is not None
+            else None
+        )
+        armature_identity = None
+        if "fmodel_skeleton_identity" in selected_armature:
+            try:
+                parsed_identity = json.loads(selected_armature["fmodel_skeleton_identity"])
+                armature_identity = parsed_identity if isinstance(parsed_identity, dict) else None
+            except (TypeError, ValueError):
+                armature_identity = None
+        if target_identity is not None:
+            issues = pose_identity_issues(target_identity, armature_identity)
+            if not issues:
+                try:
+                    verify_fmodel_target_pose(target_identity, armature_identity)
+                except ValueError as exc:
+                    issues.append(str(exc))
+            if issues and self.options.strict_fmodel_skeleton:
+                raise ValueError("; ".join(issues))
+
         selected_mesh = get_armature_mesh(selected_armature)
+        if target_identity is not None:
+            selected_mesh["fmodel_target_pose_identity"] = json.dumps(
+                target_identity,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
 
         original_shape_key_lock = selected_mesh.show_only_shape_key
         original_mode = bpy.context.active_object.mode
@@ -617,7 +918,7 @@ class UEFormatImport:
         )
 
         selected_mesh.show_only_shape_key = False
-        
+
         bone_swap_orig_parents(selected_armature)
         muted_constraints = disable_constraints(selected_armature)
 
@@ -632,7 +933,7 @@ class UEFormatImport:
             if shape_key.value != 0:
                 original_values[shape_key.name] = shape_key.value
                 shape_key.value = 0
-                
+
         root_bone = selected_armature.pose.bones.get(self.options.root_bone) or selected_armature.pose.bones[0]
 
         pose_names = []
@@ -655,7 +956,7 @@ class UEFormatImport:
                 pose_bone: bpy.types.PoseBone = get_case_insensitive(
                     selected_armature.pose.bones, pose_key.bone_name
                 )
-                
+
                 if not pose_bone:
                     continue
 
@@ -728,7 +1029,7 @@ class UEFormatImport:
             pose_name = pose.name
             if pose_name in key_blocks:
                 pose_name = f"curve_{pose_name}"
-            
+
             contributed = False
             for curve in pose.curves:
                 target_curve_name = data.curve_names[curve.curve_index]
@@ -747,16 +1048,16 @@ class UEFormatImport:
 
             if contributed:
                 selected_mesh.shape_key_add(name=pose_name, from_mix=True)
-            
+
             for key in key_blocks:
                 key.value = 0
-                
+
         # Reset shape keys back to original values
         if len(original_values) > 0:
             for key_block in key_blocks:
                 if orig_value := original_values.get(key_block.name):
                     key_block.value = orig_value
-            
+
         # Final reset before re-entering regular import mode.
         bpy.context.view_layer.objects.active = selected_armature
         bpy.ops.object.mode_set(mode="POSE")
@@ -771,5 +1072,3 @@ class UEFormatImport:
         selected_mesh.show_only_shape_key = original_shape_key_lock
         bpy.ops.object.mode_set(mode=original_mode)
         bpy.context.view_layer.objects.active = selected_mesh
-        
-    

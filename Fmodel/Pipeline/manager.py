@@ -8,7 +8,8 @@ import bpy
 from ...core import (
     MultiImportPlan, PipelineContext, PipelineConfig, PipelineStage, StageStatus,
     build_multi_import_plan, restore_checkpoint, run_pending_tasks,
-    armature_identity, import_settings_fingerprint,
+    armature_identity, import_settings_fingerprint, skeleton_provenance_from_owner,
+    UEFORMAT_SOURCE_TYPE, UEFORMAT_IMPORT_MODE, pipeline_activity,
 )
 from .stages import (
     DictionaryAcquisitionStage, FormatConversionStage,  # 新增 FormatConversionStage
@@ -48,7 +49,11 @@ class PipelineManager:
         return context
     
     def run_full_pipeline(self, context: PipelineContext) -> bool:
-        """运行完整的管线流程"""
+        """运行完整的管线流程。"""
+        with pipeline_activity():
+            return self._run_full_pipeline(context)
+
+    def _run_full_pipeline(self, context: PipelineContext) -> bool:
         if context.multi_import_plan:
             return self._run_multi_import_pipeline(context)
 
@@ -99,18 +104,23 @@ class PipelineManager:
             context.set_config("target_armature", task.target_armature)
             context.set_config("source_skeleton", task.source_skeleton)
             context.set_config("source_subset", list(task.source_subset))
+            context.set_config("skeleton_compatibility_mode", task.compatibility_mode)
+            context.skeleton_provenance = dict(task.target_skeleton_provenance or {})
             if not self.run_stage(context, PipelineStage.ASSET_IMPORT.value):
                 return False
             persist(checkpoint)
             return self.run_stage(context, PipelineStage.LIBRARY_BUILDING.value)
 
         persist(checkpoint)
+        initial_compatibility_mode = context.get_config("skeleton_compatibility_mode", "strict")
         try:
             tasks_succeeded = run_pending_tasks(checkpoint, process, persist)
         finally:
             context.set_config("target_armature", "")
             context.set_config("source_skeleton", "")
             context.set_config("source_subset", [])
+            context.set_config("skeleton_compatibility_mode", initial_compatibility_mode)
+            context.skeleton_provenance = None
             task_error_active = sys.exc_info()[0] is not None
             try:
                 if context.get_config("output_dir", ""):
@@ -144,39 +154,91 @@ class PipelineManager:
                 raise ValueError(f"多骨架导入计划包含重复源骨架: {task.source_skeleton}")
             mappings[task.source_skeleton] = task.target_armature
         available = {obj.name for obj in bpy.data.objects if obj.type == 'ARMATURE'}
+        identity_config = {
+            key: value
+            for key, value in context.config.items()
+            if key not in {"resume_fingerprints", "import_checkpoint"}
+        }
+        configured_import_fingerprint = (
+            import_settings_fingerprint(context.config)
+            if identity_config
+            else next(
+                (task.import_fingerprint for task in plan.tasks if task.import_fingerprint),
+                "",
+            )
+        )
         validated, unmapped = build_multi_import_plan(
             context.dictionary_manifest or {}, mappings,
             available_target_armatures=available,
-            import_fingerprint=import_settings_fingerprint(context.config),
+            import_fingerprint=configured_import_fingerprint,
+            skeleton_compatibility_modes={
+                task.source_skeleton: task.compatibility_mode for task in plan.tasks
+            },
+            default_compatibility_mode=context.get_config(
+                "skeleton_compatibility_mode", "strict"
+            ),
             target_armature_identities={
                 obj.name: armature_identity(obj)
+                for obj in bpy.data.objects if obj.type == 'ARMATURE'
+            },
+            target_armature_provenances={
+                obj.name: skeleton_provenance_from_owner(obj).to_dict()
                 for obj in bpy.data.objects if obj.type == 'ARMATURE'
             },
         )
         if unmapped:
             raise ValueError(f"多骨架导入计划缺少映射: {', '.join(unmapped)}")
         expected = [
-            (task.source_skeleton, task.target_armature, list(task.source_subset))
+            (
+                task.source_skeleton,
+                task.target_armature,
+                list(task.source_subset),
+                task.compatibility_mode,
+            )
             for task in validated.tasks
         ]
         actual = [
-            (task.source_skeleton, task.target_armature, list(task.source_subset))
+            (
+                task.source_skeleton,
+                task.target_armature,
+                list(task.source_subset),
+                task.compatibility_mode,
+            )
             for task in plan.tasks
         ]
         if actual != expected:
             raise ValueError("多骨架导入计划与当前字典清单不匹配")
-        return plan
+
+        # Rebuild the returned plan from the current armature identity and
+        # provenance.  Returning the persisted plan here would preserve stale
+        # task IDs/statuses after a target skeleton changes.
+        stale_tasks = [
+            (old.task_id, current.task_id)
+            for old, current in zip(plan.tasks, validated.tasks)
+            if old.task_id and old.task_id != current.task_id
+        ]
+        if stale_tasks:
+            context.log_warning(
+                "manager",
+                f"检测到 {len(stale_tasks)} 个多骨架任务身份变化，将清除旧完成状态",
+            )
+        return validated
     
     def run_stage(self, context: PipelineContext, stage_name: str) -> bool:
-        """运行单个阶段"""
-        stage = self.stages.get(stage_name)
-        if not stage:
-            context.log_error("manager", f"未知阶段: {stage_name}")
-            return False
-        return stage.run(context)
+        """运行单个阶段并抑制导入期间的全库自动扫描。"""
+        with pipeline_activity():
+            stage = self.stages.get(stage_name)
+            if not stage:
+                context.log_error("manager", f"未知阶段: {stage_name}")
+                return False
+            return stage.run(context)
     
     def run_from_stage(self, context: PipelineContext, start_stage: str) -> bool:
-        """从指定阶段开始运行"""
+        """从指定阶段开始运行。"""
+        with pipeline_activity():
+            return self._run_from_stage(context, start_stage)
+
+    def _run_from_stage(self, context: PipelineContext, start_stage: str) -> bool:
         pipeline_stages = self._PIPELINE_ORDER
         
         try:
@@ -244,7 +306,7 @@ class PIPELINE_OT_RunFullPipeline(bpy.types.Operator):
             library_name=props.library_name,
             source_type=props.source_type,
             import_mode=props.import_mode,
-            unity_skip_processed=props.unity_skip_processed,
+            unity_skip_processed=getattr(props, "unity_skip_processed", True),
             import_scale=props.import_scale,
             rotation_only=props.rotation_only,
             generate_thumbnails=props.generate_thumbnails,
@@ -384,24 +446,19 @@ class PipelineProperties(bpy.types.PropertyGroup):
     source_type: bpy.props.EnumProperty(
         name="源类型",
         items=[
-            ("unity_anim", "Unity动画", "处理Unity .anim文件"),
-            ("fmodel_ueanim", "FModel UEAnim", "处理FModel .ueanim文件"),
-            ("fbx_batch", "批量FBX", "处理批量FBX文件"),
+            (UEFORMAT_SOURCE_TYPE, "FModel UEFormat", "扫描 .ueanim / .uepose 原生资源"),
         ],
-        default="unity_anim"
+        default=UEFORMAT_SOURCE_TYPE,
     )
     
     import_mode: bpy.props.EnumProperty(
         name="导入模式",
         items=[
-            ("fbx_match", "匹配FBX", "匹配已导入的FBX动画"),
-            ("ueanim_direct", "直接导入", "直接导入.ueanim文件"),
+            (UEFORMAT_IMPORT_MODE, "直接导入", "直接导入 .ueanim / .uepose 文件"),
             ("link_existing", "链接现有", "链接现有资产库"),
         ],
-        default="fbx_match"
+        default=UEFORMAT_IMPORT_MODE,
     )
-    
-    unity_skip_processed: bpy.props.BoolProperty(name="跳过已处理", default=True)
     import_scale: bpy.props.FloatProperty(name="导入缩放", default=0.01, min=0.0001, precision=4)
     rotation_only: bpy.props.BoolProperty(name="仅导入旋转", default=False)
     generate_thumbnails: bpy.props.BoolProperty(name="生成缩略图", default=True)

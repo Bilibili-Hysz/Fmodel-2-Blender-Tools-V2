@@ -107,6 +107,127 @@ class UEFormatModelAnimationHandoffTests(unittest.TestCase):
         sys.modules.pop("addon.Fmodel.importers.model.operator_model_ueformat", None)
         _restore_modules(self.saved)
 
+    def test_canonical_identity_supplies_skeleton_metadata_without_json(self):
+        imported_armature = FakeObject("ImportedRig", "ARMATURE")
+        context = types.SimpleNamespace(
+            active_object=FakeObject("UnrelatedRig", "ARMATURE"),
+            scene=types.SimpleNamespace(
+                pipeline_wizard=FakeWizard(),
+                fmodel_project=types.SimpleNamespace(root_path="C:/Game"),
+            ),
+        )
+        importer = types.SimpleNamespace(import_file=lambda path: (imported_armature, object()))
+        self.module.get_ueformat_api = lambda: (
+            lambda options: importer, lambda **kwargs: kwargs, None, None
+        )
+        core_module = sys.modules["addon.core"]
+        core_module.skeleton_provenance_from_owner = lambda _armature: types.SimpleNamespace(
+            is_strict=True,
+            identity={
+                "skeleton_path": "/Game/Characters/Hero/SK_Hero_Skeleton",
+            },
+            fingerprint="f" * 64,
+        )
+        operator = self.module.MODEL_OT_ImportUEModel()
+        operator.filepath = "C:/Game/Hero.uemodel"
+        operator.auto_backup = False
+        operator.auto_link_mat = False
+        operator.scale_factor = 0.01
+        operator.bone_length = 4.0
+        operator.reorient_bones = False
+        operator.target_lod = 0
+        operator.import_collision = False
+        operator.import_morph_targets = True
+        operator.import_sockets = True
+        operator.import_virtual_bones = False
+        operator.report = lambda *args: None
+
+        with patch.object(self.module, "prepare_imported_armature_for_animation"):
+            self.assertEqual(operator.execute(context), {"FINISHED"})
+
+        self.assertEqual(imported_armature["FModel_Skeleton"], "SK_Hero_Skeleton")
+        self.assertEqual(imported_armature["FModel_Skeleton_Path"], "/Game/Characters/Hero/SK_Hero_Skeleton")
+        self.assertEqual(imported_armature["FModel_Skeleton_Identity_Fingerprint"], "f" * 64)
+
+    def test_model_capability_keeps_canonical_material_options_without_full_bridge(self):
+        imported_armature = FakeObject("ImportedRig", "ARMATURE")
+        context = types.SimpleNamespace(
+            active_object=None,
+            scene=types.SimpleNamespace(
+                pipeline_wizard=FakeWizard(),
+                fmodel_project=types.SimpleNamespace(root_path="C:/Game"),
+            ),
+        )
+        importer = types.SimpleNamespace(
+            import_file=lambda path: (imported_armature, object())
+        )
+        captured = {}
+
+        class FakeModelOptions:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+        bridge = types.SimpleNamespace(
+            is_current=False,
+            capabilities=types.SimpleNamespace(
+                supports_current_model=True,
+                supports_fmodel_materials=True,
+                supports_fmodel_textures=True,
+            ),
+            UEFormatImport=lambda options: importer,
+            UEModelOptions=FakeModelOptions,
+        )
+        self.module.get_ueformat_bridge = lambda **kwargs: bridge
+
+        def build_model_options(**kwargs):
+            captured["builder_input"] = kwargs
+            return {
+                "scale_factor": kwargs["scale_factor"],
+                "bone_length": kwargs["bone_length"],
+                "reorient_bones": kwargs["reorient_bones"],
+                "target_lod": kwargs["target_lod"],
+                "import_collision": kwargs["import_collision"],
+                "import_morph_targets": kwargs["import_morph_targets"],
+                "import_sockets": kwargs["import_sockets"],
+                "import_virtual_bones": kwargs["import_virtual_bones"],
+                "import_fmodel_materials": True,
+                "build_fmodel_material_nodes": True,
+                "load_fmodel_embedded_textures": True,
+                "load_fmodel_external_textures": True,
+                "keep_fmodel_unmapped_parameters": True,
+                "fmodel_ue_export_root": "C:/Game",
+                "fmodel_bundle_root": "C:/Game",
+            }
+
+        self.module.build_model_option_kwargs = build_model_options
+        operator = self.module.MODEL_OT_ImportUEModel()
+        operator.filepath = "C:/Game/Content/Hero/Hero.uemodel"
+        operator.auto_backup = False
+        operator.auto_link_mat = False
+        operator.scale_factor = 0.01
+        operator.bone_length = 4.0
+        operator.reorient_bones = False
+        operator.target_lod = 0
+        operator.import_collision = False
+        operator.import_morph_targets = True
+        operator.import_sockets = True
+        operator.import_virtual_bones = False
+        operator.report = lambda *args: None
+
+        with patch.object(self.module, "prepare_imported_armature_for_animation"):
+            self.assertEqual(operator.execute(context), {"FINISHED"})
+
+        self.assertEqual(
+            captured["builder_input"]["model_path"].replace("\\", "/"),
+            "C:/Game/Content/Hero/Hero.uemodel",
+        )
+        self.assertTrue(captured["import_fmodel_materials"])
+        self.assertTrue(captured["build_fmodel_material_nodes"])
+        self.assertTrue(captured["load_fmodel_embedded_textures"])
+        self.assertTrue(captured["load_fmodel_external_textures"])
+        self.assertEqual(captured["fmodel_ue_export_root"], "C:/Game")
+        self.assertEqual(captured["fmodel_bundle_root"], "C:/Game")
+
     def test_successful_import_handoffs_returned_armature_not_active_object(self):
         imported_armature = FakeObject("ImportedRig", "ARMATURE")
         unrelated_active = FakeObject("UnrelatedRig", "ARMATURE")

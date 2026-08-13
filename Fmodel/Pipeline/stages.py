@@ -13,14 +13,15 @@ from abc import ABC, abstractmethod
 
 from ...core import (
     PipelineContext, PipelineStage, StageStatus, SourceType, ImportMode,
-    DictionaryManifest, SkeletonNode, FolderNode, AnimationEntry,
+    UEFORMAT_SOURCE_TYPE,
+    DictionaryManifest, SkeletonNode, AnimationEntry,
     ImportedAssetCollection, ImportedAction, AssetLibraryManifest,
     CatalogEntry, LibraryAsset, BundleRecord, get_or_create_catalog_uuid, ensure_dir,
     manifest_with_bundle, replace_manifest_skeleton, publish_rebuild_replacement_set,
     prepare_library_transaction,
     persist_transaction_artifact,
     persist_transaction_replacement,
-    publish_bundle_pair_and_library_index, validate_filename_component, staging_chunk_path,
+    validate_filename_component, staging_chunk_path,
     staging_task_dir, validate_staged_blend_path,
     load_complete_v2_manifest, get_manifest_processed_sources,
     migrate_verified_legacy_manifest,
@@ -29,6 +30,11 @@ from ...core import (
     validate_skeleton_output_names,
     armature_identity, import_settings_fingerprint, make_batch_identity,
     make_manifest_source, reusable_import_results,
+    skeleton_identity_fingerprint, skeleton_provenance_from_owner,
+    read_ueformat_identity, strict_skeleton_identity_differences,
+    SKELETON_COMPATIBILITY_STRICT,
+    SKELETON_COMPATIBILITY_NAME_RETARGET,
+    normalize_skeleton_compatibility_mode, skeleton_names_match,
 )
 from ...core.action_selection import resolve_imported_action
 from ...core.action_safety import (
@@ -256,6 +262,11 @@ class PipelineStageBase(ABC):
             or ""
         )
 
+    @staticmethod
+    def _skeleton_match(source_name: str, filter_name: str) -> bool:
+        """Match display aliases without weakening canonical identity checks."""
+        return skeleton_names_match(source_name, filter_name)
+
     def _task_identity(self, context: PipelineContext) -> dict:
         """Return the stable identity that makes an import checkpoint reusable."""
         source_skeleton = self._source_skeleton(context)
@@ -266,22 +277,56 @@ class PipelineStageBase(ABC):
             )
             for index, path in enumerate(context.get_config("source_subset", [])) if path
         ]
+        compatibility_mode = normalize_skeleton_compatibility_mode(
+            context.get_config("skeleton_compatibility_mode", SKELETON_COMPATIBILITY_STRICT)
+        )
         target_name = str(context.get_config("target_armature", "") or "")
         objects = getattr(bpy.data, "objects", None)
         target = objects.get(target_name) if target_name and objects is not None else None
-        target_identity = armature_identity(target) if target and target.type == 'ARMATURE' else {
+        target_is_armature = bool(target and getattr(target, "type", "") == "ARMATURE")
+        target_identity = armature_identity(target) if target_is_armature else {
             "stable_id": target_name, "structure_revision": "missing"
         }
+        target_skeleton_provenance = skeleton_provenance_from_owner(
+            target if target_is_armature else None
+        ).to_dict()
+        # Include the canonical FModel identity in the batch digest while
+        # retaining the older generic resume identity fields for compatibility.
+        batch_target_identity = {
+            **target_identity,
+            "fmodel_skeleton_provenance": {
+                "state": target_skeleton_provenance["state"],
+                "fingerprint": target_skeleton_provenance["fingerprint"],
+            },
+            "skeleton_compatibility_mode": compatibility_mode,
+        }
         fingerprint = import_settings_fingerprint(context.config)
-        return {
+        task_identity = {
             "source_skeleton": source_skeleton,
             "source_subset": [item["normalized_path"] for item in source_identities],
             "source_identities": source_identities,
             "target_armature": target_name,
             "target_identity": target_identity,
+            "target_skeleton_provenance": target_skeleton_provenance,
+            "skeleton_compatibility_mode": compatibility_mode,
             "import_fingerprint": fingerprint,
-            "task_id": make_batch_identity(source_identities, fingerprint, target_identity),
+            "task_id": make_batch_identity(
+                source_identities, fingerprint, batch_target_identity
+            ),
         }
+        # Keep the context's top-level snapshot useful to UI/reporting code.
+        context.skeleton_provenance = target_skeleton_provenance
+        return task_identity
+
+    @staticmethod
+    def _attach_skeleton_provenance(collection, task_identity: dict) -> None:
+        """Attach provenance without breaking legacy test/vendor collection types."""
+        provenance = dict(task_identity.get("target_skeleton_provenance", {}) or {})
+        setter = getattr(collection, "set_skeleton_provenance", None)
+        if callable(setter):
+            setter(provenance)
+        elif hasattr(collection, "skeleton_provenance"):
+            collection.skeleton_provenance = provenance
 
     def _current_manifest_sources(self, context: PipelineContext) -> list[dict]:
         """Derive reusable-record identities from current scoped manifest entries."""
@@ -294,7 +339,7 @@ class PipelineStageBase(ABC):
         sources = []
         for index, (skeleton, folder, name, entry) in enumerate(manifest.get_all_animations()):
             source_file = entry.source_file
-            if source_skeleton and skeleton != source_skeleton:
+            if source_skeleton and not self._skeleton_match(skeleton, source_skeleton):
                 continue
             if source_subset and self._normalized_source_path(source_file) not in source_subset:
                 continue
@@ -358,6 +403,33 @@ class PipelineStageBase(ABC):
 # 阶段1: 字典获取
 # ============================================================
 
+def _probe_native_fmodel_animation_metadata(file_path: str) -> tuple[dict | None, str]:
+    """Classify one UEAnim/UEPose as strict, missing-identity, or invalid."""
+    try:
+        record = read_ueformat_identity(file_path)
+    except (OSError, TypeError, ValueError):
+        return None, "invalid"
+    if record.kind not in {"animation", "pose"}:
+        return None, "invalid"
+    if not record.identity:
+        return None, "missing_identity"
+    identity = dict(record.identity)
+    skeleton_path = str(identity.get("skeleton_path") or "")
+    if not skeleton_path:
+        return None, "invalid"
+    skeleton_name = skeleton_path.rsplit("/", 1)[-1] or skeleton_path
+    return {
+        "skeleton_name": skeleton_name,
+        "skeleton_display_name": skeleton_name,
+        "skeleton_path": skeleton_path,
+        "identity": identity,
+        "identity_fingerprint": skeleton_identity_fingerprint(identity),
+        "object_name": record.object_name,
+        "identifier": record.identifier,
+        "kind": record.kind,
+    }, "strict"
+
+
 class DictionaryAcquisitionStage(PipelineStageBase):
     """字典获取阶段 - 扫描源数据，生成标准化的字典清单"""
     
@@ -374,21 +446,19 @@ class DictionaryAcquisitionStage(PipelineStageBase):
         return True, ""
     
     def execute(self, context: PipelineContext) -> bool:
-        source_type = context.get_config("source_type", SourceType.UNITY_ANIM.value)
+        source_type = context.get_config("source_type", UEFORMAT_SOURCE_TYPE)
         source_dir = bpy.path.abspath(context.get_config("source_dir", ""))
-        
-        handlers = {
-            SourceType.UNITY_ANIM.value: self._process_unity_anims,
-            SourceType.FMODEL_UEANIM.value: self._process_fmodel_manifests,
-            SourceType.FBX_BATCH.value: self._process_fbx_batch,
-        }
-        
-        handler = handlers.get(source_type)
-        if not handler:
-            context.log_error(self.get_stage_name(), f"不支持的源类型: {source_type}")
+
+        # Runtime dispatch is deliberately native-only. Legacy Unity/FBX
+        # methods remain below during the migration window but cannot be reached
+        # from a UEFormat-only PipelineProperties or wizard configuration.
+        if source_type != UEFORMAT_SOURCE_TYPE:
+            context.log_error(
+                self.get_stage_name(),
+                f"不支持的源类型: {source_type}；UEFormat-only 仅接受 {UEFORMAT_SOURCE_TYPE}",
+            )
             return False
-        
-        return handler(context, source_dir)
+        return self._process_fmodel_raw_files(context, source_dir)
     
     def _process_unity_anims(self, context: PipelineContext, source_dir: str) -> bool:
         """处理Unity .anim文件"""
@@ -456,51 +526,19 @@ class DictionaryAcquisitionStage(PipelineStageBase):
         return True
     
     def _process_fmodel_manifests(self, context: PipelineContext, source_dir: str) -> bool:
-        """处理FModel manifest文件"""
-        skeleton_filter = self._source_skeleton(context).strip()
-        manifest = DictionaryManifest(
-            source_type=SourceType.FMODEL_UEANIM.value,
-            source_path=source_dir
+        """Compatibility alias for the native scanner.
+
+        The old implementation parsed `_manifest.json`; the UEFormat-only
+        route intentionally ignores those files and scans binary resources.
+        """
+        context.log_info(
+            self.get_stage_name(),
+            "UEFormat-only 模式跳过旧 manifest，直接扫描二进制资源",
         )
-        
-        processed_count = 0
-        
-        for f in os.listdir(source_dir):
-            if not f.endswith("_manifest.json"):
-                continue
-            
-            manifest_path = os.path.join(source_dir, f)
-            try:
-                with open(manifest_path, 'r', encoding='utf-8') as mf:
-                    data = json.load(mf)
-                
-                for skel_name, folder_tree in data.items():
-                    if skel_name == "__processed_sources__":
-                        continue
-                    if skeleton_filter and not self._skeleton_match(skel_name, skeleton_filter):
-                        continue
-                    
-                    if skel_name not in manifest.skeletons:
-                        manifest.skeletons[skel_name] = SkeletonNode(name=skel_name)
-                    
-                    self._merge_fmodel_tree(manifest.skeletons[skel_name], folder_tree, "")
-                    processed_count += 1
-            except Exception as e:
-                context.log_warning(self.get_stage_name(), f"manifest解析失败 {manifest_path}: {e}")
-                continue
-        
-        if processed_count == 0:
-            context.log_info(self.get_stage_name(), "未找到manifest，回退为直接扫描.ueanim/.uepose")
-            return self._process_fmodel_raw_files(context, source_dir)
-        
-        context.dictionary_manifest = manifest.to_dict()
-        context.log_info(self.get_stage_name(), f"成功解析 {processed_count} 个manifest文件")
-        return True
+        return self._process_fmodel_raw_files(context, source_dir)
 
     def _process_fmodel_raw_files(self, context: PipelineContext, source_dir: str) -> bool:
-        """处理FModel原始导出文件（.ueanim/.uepose + 同名json）"""
-        from ...Assets.Utils.utils_asset import get_skeleton_name_from_json
-
+        """Scan native UEFormat animations without sidecar JSON dependencies."""
         skeleton_filter = self._source_skeleton(context).strip()
 
         manifest = DictionaryManifest(
@@ -508,6 +546,11 @@ class DictionaryAcquisitionStage(PipelineStageBase):
             source_path=source_dir
         )
 
+        discovered_count = 0
+        strict_identity_count = 0
+        missing_identity_count = 0
+        invalid_count = 0
+        filter_mismatch_count = 0
         processed_count = 0
 
         for root, dirs, files in os.walk(source_dir):
@@ -517,29 +560,30 @@ class DictionaryAcquisitionStage(PipelineStageBase):
                 if not file.lower().endswith(('.ueanim', '.uepose')):
                     continue
 
+                discovered_count += 1
                 file_path = os.path.join(root, file)
                 original_name = os.path.splitext(file)[0]
 
-                json_path = os.path.join(root, f"{original_name}.json")
-                skeleton_name = get_skeleton_name_from_json(json_path)
+                native_metadata, classification = _probe_native_fmodel_animation_metadata(file_path)
+                if classification == "missing_identity":
+                    missing_identity_count += 1
+                    continue
+                if classification == "invalid" or native_metadata is None:
+                    invalid_count += 1
+                    continue
 
-                if not skeleton_name:
-                    rel_dir = os.path.relpath(root, source_dir).replace('\\', '/')
-                    if rel_dir != '.':
-                        skeleton_name = rel_dir.split('/')[0]
-
-                if not skeleton_name:
-                    skeleton_name = "Generic"
+                strict_identity_count += 1
+                skeleton_name = native_metadata["skeleton_name"]
 
                 if skeleton_filter and not self._skeleton_match(skeleton_name, skeleton_filter):
+                    filter_mismatch_count += 1
                     continue
 
                 rel_dir = os.path.relpath(root, source_dir).replace('\\', '/')
                 if rel_dir == '.':
                     folder_path = "Base"
                 else:
-                    parts = rel_dir.split('/')
-                    folder_path = "/".join(parts[1:]) if len(parts) > 1 else "Base"
+                    folder_path = rel_dir
 
                 if skeleton_name not in manifest.skeletons:
                     manifest.skeletons[skeleton_name] = SkeletonNode(name=skeleton_name)
@@ -552,27 +596,52 @@ class DictionaryAcquisitionStage(PipelineStageBase):
                     content_hash="",
                     metadata={
                         "file_type": "ueanim" if file.lower().endswith('.ueanim') else "uepose",
-                        "json_path": json_path if os.path.exists(json_path) else ""
+                        "json_path": "",
+                        "native_ueformat": True,
+                        "skeleton_display_name": native_metadata["skeleton_display_name"],
+                        "skeleton_path": native_metadata["skeleton_path"],
+                        "fmodel_skeleton_identity": native_metadata["identity"],
+                        "fmodel_skeleton_identity_fingerprint": native_metadata["identity_fingerprint"],
+                        "format_identifier": native_metadata["identifier"],
+                        "format_object_name": native_metadata["object_name"],
                     }
                 )
                 folder.add_animation(original_name, anim_entry)
                 processed_count += 1
 
+        if discovered_count == 0:
+            context.log_warning(self.get_stage_name(), "未发现 UEANIM/UEPOSE 文件")
+            return False
+
+        if strict_identity_count == 0:
+            context.log_error(
+                self.get_stage_name(),
+                f"发现 {discovered_count} 个 UEANIM/UEPOSE 文件，但 0 个包含 "
+                f"FMODEL_TARGET_SKELETON；请使用修正后的 FModel 重新导出。"
+                f"missing={missing_identity_count}, invalid={invalid_count}",
+            )
+            return False
+
         if processed_count == 0:
-            context.log_warning(self.get_stage_name(), "未找到.ueanim/.uepose文件")
+            context.log_error(
+                self.get_stage_name(),
+                f"发现 {strict_identity_count} 个带内嵌身份的 UEANIM/UEPOSE 文件，"
+                f"但 0 个匹配骨架筛选 '{skeleton_filter}'。"
+                f"mismatch={filter_mismatch_count}, missing={missing_identity_count}, "
+                f"invalid={invalid_count}",
+            )
             return False
 
         context.dictionary_manifest = manifest.to_dict()
-        context.log_info(self.get_stage_name(), f"成功扫描 {processed_count} 个FModel动画文件")
+        context.log_info(
+            self.get_stage_name(),
+            f"成功扫描 {processed_count} 个 FModel 动画文件；"
+            f"discovered={discovered_count}, strict={strict_identity_count}, "
+            f"mismatch={filter_mismatch_count}, missing={missing_identity_count}, "
+            f"invalid={invalid_count}",
+        )
         return True
 
-    def _skeleton_match(self, source_name: str, filter_name: str) -> bool:
-        source = (source_name or "").strip().lower()
-        target = (filter_name or "").strip().lower()
-        if not source or not target:
-            return True
-        return source == target or source in target or target in source
-    
     def _merge_fmodel_tree(self, skel: SkeletonNode, tree: dict, parent_path: str):
         """合并FModel树结构"""
         for key, value in tree.items():
@@ -872,6 +941,9 @@ class AssetImportStage(PipelineStageBase):
             import_mode=ImportMode.FBX_MATCH.value,
             task_identity=task_identity,
         )
+        attach_provenance = getattr(self, "_attach_skeleton_provenance", None)
+        if callable(attach_provenance):
+            attach_provenance(collection, task_identity)
 
         all_actions = list(bpy.data.actions)
         source_skeleton = self._source_skeleton(context)
@@ -885,7 +957,7 @@ class AssetImportStage(PipelineStageBase):
         matched_count = 0
         
         for skel, folder_path, anim_name, anim_entry in manifest.get_all_animations():
-            if source_skeleton and skel != source_skeleton:
+            if source_skeleton and not self._skeleton_match(skel, source_skeleton):
                 continue
             source_file = anim_entry.source_file
             normalized_source = self._normalized_source_path(source_file)
@@ -966,12 +1038,25 @@ class AssetImportStage(PipelineStageBase):
             return False
         
         manifest = DictionaryManifest.from_dict(context.dictionary_manifest)
+        task_identity = self._task_identity(context)
+        try:
+            compatibility_mode = normalize_skeleton_compatibility_mode(
+                context.get_config("skeleton_compatibility_mode", SKELETON_COMPATIBILITY_STRICT)
+            )
+        except ValueError as error:
+            context.log_error(self.get_stage_name(), str(error))
+            return False
+        strict_fmodel_skeleton = compatibility_mode == SKELETON_COMPATIBILITY_STRICT
         collection = ImportedAssetCollection(
             import_mode=ImportMode.UEANIM_DIRECT.value,
-            task_identity=self._task_identity(context),
+            task_identity=task_identity,
         )
+        attach_provenance = getattr(self, "_attach_skeleton_provenance", None)
+        if callable(attach_provenance):
+            attach_provenance(collection, task_identity)
         
         target_arm = None
+        target_provenance = None
         target_arm_name = context.get_config("target_armature", "")
         if target_arm_name:
             obj = bpy.data.objects.get(target_arm_name)
@@ -994,8 +1079,7 @@ class AssetImportStage(PipelineStageBase):
                     skeleton_name = str(obj.get("FModel_Skeleton", obj.name))
                     if skeleton_name == configured_skeleton:
                         exact.append(obj)
-                    elif (configured_skeleton.lower() in skeleton_name.lower()
-                          or skeleton_name.lower() in configured_skeleton.lower()):
+                    elif self._skeleton_match(skeleton_name, configured_skeleton):
                         fuzzy.append(obj)
                 candidates = exact or fuzzy
                 if len(candidates) == 1:
@@ -1015,7 +1099,20 @@ class AssetImportStage(PipelineStageBase):
         if target_arm:
             target_skeleton_metadata = str(target_arm.get("FModel_Skeleton", "") or "")
             source_skeleton = self._source_skeleton(context)
-            if target_skeleton_metadata and source_skeleton and target_skeleton_metadata != source_skeleton:
+            provenance_reader = globals().get("skeleton_provenance_from_owner")
+            target_provenance = (
+                provenance_reader(target_arm) if callable(provenance_reader) else None
+            )
+            strict_target_identity = bool(
+                target_provenance is not None and target_provenance.is_strict
+            )
+            if (
+                target_skeleton_metadata
+                and source_skeleton
+                and not self._skeleton_match(target_skeleton_metadata, source_skeleton)
+                and strict_fmodel_skeleton
+                and not strict_target_identity
+            ):
                 context.log_error(
                     self.get_stage_name(),
                     f"目标骨架元数据不匹配: 任务={source_skeleton}, 目标={target_skeleton_metadata}",
@@ -1024,29 +1121,21 @@ class AssetImportStage(PipelineStageBase):
                 return False
             target_skeleton_name = target_skeleton_metadata or target_arm.name
 
-        try:
-            options = UEAnimOptions(
-                scale_factor=context.get_config("import_scale", 0.01),
-                rotation_only=context.get_config("rotation_only", False),
-                import_curves=context.get_config("import_curves", False),
-                override_skeleton=target_arm,
-                strict_fmodel_skeleton=True,
+        if not target_arm and compatibility_mode == SKELETON_COMPATIBILITY_NAME_RETARGET:
+            context.log_error(
+                self.get_stage_name(),
+                "名称兼容模式必须显式指定一个目标骨架对象",
             )
-        except TypeError:
-            # Legacy UEFormat has no strict identity option.
-            options = UEAnimOptions(
-                scale_factor=context.get_config("import_scale", 0.01),
-                rotation_only=context.get_config("rotation_only", False),
-                import_curves=context.get_config("import_curves", False),
-            )
-        importer = UEFormatImport(options)
-        
+            context.imported_assets = collection.to_dict()
+            return False
+
         valid_entries = []
+        source_metadata_by_path = {}
         source_skeleton = self._source_skeleton(context)
         task_identity = self._task_identity(context)
         source_subset = set(task_identity["source_subset"])
         for manifest_index, (skel, folder_path, anim_name, anim_entry) in enumerate(manifest.get_all_animations()):
-            if source_skeleton and skel != source_skeleton:
+            if source_skeleton and not self._skeleton_match(skel, source_skeleton):
                 continue
             source_file = anim_entry.source_file
             if not source_file or not os.path.exists(source_file):
@@ -1059,12 +1148,99 @@ class AssetImportStage(PipelineStageBase):
                 manifest_index, skel, folder_path, anim_name, source_file,
                 anim_entry.content_hash,
             )
+            source_metadata_by_path[self._normalized_source_path(source_file)] = dict(
+                getattr(anim_entry, "metadata", {}) or {}
+            )
             valid_entries.append((skel, folder_path, anim_name, source_file, source_identity))
 
         if not valid_entries:
             context.log_warning(self.get_stage_name(), "没有可导入的.ueanim文件")
             context.imported_assets = collection.to_dict()
             return False
+
+        # Every entry in a task normally shares one source skeleton identity.
+        # Re-read the authoritative identity from each binary before constructing
+        # the importer.  The manifest is a discovery cache and must not be able
+        # to hide a stale, missing, or forged UEANIM identity.
+        if strict_fmodel_skeleton and target_provenance is not None and target_provenance.is_strict:
+            target_identity = target_provenance.identity
+            preflight_failures = []
+            for _skel, _folder_path, _anim_name, source_file, _source_identity in valid_entries:
+                source_identity = None
+                try:
+                    native_record = read_ueformat_identity(source_file)
+                    if native_record.kind != "animation":
+                        raise ValueError(
+                            f"source file contains {native_record.kind.upper()} data"
+                        )
+                    source_identity = native_record.identity
+                    if source_identity is None:
+                        raise ValueError("source file has no FMODEL_TARGET_SKELETON identity")
+                    differences = strict_skeleton_identity_differences(
+                        source_identity, target_identity
+                    )
+                except (TypeError, ValueError) as error:
+                    differences = (f"source identity cannot be verified ({error})",)
+                if differences:
+                    preflight_failures.append((source_file, differences, source_identity))
+                else:
+                    # Keep downstream action provenance aligned with the same
+                    # bytes used for the strict decision.  This is not the
+                    # authority for the decision; it is only a report cache.
+                    source_metadata = source_metadata_by_path.setdefault(
+                        self._normalized_source_path(source_file), {}
+                    )
+                    source_metadata["fmodel_skeleton_identity"] = source_identity
+                    source_metadata["skeleton_path"] = source_identity["skeleton_path"]
+
+            if preflight_failures:
+                source_file, differences, source_identity = preflight_failures[0]
+                source_hash = str(
+                    (source_identity or {}).get("bone_layout_hash", "") or ""
+                )
+                target_hash = str(target_identity.get("bone_layout_hash", "") or "")
+                message = (
+                    "严格骨架身份预检失败：本任务的 UEANIM 与目标 Armature 不兼容 "
+                    f"({'; '.join(differences)}；受影响文件 {len(preflight_failures)}/{len(valid_entries)}；"
+                    f"source layout={source_hash or 'missing'}；target layout={target_hash or 'missing'})。"
+                    "请选择具有匹配内嵌身份的 UEMODEL，或由用户显式选择 Name-based compatibility；"
+                    "不会自动降级兼容模式。"
+                )
+                collection.failed_imports.append({
+                    "source_file": source_file,
+                    "error": message,
+                })
+                context.set_config("import_checkpoint", {})
+                context.imported_assets = collection.to_dict()
+                context.log_error(self.get_stage_name(), message)
+                report_path = self._write_failure_report(context, collection)
+                if report_path:
+                    context.log_warning(self.get_stage_name(), f"失败报告已导出: {report_path}")
+                return False
+
+        try:
+            options = UEAnimOptions(
+                scale_factor=context.get_config("import_scale", 0.01),
+                rotation_only=context.get_config("rotation_only", False),
+                import_curves=context.get_config("import_curves", False),
+                override_skeleton=target_arm,
+                strict_fmodel_skeleton=strict_fmodel_skeleton,
+            )
+        except TypeError as exc:
+            context.log_error(
+                self.get_stage_name(),
+                f"当前 UEFormat 插件无法启用严格动画骨架校验: {exc}",
+            )
+            context.imported_assets = collection.to_dict()
+            return False
+        importer = UEFormatImport(options)
+
+        if compatibility_mode == SKELETON_COMPATIBILITY_NAME_RETARGET:
+            context.log_warning(
+                self.get_stage_name(),
+                "已启用显式名称兼容模式：仅按大小写不敏感的骨骼名绑定，"
+                "源骨架独有骨骼会被跳过；这不是 Unreal Retarget Manager 的完整重定向。",
+            )
 
         resume_enabled = bool(context.get_config("import_resume_enabled", True))
         checkpoint = context.get_config("import_checkpoint", {}) if resume_enabled else {}
@@ -1337,6 +1513,37 @@ class AssetImportStage(PipelineStageBase):
                         action["Pipeline_SourceRef"] = source_ref
                         if target_skeleton_name:
                             action["Pipeline_Skeleton"] = target_skeleton_name
+                        source_metadata = source_metadata_by_path.get(
+                            self._normalized_source_path(source_file), {}
+                        )
+                        target_identity_data = (
+                            target_provenance.identity
+                            if target_provenance is not None and target_provenance.is_strict
+                            else None
+                        )
+                        action["fmodel_skeleton_compatibility"] = json.dumps(
+                            {
+                                "mode": compatibility_mode,
+                                "source_skeleton": skel,
+                                "source_skeleton_path": str(
+                                    source_metadata.get("skeleton_path", "") or ""
+                                ),
+                                "target_armature": target_arm.name if target_arm else "",
+                                "target_skeleton": target_skeleton_name,
+                                "target_skeleton_path": str(
+                                    (target_identity_data or {}).get("skeleton_path", "")
+                                ),
+                                "binding": (
+                                    "casefold_bone_name"
+                                    if not strict_fmodel_skeleton
+                                    else "strict_identity_and_casefold_bone_name"
+                                ),
+                                "strict_identity": strict_fmodel_skeleton,
+                            },
+                            separators=(",", ":"),
+                            sort_keys=True,
+                        )
+                        action["Pipeline_SkeletonCompatibility"] = compatibility_mode
                         imported = ImportedAction(
                             action_name=action.name,
                             source_manifest_ref=source_ref,
@@ -1482,10 +1689,14 @@ class AssetImportStage(PipelineStageBase):
     
     def _import_link_existing(self, context: PipelineContext) -> bool:
         """链接现有资产库"""
+        task_identity = self._task_identity(context)
         collection = ImportedAssetCollection(
             import_mode=ImportMode.LINK_EXISTING.value,
-            task_identity=self._task_identity(context),
+            task_identity=task_identity,
         )
+        attach_provenance = getattr(self, "_attach_skeleton_provenance", None)
+        if callable(attach_provenance):
+            attach_provenance(collection, task_identity)
 
         source_skeleton = self._source_skeleton(context)
 
@@ -2083,7 +2294,7 @@ class LibraryBuildingStage(PipelineStageBase):
                                 quality=context.get_config("thumb_quality", "OPENGL"),
                                 isolate=context.get_config("thumb_isolate", True),
                             )
-                        except Exception as e:
+                        except Exception:
                             rel_thumb_path = ""
                             import traceback
                             traceback.print_exc()
@@ -2391,7 +2602,7 @@ class LibraryBuildingStage(PipelineStageBase):
             if sk == skeleton_name:
                 return obj
             # 模糊匹配候选
-            if sk.lower() in skeleton_name.lower() or skeleton_name.lower() in sk.lower():
+            if self._skeleton_match(sk, skeleton_name):
                 candidates.append((obj, sk))
         
         if len(candidates) == 1:

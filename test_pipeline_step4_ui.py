@@ -57,7 +57,7 @@ class PipelineStep4UiTests(unittest.TestCase):
         exec(compile(ast.Module(body=[panel_node], type_ignores=[]), "ui.py", "exec"), namespace)
         return namespace["FMODEL_PT_Pipeline"]
 
-    def _draw_step4(self, objects, stored_target_name, active_object=None):
+    def _draw_step4(self, objects, stored_target_name, active_object=None, lib_completed=False):
         panel = self._panel_class(objects)()
         panel.layout = FakeLayout()
         state = types.SimpleNamespace(
@@ -83,7 +83,7 @@ class PipelineStep4UiTests(unittest.TestCase):
             lib_force_rebuild=False,
             lib_save_model=False,
             lib_model_preview=False,
-            lib_completed=False,
+            lib_completed=lib_completed,
         )
         context = types.SimpleNamespace(
             active_object=active_object,
@@ -127,6 +127,28 @@ class PipelineStep4UiTests(unittest.TestCase):
         )
         self.assertFalse(import_button[1])
         self.assertIn({"text": "请选中骨架", "icon": "ERROR"}, layout.labels)
+
+    def test_completed_step4_uses_compact_view_instead_of_mapping_editor(self):
+        stored_target = types.SimpleNamespace(name="HeroRig", type="ARMATURE")
+        layout = self._draw_step4(
+            {stored_target.name: stored_target},
+            stored_target.name,
+            lib_completed=True,
+        )
+
+        self.assertIn({"text": "导入并打包已完成", "icon": "CHECKMARK"}, layout.labels)
+        self.assertNotIn(
+            "pipeline.wizard_step4",
+            [identifier for identifier, _enabled, _kwargs in layout.operators],
+        )
+        self.assertIn(
+            "pipeline.rebake_thumbnails",
+            [identifier for identifier, _enabled, _kwargs in layout.operators],
+        )
+        self.assertIn(
+            "pipeline.wizard_reset",
+            [identifier for identifier, _enabled, _kwargs in layout.operators],
+        )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "vendor_id": "io_scene_ueformat",
+  "package_name": "io_scene_ueformat",
+  "version": "1.2.0",
+  "source_repository": "UEFormat FModel fork",
+  "source_commit": "f0deb75",
+  "source_snapshot": "fmodel_working_tree_snapshot",
+  "registration_mode": "headless",
+  "capabilities": [
+    "uemodel",
+    "ueanim",
+    "uepose",
+    "fmodel_materials",
+    "fmodel_textures",
+    "strict_animation_skeleton",
+    "strict_pose_skeleton"
+  ],
+  "root": ".",
+  "excluded_globs": [
+    "vendor_tree_manifest.json",
+    "**/__pycache__/**",
+    "**/*.pyc",
+    "**/*.pyo",
+    "**/*.pyd"
+  ],
+  "file_count": 33,
+  "tree_sha256": "8b31b3a685dc67d3b484b368aa12fb2c81fb4aa5d0309da2219acd20b8cf6453",
+  "files": [
+    {
+      "path": "README.md",
+      "size": 3255,
+      "sha256": "263e367aa7eb0184ee97c2c2bd7cb43d9936a3c3c7bd319838523ba82360410d"
+    },
+    {
+      "path": "io_scene_ueformat/LICENSE.txt",
+      "size": 1198,
+      "sha256": "d5ccb0e63a23263d0803ce21eac25bf2b11cfdaa22a87e9eb03ae37d3fb4554f"
+    },
+    {
+      "path": "io_scene_ueformat/__init__.py",
+      "size": 854,
+      "sha256": "c85c9f81506cb491ea0f9a63946e673cc826ad83a39b8509db50d03a00ba2fc2"
+    },
+    {
+      "path": "io_scene_ueformat/blender_manifest.toml",
+      "size": 501,
+      "sha256": "ca8365fba4299bdcda1501bf2c4e51b094a7dab8109df04493b42c643495ee07"
+    },
+    {
+      "path": "io_scene_ueformat/importer/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "io_scene_ueformat/importer/animation_time.py",
+      "size": 1820,
+      "sha256": "0718b7ddb4d6acc7df706553ffba49c2e4f8ae8e48e6b9ae12a32e1d23da652b"
+    },
+    {
+      "path": "io_scene_ueformat/importer/classes.py",
+      "size": 40144,
+      "sha256": "05867dc50f0515eda63211dcde8b2890c732005f215a3d8893739d6c2e0bcfa4"
+    },
+    {
+      "path": "io_scene_ueformat/importer/creation_tracker.py",
+      "size": 2415,
+      "sha256": "1d45c95ca33475ef1f0f09a5f19cfb98ee75bc55366d637797f80486a9e604a9"
+    },
+    {
+      "path": "io_scene_ueformat/importer/fmodel.py",
+      "size": 23742,
+      "sha256": "be398622670d813d5436a4dc0f823cc72535835ffa8f9a15c23a1f8d758167fd"
+    },
+    {
+      "path": "io_scene_ueformat/importer/identity.py",
+      "size": 5797,
+      "sha256": "37defbd2be28b440b1f6516dbb98deff07f9cefb0bdfb0a0a201a294176e4d63"
+    },
+    {
+      "path": "io_scene_ueformat/importer/logic.py",
+      "size": 45650,
+      "sha256": "7541487c5af436c24f9dc37b3b03312d6e3f1985b4bf976b0f5357f970b956f7"
+    },
+    {
+      "path": "io_scene_ueformat/importer/material_builder.py",
+      "size": 35444,
+      "sha256": "f86bf4d8df5123bb82ea7562923bed0b4fda31447d57c150bfb57919e12d9414"
+    },
+    {
+      "path": "io_scene_ueformat/importer/material_images.py",
+      "size": 6214,
+      "sha256": "431123d4c1d346a13fd2ae6e5c601ecaf37c6acbd6fb04fb9b68dd1d3bd8d22c"
+    },
+    {
+      "path": "io_scene_ueformat/importer/materials.py",
+      "size": 14772,
+      "sha256": "5cac804107c9622035e40a39ff7771f073d39de26d5750123b2a4e28f1548109"
+    },
+    {
+      "path": "io_scene_ueformat/importer/mesh_batch.py",
+      "size": 1685,
+      "sha256": "71f1947ba099b986f06653e715bcff9f65f97e0bd4aa3ac8908ee2d635285e74"
+    },
+    {
+      "path": "io_scene_ueformat/importer/morph_batch.py",
+      "size": 1442,
+      "sha256": "7b9e2e0f11daf92bb016846318189ff11a08cbfca774d1ef9ebab44739b24f27"
+    },
+    {
+      "path": "io_scene_ueformat/importer/protocol.py",
+      "size": 8368,
+      "sha256": "bbe02eb7134e51f5761b6561575fe55b875ba32f23165bf16d488292bed9f0e5"
+    },
+    {
+      "path": "io_scene_ueformat/importer/reader.py",
+      "size": 5217,
+      "sha256": "5f224c6eda24948eb47d71ac30ff2f7930979cea2c44326ca621037f5575f915"
+    },
+    {
+      "path": "io_scene_ueformat/importer/reorient_utils.py",
+      "size": 3737,
+      "sha256": "6295daf9dce3818da2d3dae0c0faf41cc91e0aea088b8a44f6516af823500acb"
+    },
+    {
+      "path": "io_scene_ueformat/importer/resources.py",
+      "size": 17992,
+      "sha256": "c4fac698a1ef4bfaa198e3dc3ba3a50d868e89193d3d088c4a82435d0bbba337"
+    },
+    {
+      "path": "io_scene_ueformat/importer/topology.py",
+      "size": 5225,
+      "sha256": "655b85fee9c3ba84485b3b22c2cff50b1ae449bfdfc4b7309ceb2351d047f375"
+    },
+    {
+      "path": "io_scene_ueformat/importer/utils.py",
+      "size": 5867,
+      "sha256": "905164a35b0ca73f28f04ef1feead6309426c93816f115b3596c95586c07043f"
+    },
+    {
+      "path": "io_scene_ueformat/logging.py",
+      "size": 1209,
+      "sha256": "e8fd3180449476d0c30f36677faa5ca1ffdeb32d554ed7bcf6e082303627eb97"
+    },
+    {
+      "path": "io_scene_ueformat/op/__init__.py",
+      "size": 2850,
+      "sha256": "9cb98efd1572bbc63de49f2ec0cb5a2e6af2e1fa55bcb27ce48a9da905bfb6f3"
+    },
+    {
+      "path": "io_scene_ueformat/op/import_helpers.py",
+      "size": 6737,
+      "sha256": "e27d77b61e01e7b305e1e263286045154556fd9e3063c6faea0779673913b414"
+    },
+    {
+      "path": "io_scene_ueformat/op/panels.py",
+      "size": 4309,
+      "sha256": "0f8e51536c7d693dbba7934014e7ead5c449bbb3ef811998892559e73831e2d0"
+    },
+    {
+      "path": "io_scene_ueformat/op/settings.py",
+      "size": 2057,
+      "sha256": "9d37f07553c053183aadd29273ad7529250a6be4d2531e5b4bf9c24943226741"
+    },
+    {
+      "path": "io_scene_ueformat/options.py",
+      "size": 1606,
+      "sha256": "dcb21b06f27a35901dafa6ddc222bb518b88a50da8ced1315d28341050adcd0f"
+    },
+    {
+      "path": "io_scene_ueformat/typing.py",
+      "size": 199,
+      "sha256": "9d93dc0992d3d71fe7964cefa5afce4652a4818152df51905970d9312e4eeb99"
+    },
+    {
+      "path": "io_scene_ueformat/wheels/zstandard-0.25.0-cp311-cp311-win_amd64.whl",
+      "size": 506183,
+      "sha256": "daab68faadb847063d0c56f361a289c4f268706b598afbf9ad113cbe5c38b6b2"
+    },
+    {
+      "path": "io_scene_ueformat/wheels/zstandard-0.25.0-cp312-cp312-win_amd64.whl",
+      "size": 506276,
+      "sha256": "ffef5a74088f1e09947aecf91011136665152e0b4b359c42be3373897fb39b01"
+    },
+    {
+      "path": "io_scene_ueformat/wheels/zstandard-0.25.0-cp313-cp313-win_amd64.whl",
+      "size": 506232,
+      "sha256": "1f830a0dac88719af0ae43b8b2d6aef487d437036468ef3c2ea59c51f9d55fd5"
+    },
+    {
+      "path": "vendor_manifest.toml",
+      "size": 1444,
+      "sha256": "0fb2ee4b9c3cf6fad2504eaaebbe857964861e48d40a4f7cf13cf01d83af7283"
+    }
+  ]
+}

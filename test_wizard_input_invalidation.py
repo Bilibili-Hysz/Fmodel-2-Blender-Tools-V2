@@ -55,7 +55,7 @@ def test_automatic_handoff_forces_fmodel_defaults_and_clears_once():
     state = completed_state()
     armature = types.SimpleNamespace(name="HeroRig", type="ARMATURE", get=lambda key, default="": "Hero" if key == "FModel_Skeleton" else default)
     assert state_module.handoff_armature(state, armature, "C:/Project", automatic=True)
-    assert (state.flow_type, state.source_mode, state.source_dir, state.skeleton_filter, state.import_target_skeleton) == ("FMODEL", "PROJECT", "C:/Project", "Hero", "HeroRig")
+    assert (state.flow_type, state.source_mode, state.source_dir, state.skeleton_filter, state.import_target_skeleton) == ("FMODEL", "MANUAL", "C:/Project", "Hero", "HeroRig")
     assert_cleared(state)
 
 

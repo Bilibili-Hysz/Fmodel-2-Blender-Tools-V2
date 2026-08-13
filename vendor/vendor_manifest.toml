@@ -1,0 +1,59 @@
+schema_version = 1
+vendor_id = "io_scene_ueformat"
+package_name = "io_scene_ueformat"
+version = "1.2.0"
+source_repository = "UEFormat FModel fork"
+source_commit = "f0deb75"
+source_snapshot = "fmodel_working_tree_snapshot"
+tree_manifest = "vendor_tree_manifest.json"
+registration_mode = "headless"
+blender_min = "4.2.0"
+
+capabilities = [
+  "uemodel",
+  "ueanim",
+  "uepose",
+  "fmodel_materials",
+  "fmodel_textures",
+  "strict_animation_skeleton",
+  "strict_pose_skeleton",
+]
+
+[[wheels]]
+file = "zstandard-0.25.0-cp311-cp311-win_amd64.whl"
+python_tag = "cp311"
+abi_tag = "cp311"
+platform_tag = "win_amd64"
+sha256 = "daab68faadb847063d0c56f361a289c4f268706b598afbf9ad113cbe5c38b6b2"
+
+[[wheels]]
+file = "zstandard-0.25.0-cp312-cp312-win_amd64.whl"
+python_tag = "cp312"
+abi_tag = "cp312"
+platform_tag = "win_amd64"
+sha256 = "ffef5a74088f1e09947aecf91011136665152e0b4b359c42be3373897fb39b01"
+
+[[wheels]]
+file = "zstandard-0.25.0-cp313-cp313-win_amd64.whl"
+python_tag = "cp313"
+abi_tag = "cp313"
+platform_tag = "win_amd64"
+sha256 = "1f830a0dac88719af0ae43b8b2d6aef487d437036468ef3c2ea59c51f9d55fd5"
+
+[[licenses]]
+file = "io_scene_ueformat/LICENSE.txt"
+spdx = "MIT"
+
+[[licenses]]
+file = "zstandard-0.25.0-cp311-cp311-win_amd64.whl"
+spdx = "see wheel metadata"
+
+[[licenses]]
+file = "zstandard-0.25.0-cp312-cp312-win_amd64.whl"
+spdx = "see wheel metadata"
+
+[[licenses]]
+file = "zstandard-0.25.0-cp313-cp313-win_amd64.whl"
+spdx = "see wheel metadata"
+
+

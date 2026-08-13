@@ -7,11 +7,18 @@ from . import context
 from . import utils
 from . import logger
 from . import i18n
+from .pipeline_activity import is_pipeline_active, pipeline_activity
 
 # 重新导出常用内容
 from .enums import (
     PipelineStage, StageStatus, SourceType, ImportMode,
-    ItemType, ApplyMethod
+    ItemType, ApplyMethod,
+    UEFORMAT_SOURCE_TYPE, UEFORMAT_IMPORT_MODE, UEFORMAT_IMPORT_MODES,
+    normalize_ueformat_pipeline_config,
+    SKELETON_COMPATIBILITY_STRICT, SKELETON_COMPATIBILITY_NAME_RETARGET,
+    SKELETON_COMPATIBILITY_MODES, SKELETON_COMPATIBILITY_ITEMS,
+    skeleton_names_match, normalize_skeleton_compatibility_mode,
+    is_name_based_compatibility,
 )
 
 from .types import (
@@ -23,6 +30,33 @@ from .types import (
 )
 
 from .context import PipelineContext
+
+from .skeleton_provenance import (
+    PROVENANCE_INVALID, PROVENANCE_LEGACY, PROVENANCE_STRICT,
+    SKELETON_IDENTITY_PROPERTY, SKELETON_IDENTITY_VERSION,
+    SkeletonProvenance, SkeletonProvenanceError,
+    inspect_skeleton_provenance, normalize_skeleton_identity,
+    provenance_record, skeleton_identity_fingerprint, validate_provenance_record,
+    skeleton_provenance_from_owner, strict_skeleton_identity_differences,
+)
+
+from .ueformat_identity_reader import (
+    UEFormatIdentityError, UEFormatIdentityRecord,
+    read_ueformat_identity, read_ueformat_identity_bytes,
+    read_ueformat_provenance,
+)
+
+from .import_session import (
+    ImportFailure, ImportSession, ImportStatus, persist_import_session,
+)
+
+from .operation_report import (
+    LastOperationReport, format_last_operation, load_last_operation,
+)
+
+from .import_transaction import ImportRollbackReport, ImportTransaction
+
+# Indexed Project services are legacy-only and intentionally not imported at addon startup.
 
 from .resume import (
     armature_identity, build_settings_fingerprint, import_settings_fingerprint,
@@ -38,9 +72,7 @@ from .utils import (
     get_or_create_catalog_uuid,
     get_ueformat_bridge,
     build_model_option_kwargs,
-    build_uescene_settings_kwargs,
     derive_fmodel_roots,
-    parse_uescene_import_status,
     ensure_dir,
     safe_relpath,
     normalize_path,

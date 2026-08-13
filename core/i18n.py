@@ -1,11 +1,50 @@
 # FModel_Tools/core/i18n.py
 # 国际化 — 中文默认, 非中文环境 Blender 自动替换英文
 
+import re
+
 import bpy
 
 
 def t(text: str) -> str:
     return bpy.app.translations.pgettext(text)
+
+
+_STATUS_EXACT = {
+    "Animation index ready": "动画索引已就绪",
+    "Animation index has not been created": "动画索引尚未创建",
+    "Animation index must be reset": "动画索引需要重置",
+    "Animation index is unavailable": "动画索引不可用",
+    "Animation index compatibility state is unavailable": "动画索引兼容状态不可用",
+    "Animation index job queued": "动画索引任务已排队",
+    "Animation index job cancelled": "动画索引任务已取消",
+    "Previous background index job did not survive file reload": "之前的后台索引任务未能在文件重新加载后恢复",
+    "Animation index result discarded because inputs changed": "由于输入已变化，已丢弃动画索引结果",
+}
+
+
+def localize_status_message(text: object) -> str:
+    """Translate transient English pipeline status text at the UI boundary.
+
+    Pipeline/controller state remains stable and serializable in English; this
+    helper only converts known status messages when they are rendered.
+    Unknown errors and asset paths are returned verbatim.
+    """
+    value = str(text or "")
+    if not value:
+        return ""
+    chinese = _STATUS_EXACT.get(value)
+    if chinese is not None:
+        return t(chinese)
+    if value.startswith("Animation index "):
+        return f"{t('动画索引')} {value[len('Animation index '):]}"
+    match = re.fullmatch(r"Import plan ready: (\d+) animations, (\d+) skeletons", value)
+    if match:
+        return (
+            f"{t('导入计划已准备')}: {match.group(1)} {t('个动画')}, "
+            f"{match.group(2)} {t('个骨架')}"
+        )
+    return value
 
 
 _CN_TO_EN = {
@@ -328,6 +367,155 @@ _CN_TO_EN = {
     ("*", "展开或折叠节点"): "Toggle node",
     ("*", "选中网格中的动作项"): "Select grid action item",
     ("*", "为模型上传自定义预览图"): "Upload custom preview for model",
+
+    ("*", '复制最近操作报告'): 'Copy Last Operation Report',
+    ("*", '复制统一的 FModel 导入与 UEFormat 运行时报告'): 'Copy the unified FModel import and UEFormat runtime report',
+    ("*", '打开操作来源'): 'Open Operation Source',
+    ("*", '打开包含主要源资产的文件夹'): 'Open the folder containing the primary source asset',
+    ("*", '没有可用的 FModel 操作报告'): 'No FModel operation report is available',
+    ("*", 'FModel 操作报告已复制'): 'FModel operation report copied',
+    ("*", '没有可用的平台文件夹打开器'): 'No platform folder opener is available',
+    ("*", '源文件夹不可用'): 'The source folder is unavailable',
+    ("*", '无法打开源文件夹'): 'Could not open source folder',
+    ("*", '报告不可用'): 'Report unavailable',
+    ("*", '没有记录 UEFormat 操作'): 'No UEFormat operation has been recorded',
+    ("*", '未知失败'): 'Unknown failure',
+    ("*", '其他失败'): 'Additional failures',
+    ("*", 'FModel 导出'): 'FModel Export',
+    ("*", '导入策略'): 'Policy',
+    ("*", '运行时'): 'Runtime',
+    ("*", 'UEFormat 运行时正在加载'): 'UEFormat runtime is loading',
+    ("*", '已选择外部 UEFormat 运行时'): 'External UEFormat runtime selected',
+    ("*", 'UEFormat 运行时不可用'): 'Runtime unavailable',
+    ("*", '外部来源'): 'External',
+    ("*", 'Vendor 树'): 'Vendor Tree',
+    ("*", '项目设置'): 'Project Settings',
+    ("*", '项目控制不可用'): 'Project controls are unavailable',
+    ("*", 'Indexed Project 已停用'): 'Indexed Project is retired',
+    ("*", '请在动画管线中选择动画文件夹'): 'Choose an animation folder in Animation Pipeline',
+    ("*", '项目根目录'): 'Project Root',
+    ("*", '索引状态'): 'Index',
+    ("*", '架构'): 'Schema',
+    ("*", '动画数量'): 'Animations',
+    ("*", '模型数量'): 'Models',
+    ("*", '打开'): 'Open',
+    ("*", '重建'): 'Rebuild',
+    ("*", 'UEFormat 原生管线'): 'UEFormat Native Pipeline',
+    ("*", '动画交接'): 'Animation Handoff',
+    ("*", '准备选中的骨架用于动画管线'): 'Prepare selected Armature for Animation Pipeline',
+    ("*", '使用当前骨架'): 'Use Active Armature',
+    ("*", '最近操作'): 'Last Operation',
+    ("*", '动画管线'): 'Animation Pipeline',
+    ("*", '动画来源'): 'Animation Source',
+    ("*", '索引维护'): 'Index Maintenance',
+    ("*", '动画目录'): 'Animation Directory',
+    ("*", '刷新索引'): 'Refresh Index',
+    ("*", '重置并重新扫描'): 'Reset and Rescan',
+    ("*", '准备导入计划'): 'Prepare Import Plan',
+    ("*", '刷新动画索引并准备此骨架'): 'Refreshes the animation index and prepares this skeleton',
+    ("*", '扫描动画目录'): 'Scan Animation Directory',
+    ("*", '模式'): 'Mode',
+    ("*", '兼容策略'): 'Compatibility',
+    ("*", '已显式启用按名称兼容'): 'Name-based compatibility is explicitly enabled',
+    ("*", '仅绑定同名骨骼；跳过源骨架独有骨骼。'): 'Only matching bone names are bound; source-only bones are skipped.',
+    ("*", '这不是完整的 Unreal Retarget Manager/参考姿势重定向。'): 'This is not full Unreal Retarget Manager/reference-pose retargeting.',
+    ("*", '游戏配置 (GameProfile)'): 'GameProfile',
+    ("*", '动画路径'): 'Animation Path',
+    ("*", '包含'): 'Include',
+    ("*", '已索引动画'): 'Indexed Animations',
+    ("*", '索引架构版本'): 'Index Schema Version',
+    ("*", '已索引模型'): 'Indexed Models',
+    ("*", '已索引骨架'): 'Indexed Skeleton',
+    ("*", '动画索引已就绪'): 'Animation index ready',
+    ("*", '动画索引尚未创建'): 'Animation index has not been created',
+    ("*", '动画索引需要重置'): 'Animation index must be reset',
+    ("*", '动画索引不可用'): 'Animation index is unavailable',
+    ("*", '动画索引准备任务已在运行'): 'Animation index preparation is already running',
+    ("*", '必须先设置项目根目录'): 'Project root is required',
+    ("*", '项目索引不可用'): 'Project index unavailable',
+    ("*", '打开项目索引'): 'Open Project Index',
+    ("*", '打开项目索引失败'): 'Project index open failed',
+    ("*", '项目索引缺失，请先扫描'): 'Project index is missing; scan it',
+    ("*", '需要重建项目索引'): 'Rebuild required for project index',
+    ("*", '项目索引已加载'): 'Project index loaded',
+    ("*", '扫描项目索引'): 'Scan Project Index',
+    ("*", '项目索引扫描失败'): 'Project index scan failed',
+    ("*", '项目索引已扫描'): 'Project index scanned',
+    ("*", '重置并重新扫描动画索引'): 'Reset and Rescan Animation Index',
+    ("*", '重置动画索引失败'): 'Animation index reset failed',
+    ("*", '动画索引重置并重新扫描失败'): 'Animation index reset and rescan failed',
+    ("*", '动画索引已重置并重新扫描'): 'Animation index reset and rescanned',
+    ("*", '刷新已索引动画'): 'Refresh Indexed Animations',
+    ("*", '需要可用的项目索引'): 'A ready project index is required',
+    ("*", '请选择已索引的骨架'): 'Select an indexed skeleton',
+    ("*", '加载动画时项目索引查询失败'): 'Project index query failed while loading animations',
+    ("*", '所选骨架没有已索引动画'): 'No indexed animations for the selected skeleton',
+    ("*", '使用已索引动画选择'): 'Use Indexed Animation Selection',
+    ("*", '请选择至少一个已索引动画'): 'Select at least one indexed animation',
+    ("*", '动画管线不可用'): 'Animation Pipeline is unavailable',
+    ("*", '无法应用已索引的动画选择'): 'Unable to apply indexed animation selection',
+    ("*", '使用当前骨架进行动画管线'): 'Use Active Armature for Animation',
+    ("*", '请选择用于动画的骨架'): 'Select an Armature for animation',
+    ("*", '取消动画索引'): 'Cancel Animation Index',
+    ("*", '准备导入计划失败'): 'Prepare Import Plan failed',
+    ("*", '后台动画索引准备已开始'): 'Animation index preparation started in background',
+    ("*", '动画索引取消请求已提交'): 'Animation index cancellation requested',
+    ("*", '源骨架'): 'Source skeleton',
+    ("*", '骨架兼容策略'): 'Skeleton compatibility',
+    ("*", '状态'): 'Status',
+    ("*", '动画索引状态'): 'Animation Index State',
+    ("*", '动画索引架构'): 'Animation Index Schema',
+    ("*", '动画索引生成'): 'Animation Index Generation',
+    ("*", '匹配动画'): 'Matching Animations',
+    ("*", '动画索引上次扫描'): 'Animation Index Last Scan',
+    ("*", '动画索引消息'): 'Animation Index Message',
+    ("*", '动画索引任务'): 'Animation Index Job',
+    ("*", '动画索引请求代次'): 'Animation Index Request Generation',
+    ("*", '动画索引进度'): 'Animation Index Progress',
+    ("*", '动画索引进度阶段'): 'Animation Index Progress Phase',
+    ("*", '动画索引进度路径'): 'Animation Index Progress Path',
+    ("*", '已请求取消动画索引'): 'Animation Index Cancel Requested',
+    ("*", '严格身份'): 'Strict identity',
+    ("*", '要求 UEANIM 目标骨架身份与选中骨架完全一致'): 'Require the UEANIM target skeleton identity to match the selected armature',
+    ("*", '按名称兼容'): 'Name-based compatibility',
+    ("*", '显式绑定同名骨骼；跳过源骨架独有骨骼'): 'Explicitly bind matching bone names; source-only bones are skipped',
+    ("*", '严格身份是默认模式。按名称兼容是显式的部分重定向路径，不等同于 Unreal Retarget Manager。'): 'Strict identity is the default. Name-based compatibility is an explicit partial retarget route and is not Unreal Retarget Manager parity.',
+    ("*", '动画配置'): 'Animation',
+    ("*", '姿势配置'): 'Pose',
+    ("*", '按名称兼容不等同于完整的 Unreal 重定向'): 'Name-based compatibility is not full Unreal retargeting',
+    ("*", '模型配置'): 'Model',
+    ("*", '骨架配置'): 'Skeleton',
+    ("*", '启用旧版材质后处理'): 'Enable Legacy Material Post-processing',
+    ("*", '标准 FModel 材质由 UEFormat 导入器独立处理；此项仅控制旧版 JSON/启发式材质回退'): 'Canonical FModel materials are handled by the UEFormat importer; this only controls legacy JSON/heuristic material fallback',
+
+    ("*", '动画索引'): 'Animation index',
+    ("*", '导入计划已准备'): 'Import plan ready',
+    ("*", '个动画'): 'animations',
+    ("*", '个骨架'): 'skeletons',
+    ("*", '匹配骨架'): 'Matching Skeleton',
+    ("*", '正在准备动画索引'): 'Preparing Animation Index',
+    ("*", '已检测'): 'Observed',
+    ("*", '外部运行时'): 'External runtime',
+    ("*", '等待中'): 'Pending',
+    ("*", '未知'): 'Unknown',
+    ("*", '已就绪'): 'Ready',
+    ("*", '扫描中'): 'Scanning',
+    ("*", '已取消'): 'Cancelled',
+    ("*", '缺失'): 'Missing',
+    ("*", '需要重建'): 'Rebuild required',
+    ("*", '无匹配'): 'No match',
+    ("*", '动画索引兼容状态不可用'): 'Animation index compatibility state is unavailable',
+    ("*", '动画索引任务已排队'): 'Animation index job queued',
+    ("*", '动画索引任务已取消'): 'Animation index job cancelled',
+    ("*", '之前的后台索引任务未能在文件重新加载后恢复'): 'Previous background index job did not survive file reload',
+    ("*", '由于输入已变化，已丢弃动画索引结果'): 'Animation index result discarded because inputs changed',
+    ("*", '导入并打包已完成'): 'Import and package completed',
+
+    ("*", 'Folder 模式：直接扫描动画文件夹'): 'Folder mode: scan an animation folder directly',
+    ("*", '动画文件夹'): 'Animation Folder',
+    ("*", '请填写动画文件夹、输出目录和库名称'): 'Set the animation folder, output directory, and library name',
+    ("*", '扫描动画文件夹'): 'Scan Animation Folder',
+    ("*", '扫描当前文件夹中的 UEFormat 动画文件'): 'Scan UEFormat animation files in the current folder',
 }
 
 

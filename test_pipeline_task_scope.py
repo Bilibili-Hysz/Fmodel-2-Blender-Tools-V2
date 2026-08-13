@@ -484,6 +484,250 @@ class TaskScopedImportTests(unittest.TestCase):
             self.assertTrue(any("Hero" in message and "Enemy" in message
                                 for level, message in context.logs if level == "error"))
 
+    def test_ueanim_strict_identity_preflight_fails_once_before_importer_construction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sources = [os.path.join(directory, name) for name in ("Idle.ueanim", "Run.ueanim")]
+            for source in sources:
+                open(source, "w").close()
+            constructed = []
+
+            class Options:
+                def __init__(self, **kwargs):
+                    constructed.append(kwargs)
+
+            class Importer:
+                def __init__(self, options):
+                    raise AssertionError("strict identity preflight must run before importer construction")
+
+            api = types.ModuleType("addon.Fmodel.importers.animation.operator_anim_ueformat")
+            api.get_ueformat_api = lambda: (Importer, None, Options, None)
+            sys.modules[api.__name__] = api
+            target_identity = {
+                "version": 1,
+                "skeleton_path": "/Game/Characters/SK_Hero.SK_Hero",
+                "has_skeleton_guid": False,
+                "skeleton_guid": None,
+                "bone_layout_hash": "b" * 64,
+            }
+            target = types.SimpleNamespace(
+                name="HeroRig",
+                type="ARMATURE",
+                get=lambda key, default=None: {
+                    "FModel_Skeleton": "Hero",
+                    "fmodel_skeleton_identity": target_identity,
+                }.get(key, default),
+            )
+            self.bpy.data.objects = types.SimpleNamespace(get=lambda name: target if name == "HeroRig" else None)
+            source_identity = {
+                "version": 1,
+                "skeleton_path": "/Game/Characters/SK_Hero.SK_Hero",
+                "has_skeleton_guid": False,
+                "skeleton_guid": None,
+                "bone_layout_hash": "a" * 64,
+            }
+            context = FakeContext({"skeletons": {"Hero": {"Moves": {"__animations__": {
+                "Idle": {"source_file": sources[0], "metadata": {"fmodel_skeleton_identity": source_identity}},
+                "Run": {"source_file": sources[1], "metadata": {"fmodel_skeleton_identity": source_identity}},
+            }}}}}, {
+                "source_skeleton": "Hero", "source_subset": sources,
+                "target_armature": "HeroRig", "output_dir": directory,
+                "skeleton_compatibility_mode": "strict",
+            })
+
+            self.assertFalse(self.stages.AssetImportStage()._import_ueanim_direct(context))
+
+            self.assertEqual(constructed, [])
+            self.assertEqual(len(context.imported_assets["failed_imports"]), 1)
+            self.assertEqual(context.get_config("import_checkpoint"), {})
+            self.assertTrue(any("严格骨架身份预检失败" in message
+                                for level, message in context.logs if level == "error"))
+
+    def test_ueanim_name_compatibility_skips_strict_identity_preflight(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = os.path.join(directory, "Idle.ueanim")
+            open(source, "w").close()
+            constructed = []
+
+            class Options:
+                def __init__(self, **kwargs):
+                    constructed.append(kwargs)
+
+            class Importer:
+                def __init__(self, options):
+                    pass
+
+                def import_file(self, path):
+                    TaskScopedImportTests.actions.append(FakeAction("Idle"))
+
+            api = types.ModuleType("addon.Fmodel.importers.animation.operator_anim_ueformat")
+            api.get_ueformat_api = lambda: (Importer, None, Options, None)
+            sys.modules[api.__name__] = api
+            target_identity = {
+                "version": 1,
+                "skeleton_path": "/Game/Characters/SK_Hero.SK_Hero",
+                "has_skeleton_guid": False,
+                "skeleton_guid": None,
+                "bone_layout_hash": "b" * 64,
+            }
+            target = types.SimpleNamespace(
+                name="HeroRig",
+                type="ARMATURE",
+                get=lambda key, default=None: {
+                    "FModel_Skeleton": "Hero",
+                    "fmodel_skeleton_identity": target_identity,
+                }.get(key, default),
+            )
+            self.bpy.data.objects = types.SimpleNamespace(get=lambda name: target if name == "HeroRig" else None)
+            context = FakeContext({"skeletons": {"Hero": {"Moves": {"__animations__": {
+                "Idle": {
+                    "source_file": source,
+                    "metadata": {"fmodel_skeleton_identity": {
+                        "version": 1,
+                        "skeleton_path": "/Game/Characters/SK_Hero.SK_Hero",
+                        "has_skeleton_guid": False,
+                        "skeleton_guid": None,
+                        "bone_layout_hash": "a" * 64,
+                    }},
+                },
+            }}}}}, {
+                "source_skeleton": "Hero", "source_subset": [source],
+                "target_armature": "HeroRig", "import_resume_enabled": False,
+                "skeleton_compatibility_mode": "name_retarget",
+            })
+
+            self.assertTrue(self.stages.AssetImportStage()._import_ueanim_direct(context))
+
+            self.assertEqual(len(constructed), 1)
+            self.assertFalse(constructed[0]["strict_fmodel_skeleton"])
+            self.assertEqual(context.imported_assets["failed_imports"], [])
+            self.assertEqual(self.actions[0]["Pipeline_SkeletonCompatibility"], "name_retarget")
+
+    def test_ueanim_strict_preflight_uses_binary_identity_over_manifest_cache(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = os.path.join(directory, "Idle.ueanim")
+            open(source, "w").close()
+            constructed = []
+
+            class Options:
+                def __init__(self, **kwargs):
+                    constructed.append(kwargs)
+
+            class Importer:
+                def __init__(self, options):
+                    raise AssertionError("binary identity preflight must run before importer construction")
+
+            api = types.ModuleType("addon.Fmodel.importers.animation.operator_anim_ueformat")
+            api.get_ueformat_api = lambda: (Importer, None, Options, None)
+            sys.modules[api.__name__] = api
+
+            matching_identity = {
+                "version": 1,
+                "skeleton_path": "/Game/Characters/SK_Hero.SK_Hero",
+                "has_skeleton_guid": False,
+                "skeleton_guid": None,
+                "bone_layout_hash": "b" * 64,
+            }
+            binary_identity = {
+                **matching_identity,
+                "bone_layout_hash": "a" * 64,
+            }
+            target = types.SimpleNamespace(
+                name="HeroRig",
+                type="ARMATURE",
+                get=lambda key, default=None: {
+                    "FModel_Skeleton": "Hero",
+                    "fmodel_skeleton_identity": matching_identity,
+                }.get(key, default),
+            )
+            self.bpy.data.objects = types.SimpleNamespace(
+                get=lambda name: target if name == "HeroRig" else None
+            )
+            context = FakeContext({"skeletons": {"Hero": {"Moves": {"__animations__": {
+                "Idle": {
+                    "source_file": source,
+                    # Deliberately forged/stale cache value: it matches target.
+                    "metadata": {"fmodel_skeleton_identity": matching_identity},
+                },
+            }}}}}, {
+                "source_skeleton": "Hero",
+                "source_subset": [source],
+                "target_armature": "HeroRig",
+                "output_dir": directory,
+                "skeleton_compatibility_mode": "strict",
+            })
+
+            with mock.patch.object(
+                self.stages,
+                "read_ueformat_identity",
+                return_value=types.SimpleNamespace(kind="animation", identity=binary_identity),
+            ):
+                self.assertFalse(self.stages.AssetImportStage()._import_ueanim_direct(context))
+
+            self.assertEqual(constructed, [])
+            self.assertEqual(len(context.imported_assets["failed_imports"]), 1)
+            self.assertTrue(any("bone layout hash differs" in message
+                                for level, message in context.logs if level == "error"))
+
+    def test_ueanim_strict_preflight_rejects_missing_binary_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = os.path.join(directory, "Idle.ueanim")
+            open(source, "w").close()
+            constructed = []
+
+            class Options:
+                def __init__(self, **kwargs):
+                    constructed.append(kwargs)
+
+            class Importer:
+                def __init__(self, options):
+                    raise AssertionError("missing binary identity must fail before importer construction")
+
+            api = types.ModuleType("addon.Fmodel.importers.animation.operator_anim_ueformat")
+            api.get_ueformat_api = lambda: (Importer, None, Options, None)
+            sys.modules[api.__name__] = api
+            identity = {
+                "version": 1,
+                "skeleton_path": "/Game/Characters/SK_Hero.SK_Hero",
+                "has_skeleton_guid": False,
+                "skeleton_guid": None,
+                "bone_layout_hash": "b" * 64,
+            }
+            target = types.SimpleNamespace(
+                name="HeroRig",
+                type="ARMATURE",
+                get=lambda key, default=None: {
+                    "FModel_Skeleton": "Hero",
+                    "fmodel_skeleton_identity": identity,
+                }.get(key, default),
+            )
+            self.bpy.data.objects = types.SimpleNamespace(
+                get=lambda name: target if name == "HeroRig" else None
+            )
+            context = FakeContext({"skeletons": {"Hero": {"Moves": {"__animations__": {
+                "Idle": {
+                    "source_file": source,
+                    "metadata": {"fmodel_skeleton_identity": identity},
+                },
+            }}}}}, {
+                "source_skeleton": "Hero",
+                "source_subset": [source],
+                "target_armature": "HeroRig",
+                "output_dir": directory,
+                "skeleton_compatibility_mode": "strict",
+            })
+
+            with mock.patch.object(
+                self.stages,
+                "read_ueformat_identity",
+                return_value=types.SimpleNamespace(kind="animation", identity=None),
+            ):
+                self.assertFalse(self.stages.AssetImportStage()._import_ueanim_direct(context))
+
+            self.assertEqual(constructed, [])
+            self.assertEqual(len(context.imported_assets["failed_imports"]), 1)
+            self.assertTrue(any("no FMODEL_TARGET_SKELETON identity" in message
+                                for level, message in context.logs if level == "error"))
+
     def test_ueanim_import_exception_removes_partial_action_and_refreshes_delta(self):
         with tempfile.TemporaryDirectory() as directory:
             broken = os.path.join(directory, "Broken.ueanim")
@@ -1132,7 +1376,10 @@ class TaskScopedImportTests(unittest.TestCase):
             subset = [live_source, staged_source]
             context = FakeContext({"skeletons": {"Hero": {"Moves": {"__animations__": {
                 "Idle": {"source_file": live_source}, "Run": {"source_file": staged_source},
-            }}}}}, {"source_skeleton": "Hero", "source_subset": subset, "target_armature": "HeroRig"})
+            }}}}}, {
+                "source_skeleton": "Hero", "source_subset": subset,
+                "target_armature": "HeroRig", "output_dir": directory,
+            })
             stage = self.stages.AssetImportStage()
             identity = stage._task_identity(context)
             task_dir = stage._staging_task_dir(context)
@@ -2285,16 +2532,21 @@ class TaskScopedImportTests(unittest.TestCase):
                 return next((obj for obj in self if obj.name == name), None)
 
         self.bpy.data.objects = Objects(armatures)
-        context = FakeContext({}, {
-            "source_skeleton": "Hero",
-            "skeleton_filter": "Enemy",
-            "import_resume_enabled": False,
-        })
+        with tempfile.TemporaryDirectory() as directory:
+            source = os.path.join(directory, "Idle.ueanim")
+            open(source, "w").close()
+            context = FakeContext({"skeletons": {"Hero": {"": {"__animations__": {
+                "Idle": {"source_file": source},
+            }}}}}, {
+                "source_skeleton": "Hero",
+                "skeleton_filter": "Enemy",
+                "import_resume_enabled": False,
+            })
 
-        self.assertFalse(self.stages.AssetImportStage()._import_ueanim_direct(context))
+            self.assertFalse(self.stages.AssetImportStage()._import_ueanim_direct(context))
         self.assertEqual(selected_targets, [armatures[0]])
 
-    def test_explicit_source_skeleton_wins_during_fmodel_manifest_acquisition(self):
+    def test_fmodel_manifest_acquisition_ignores_legacy_json_sidecars(self):
         with tempfile.TemporaryDirectory() as directory:
             manifest_path = os.path.join(directory, "animations_manifest.json")
             with open(manifest_path, "w", encoding="utf-8") as handle:
@@ -2307,22 +2559,21 @@ class TaskScopedImportTests(unittest.TestCase):
                 "skeleton_filter": "Enemy",
             })
 
-            self.assertTrue(
+            self.assertFalse(
                 self.stages.DictionaryAcquisitionStage()._process_fmodel_manifests(context, directory)
             )
-            self.assertEqual(list(context.dictionary_manifest["skeletons"]), ["Hero"])
+            self.assertEqual(context.dictionary_manifest, {})
 
-    def test_explicit_source_skeleton_wins_during_fmodel_raw_acquisition(self):
+    def test_fmodel_raw_acquisition_does_not_fall_back_to_json_skeleton_names(self):
         with tempfile.TemporaryDirectory() as directory:
             for skeleton, animation in (("Hero", "Idle"), ("Enemy", "Attack")):
                 skeleton_dir = os.path.join(directory, skeleton)
                 os.makedirs(skeleton_dir)
                 open(os.path.join(skeleton_dir, f"{animation}.ueanim"), "w").close()
 
+            fallback_calls = []
             utils_asset = types.ModuleType("addon.Assets.Utils.utils_asset")
-            utils_asset.get_skeleton_name_from_json = lambda path: os.path.basename(
-                os.path.dirname(path)
-            )
+            utils_asset.get_skeleton_name_from_json = lambda path: fallback_calls.append(path)
             context = FakeContext({}, {
                 "source_skeleton": "Hero",
                 "skeleton_filter": "Enemy",
@@ -2333,12 +2584,13 @@ class TaskScopedImportTests(unittest.TestCase):
                 "addon.Assets.Utils": types.ModuleType("addon.Assets.Utils"),
                 "addon.Assets.Utils.utils_asset": utils_asset,
             }):
-                self.assertTrue(
+                self.assertFalse(
                     self.stages.DictionaryAcquisitionStage()._process_fmodel_raw_files(
                         context, directory
                     )
                 )
-            self.assertEqual(list(context.dictionary_manifest["skeletons"]), ["Hero"])
+            self.assertEqual(context.dictionary_manifest, {})
+            self.assertEqual(fallback_calls, [])
 
     def test_checkpoint_staging_validation_uses_action_manifest_skeleton(self):
         with tempfile.TemporaryDirectory() as output_dir:

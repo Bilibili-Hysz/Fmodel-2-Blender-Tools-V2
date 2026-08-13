@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import IntEnum, auto
+from enum import IntEnum
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -9,31 +9,63 @@ import numpy.typing as npt
 from mathutils import Quaternion, Vector
 
 from ..logging import Log
+from .protocol import (
+    ANIM_IDENTIFIER,
+    MAGIC,
+    MODEL_IDENTIFIER,
+    POSE_IDENTIFIER,
+    EUEFormatVersion,
+    MAX_FMODEL_IDENTITY_PATH_BYTES,
+    MAX_FMODEL_MATERIAL_TEXTURE_BINDINGS,
+    MAX_FMODEL_PARAMETERS,
+    MAX_FMODEL_PBR_INTERFACES,
+    MAX_FMODEL_SLOTS,
+    MAX_FMODEL_TEXTURE_ID_BYTES,
+    MAX_FMODEL_TEXTURES,
+    _FModelTextureLegacyFormatMismatchError,
+    _read_non_negative_count,
+    _read_strict_identity_fstring,
+    _read_strict_legacy_fstring,
+    _read_strict_utf8_string,
+    _validate_fmodel_identity_chunk_count,
+    _validate_fmodel_material_id,
+    _validate_logical_resource_uri,
+    _normalize_logical_unreal_path,
+    _validate_logical_unreal_path,
+    _validate_max_count,
+    _validate_top_level_count,
+)
+from .identity import (
+    FModelSkeletonIdentity,
+    FModelTargetPoseIdentity,
+    FModelTargetSkeletonIdentity,
+    compute_skeleton_layout_hash,
+)
+
+from .materials import (
+    FModelMaterialLinks,
+    FModelMaterialParameter,
+    FModelMaterialSlot,
+    FModelMaterialTextureBinding,
+    FModelMaterialTextureRecord,
+    FModelMaterialTextures,
+    FModelPBRInterface,
+    FModelTextureMapKind,
+)
+from .resources import TextureResource, TextureResourceKind
+
+from .topology import (
+    UEMODELLodTopologySummary,
+    UEMODELSkeletonTopologySummary,
+    UEMODELTopologySummary,
+    _validate_uemodel_lods,
+    _validate_uemodel_skeleton,
+    validate_uemodel_topology,
+)
+
 
 if TYPE_CHECKING:
     from io_scene_ueformat.importer.reader import FArchiveReader
-
-
-MAGIC = "UEFORMAT"
-MODEL_IDENTIFIER = "UEMODEL"
-ANIM_IDENTIFIER = "UEANIM"
-POSE_IDENTIFIER = "UEPOSE"
-
-
-class EUEFormatVersion(IntEnum):
-    BeforeCustomVersionWasAdded = 0
-    SerializeBinormalSign = 1
-    AddMultipleVertexColors = 2
-    AddConvexCollisionGeom = 3
-    LevelOfDetailFormatRestructure = 4
-    SerializeVirtualBones = 5
-    SerializeMaterialPath = 6
-    SerializeAssetMetadata = 7
-    PreserveOriginalTransforms = 8
-    AddPoseExport = 9
-
-    VersionPlusOne = auto()
-    LatestVersion = VersionPlusOne - 1
 
 
 @dataclass(slots=True)
@@ -41,6 +73,11 @@ class UEModel:
     lods: list[UEModelLOD] = field(default_factory=list)
     collisions: list[ConvexCollision] = field(default_factory=list)
     skeleton: UEModelSkeleton | None = None
+    material_links: FModelMaterialLinks = field(default_factory=lambda: FModelMaterialLinks())
+    textures: list[TextureResource] = field(default_factory=list)
+    material_textures: FModelMaterialTextures | None = None
+    skeleton_identity: FModelSkeletonIdentity | None = None
+    skeleton_identity_derived: bool = False
     # physics = None  # noqa: ERA001
 
     @classmethod
@@ -49,26 +86,130 @@ class UEModel:
         ar: FArchiveReader
     ) -> UEModel:
         data = cls()
+        recognized_chunks: set[str] = set()
 
         while not ar.eof():
             section_name = ar.read_fstring()
             array_size = ar.read_int()
             byte_size = ar.read_int()
+            if array_size < 0:
+                raise ValueError(f"Invalid top-level array_size: {array_size}")
+            extension_name = {
+                "FMODEL_MATERIALS": "FModel materials",
+                "FMODEL_TEXTURES": "FModel textures",
+                "FMODEL_PBR_INTERFACES": "FModel PBR interfaces",
+                "FMODEL_SKELETON_IDENTITY": "FModel skeleton identity",
+            }.get(section_name, f"Top-level chunk {section_name}")
+            if byte_size < 0:
+                raise ValueError(f"{extension_name} chunk declared negative byte_size")
+            if byte_size > ar.remaining():
+                raise ValueError(f"{extension_name} chunk declared byte_size exceeds available data")
+
+            if section_name in {
+                "LODS",
+                "SKELETON",
+                "COLLISION",
+                "FMODEL_MATERIALS",
+                "FMODEL_TEXTURES",
+                "FMODEL_PBR_INTERFACES",
+                "FMODEL_SKELETON_IDENTITY",
+            }:
+                if section_name in recognized_chunks:
+                    raise ValueError(f"Invalid duplicate top-level chunk: {section_name}")
+                recognized_chunks.add(section_name)
+
+            chunk = ar.chunk(byte_size)
 
             match section_name:
                 case "LODS":
-                    data.lods = ar.read_array(array_size, lambda ar: UEModelLOD.from_archive(ar))
+                    if array_size > chunk.remaining() // 8:
+                        raise ValueError("Top-level LODS array_size cannot fit minimum records")
+                    data.lods = chunk.read_array(array_size, UEModelLOD.from_archive)
                 case "SKELETON":
-                    data.skeleton = UEModelSkeleton.from_archive(ar.chunk(byte_size))
+                    if array_size != 1:
+                        raise ValueError("SKELETON chunk array_size must be 1")
+                    data.skeleton = UEModelSkeleton.from_archive(chunk)
                 case "COLLISION":
-                    data.collisions = ar.read_array(
+                    if array_size > chunk.remaining() // 12:
+                        raise ValueError("Top-level COLLISION array_size cannot fit minimum records")
+                    data.collisions = chunk.read_array(
                         array_size,
                         lambda ar: ConvexCollision.from_archive(ar),
                     )
+                case "FMODEL_MATERIALS":
+                    data.material_links = FModelMaterialLinks.from_archive(chunk, array_size)
+                case "FMODEL_TEXTURES":
+                    data.textures, data.material_textures = TextureResource.read_all(chunk, array_size)
+                case "FMODEL_PBR_INTERFACES":
+                    data.material_links.pbr_interfaces = FModelPBRInterface.read_all(chunk, array_size)
+                    data.material_links.pbr_interfaces_present = True
+                case "FMODEL_SKELETON_IDENTITY":
+                    _validate_fmodel_identity_chunk_count(array_size, section_name)
+                    data.skeleton_identity = FModelSkeletonIdentity.from_archive(chunk)
                 case _:
                     Log.warn(f"Unknown Model Data: {section_name}")
-                    ar.skip(byte_size)
+                    chunk.read_to_end()
+            if not chunk.eof():
+                raise ValueError(f"Trailing bytes in {extension_name} chunk")
+        if (
+            data.skeleton_identity is None
+            and data.skeleton is not None
+            and data.skeleton.metadata is not None
+            and data.skeleton.bones
+            and data.skeleton.metadata.skeleton_path
+        ):
+            # The official standard SKELETON chunk already carries the logical
+            # skeleton path and ordered bone layout. Derive the same V1 identity
+            # tuple when the optional additive chunk is absent so a skeletal
+            # UEMODEL can still be the strict target of R38 UEANIM/UEPOSE files.
+            # GetPathName() may omit the leading slash; root it exactly as the
+            # active FModel target-identity producer does.
+            skeleton_path = _normalize_logical_unreal_path(
+                data.skeleton.metadata.skeleton_path,
+                "UEMODEL standard skeleton metadata path",
+            )
+            data.skeleton_identity = FModelSkeletonIdentity(
+                1,
+                skeleton_path,
+                None,
+                compute_skeleton_layout_hash(data.skeleton.bones),
+            )
+            data.skeleton_identity_derived = True
+        slots_by_ordinal: dict[int, FModelMaterialSlot] = {}
+        for slot in data.material_links.slots:
+            if slot.slot_index < 0:
+                raise ValueError(f"Invalid FModel material slot_index: {slot.slot_index}")
+            if slot.slot_index in slots_by_ordinal:
+                raise ValueError(f"Invalid FModel material duplicate slot_index: {slot.slot_index}")
+            slots_by_ordinal[slot.slot_index] = slot
+        if data.material_textures is not None and data.material_links.slots:
+            from .fmodel import apply_material_texture_bindings
+
+            apply_material_texture_bindings(data.material_links, data.material_textures)
+
+        singleton_roles: set[tuple[int, int]] = set()
+        for interface in data.material_links.pbr_interfaces:
+            slot = slots_by_ordinal.get(interface.slot_index)
+            if slot is None:
+                msg = f"Invalid FModel PBR interface slot_index: {interface.slot_index}"
+                raise ValueError(msg)
+            parameters = slot.parameters
+            if interface.parameter_index >= len(parameters):
+                msg = f"Invalid FModel PBR interface parameter_index: {interface.parameter_index}"
+                raise ValueError(msg)
+            role_key = (interface.slot_index, interface.role)
+            if role_key in singleton_roles:
+                msg = (
+                    "Invalid FModel PBR interface duplicate role "
+                    f"for slot_index {interface.slot_index}: {interface.role}"
+                )
+                raise ValueError(msg)
+            singleton_roles.add(role_key)
         return data
+
+    def topology_summary(self) -> UEMODELTopologySummary:
+        """Validate standard UEMODEL topology after binary chunk decoding."""
+        return validate_uemodel_topology(self.lods, self.skeleton, self.skeleton_identity)
 
     @classmethod
     def from_archive_legacy(self, ar: FArchiveReader) -> UEModel:
@@ -97,7 +238,8 @@ class UEModel:
                     flattened = np.array(ar.read_float_vector(array_size * 3)).reshape(array_size, 3)
                     lod.normals = flattened
             elif header_name == "TANGENTS":
-                ar.skip(array_size * 3 * 3)
+                # FModel serializes each FVector tangent as three float32 values.
+                ar.skip(array_size * 3 * 4)
                 # flattened = np.array(ar.read_float_vector(array_size * 3)).reshape(array_size, 3)  # noqa: ERA001
             elif header_name == "VERTEXCOLORS":
                 if ar.file_version >= EUEFormatVersion.AddMultipleVertexColors:
@@ -117,7 +259,10 @@ class UEModel:
                     count = ar.read_int()
                     lod.uvs.append(np.array(ar.read_float_vector(count * 2)).reshape(count, 2))
             elif header_name == "MATERIALS":
-                lod.materials = ar.read_array(array_size, lambda ar: Material.from_archive(ar))
+                lod.materials = [
+                    Material.from_archive(ar, source_slot_index)
+                    for source_slot_index in range(array_size)
+                ]
             elif header_name == "WEIGHTS":
                 lod.weights = ar.read_array(array_size, lambda ar: Weight.from_archive(ar))
             elif header_name == "MORPHTARGETS":
@@ -162,6 +307,7 @@ class UEModelLOD:
     materials: list[Material] = field(default_factory=list)
     morphs: list[MorphTarget] = field(default_factory=list)
     weights: list[Weight] = field(default_factory=list)
+    topology_children: set[str] = field(default_factory=set)
 
     @classmethod
     def from_archive(
@@ -169,6 +315,11 @@ class UEModelLOD:
         ar: FArchiveReader
     ) -> UEModelLOD:
         data = cls(name=ar.read_fstring())
+        seen_children: set[str] = set()
+        known_children = {
+            "VERTICES", "INDICES", "NORMALS", "TANGENTS", "VERTEXCOLORS",
+            "TEXCOORDS", "MATERIALS", "WEIGHTS", "MORPHTARGETS",
+        }
 
         lod_size = ar.read_int()
         ar = ar.chunk(lod_size)
@@ -177,64 +328,80 @@ class UEModelLOD:
             header_name = ar.read_fstring()
             array_size = ar.read_int()
             byte_size = ar.read_int()
+            if array_size < 0:
+                raise ValueError(f"Invalid negative LOD child array_size: {array_size}")
+            if byte_size < 0:
+                raise ValueError(f"LOD child {header_name} declared negative byte_size")
+            if byte_size > ar.remaining():
+                raise ValueError(f"LOD child {header_name} declared byte_size exceeds available data")
 
-            pos = ar.data.tell()
+            child = ar.chunk(byte_size)
+
+            if header_name in known_children:
+                if header_name in seen_children:
+                    raise ValueError(f"Invalid duplicate LOD child: {header_name}")
+                seen_children.add(header_name)
 
             if header_name == "VERTICES":
-                flattened = ar.read_float_vector(array_size * 3)
-                data.vertices = (np.array(flattened) * ar.metadata["scale"]).reshape(array_size, 3)
+                data.topology_children.add(header_name)
+                flattened = child.read_float_vector(array_size * 3)
+                data.vertices = (np.array(flattened) * child.metadata["scale"]).reshape(array_size, 3)
                 
-                if ar.file_version >= EUEFormatVersion.PreserveOriginalTransforms:
+                if child.file_version >= EUEFormatVersion.PreserveOriginalTransforms:
                     data.vertices *= (1, -1, 1)
                     
             elif header_name == "INDICES":
+                data.topology_children.add(header_name)
                 data.indices = np.array(
-                    ar.read_int_vector(array_size),
+                    child.read_int_vector(array_size),
                     dtype=np.int32,
                 ).reshape(array_size // 3, 3)
             elif header_name == "NORMALS":
                 # W XYZ  # TODO: change to XYZ W 
-                flattened = np.array(ar.read_float_vector(array_size * 4))
+                flattened = np.array(child.read_float_vector(array_size * 4))
                 data.normals = flattened.reshape(-1, 4)[:, 1:]
 
-                if ar.file_version >= EUEFormatVersion.PreserveOriginalTransforms:
+                if child.file_version >= EUEFormatVersion.PreserveOriginalTransforms:
                     data.normals *= (1, -1, 1)
                     
             elif header_name == "TANGENTS":
-                ar.skip(array_size * 3 * 3)
+                # FModel serializes each FVector tangent as three float32 values.
+                child.skip(array_size * 3 * 4)
             elif header_name == "VERTEXCOLORS":
-                data.colors = [VertexColor.from_archive(ar) for _ in range(array_size)]
+                data.colors = [VertexColor.from_archive(child) for _ in range(array_size)]
             elif header_name == "TEXCOORDS":
                 data.uvs = []
                 for _ in range(array_size):
-                    count = ar.read_int()
-                    uvs = np.array(ar.read_float_vector(count * 2)).reshape(count, 2)
+                    count = child.read_int()
+                    uvs = np.array(child.read_float_vector(count * 2)).reshape(count, 2)
 
-                    if ar.file_version >= EUEFormatVersion.PreserveOriginalTransforms:
+                    if child.file_version >= EUEFormatVersion.PreserveOriginalTransforms:
                         uvs *= (1, -1)
                         uvs += (0, 1)
                 
                     data.uvs.append(uvs)
             elif header_name == "MATERIALS":
-                data.materials = ar.read_array(
-                    array_size,
-                    lambda ar: Material.from_archive(ar),
-                )
+                data.topology_children.add(header_name)
+                data.materials = [
+                    Material.from_archive(child, source_slot_index)
+                    for source_slot_index in range(array_size)
+                ]
             elif header_name == "WEIGHTS":
-                data.weights = ar.read_array(
+                data.weights = child.read_array(
                     array_size,
                     lambda ar: Weight.from_archive(ar),
                 )
             elif header_name == "MORPHTARGETS":
-                data.morphs = ar.read_array(
+                data.morphs = child.read_array(
                     array_size,
                     lambda ar: MorphTarget.from_archive(ar),
                 )
             else:
                 Log.warn(f"Unknown LOD Data: {header_name}")
-                ar.skip(byte_size)
+                child.read_to_end()
 
-            ar.data.seek(pos + byte_size, 0)
+            if not child.eof():
+                raise ValueError(f"Trailing bytes in LOD child {header_name}")
         return data
 
 
@@ -248,36 +415,57 @@ class UEModelSkeleton:
     @classmethod
     def from_archive(cls, ar: FArchiveReader) -> UEModelSkeleton:
         data = cls()
+        seen_children: set[str] = set()
+        known_children = {"METADATA", "BONES", "SOCKETS", "VIRTUALBONES"}
         
         while not ar.eof():
             section_name = ar.read_fstring()
             array_size = ar.read_int()
             byte_size = ar.read_int()
+            if array_size < 0:
+                raise ValueError(f"Invalid negative skeleton child array_size: {array_size}")
+            if byte_size < 0:
+                raise ValueError(f"Skeleton child {section_name} declared negative byte_size")
+            if byte_size > ar.remaining():
+                raise ValueError(f"Skeleton child {section_name} declared byte_size exceeds available data")
 
-            pos = ar.data.tell()
+            child = ar.chunk(byte_size)
+            if section_name in known_children:
+                if section_name in seen_children:
+                    raise ValueError(f"Invalid duplicate skeleton child: {section_name}")
+                seen_children.add(section_name)
             match section_name:
                 case "METADATA":
-                    data.metadata = UEModelSkeletonMetadata.from_archive(ar)
+                    if array_size != 1:
+                        raise ValueError("METADATA child array_size must be 1")
+                    data.metadata = UEModelSkeletonMetadata.from_archive(child)
                 case "BONES":
-                    data.bones = ar.read_array(
+                    if array_size <= 0:
+                        raise ValueError("BONES child array_size must be greater than 0")
+                    data.bones = child.read_array(
                         array_size,
                         lambda ar: Bone.from_archive(ar),
                     )
                 case "SOCKETS":
-                    data.sockets = ar.read_array(
+                    data.sockets = child.read_array(
                         array_size,
                         lambda ar: Socket.from_archive(ar),
                     )
                 case "VIRTUALBONES":
-                    data.virtual_bones = ar.read_array(
+                    data.virtual_bones = child.read_array(
                         array_size,
                         lambda ar: VirtualBone.from_archive(ar),
                     )
                 case _:
                     Log.warn(f"Unknown Skeleton Data: {section_name}")
-                    ar.skip(byte_size)
-            ar.data.seek(pos + byte_size, 0)
+                    child.read_to_end()
+            if not child.eof():
+                raise ValueError(f"Trailing bytes in skeleton child {section_name}")
 
+        if "METADATA" not in seen_children:
+            raise ValueError("SKELETON requires exactly one METADATA child")
+        if "BONES" not in seen_children:
+            raise ValueError("SKELETON requires BONES child")
         return data
 
 
@@ -287,7 +475,12 @@ class UEModelSkeletonMetadata:
     
     @classmethod
     def from_archive(cls, ar: FArchiveReader) -> UEModelSkeletonMetadata:
-        return cls(skeleton_path=ar.read_fstring())
+        return cls(
+            skeleton_path=_normalize_logical_unreal_path(
+                ar.read_fstring(),
+                "UEMODEL standard skeleton metadata path",
+            ),
+        )
 
 @dataclass(slots=True)
 class ConvexCollision:
@@ -338,14 +531,16 @@ class Material:
     material_path: str
     first_index: int
     num_faces: int
+    source_slot_index: int | None = None
 
     @classmethod
-    def from_archive(cls, ar: FArchiveReader) -> Material:
+    def from_archive(cls, ar: FArchiveReader, source_slot_index: int) -> Material:
         return cls(
             material_name=ar.read_fstring(),
             material_path=ar.read_fstring() if ar.file_version >= EUEFormatVersion.SerializeMaterialPath else "",
             first_index=ar.read_int(),
             num_faces=ar.read_int(),
+            source_slot_index=source_slot_index,
         )
 
 
@@ -378,7 +573,7 @@ class Weight:
     @classmethod
     def from_archive(cls, ar: FArchiveReader) -> Weight:
         return cls(
-            bone_index=ar.read_short(),
+            bone_index=ar.read_ushort(),
             vertex_index=ar.read_int(),
             weight=ar.read_float(),
         )
@@ -456,40 +651,107 @@ class VirtualBone:
         )
 
 
+
+
+def _validate_fmodel_animation_chunk_profile(identifier: str, sections: list[str]) -> None:
+    """Validate frozen FModel chunk structure after target identity proves provenance."""
+    target = "FMODEL_TARGET_SKELETON"
+    if identifier == ANIM_IDENTIFIER:
+        required = ("METADATA", "TRACKS")
+        optional = ("CURVES",)
+    elif identifier == POSE_IDENTIFIER:
+        required = ("POSES", "CURVES")
+        optional = ()
+    else:
+        raise ValueError(f"Unsupported FModel animation profile: {identifier}")
+
+    known = (*required, *optional, target)
+    counts = {name: sections.count(name) for name in known}
+    duplicates = [name for name, count in counts.items() if count > 1]
+    if duplicates:
+        raise ValueError(f"Invalid FModel {identifier} duplicate known chunk: {duplicates[0]}")
+
+    missing = [name for name in (*required, target) if counts[name] != 1]
+    if missing:
+        raise ValueError(f"Invalid FModel {identifier} missing required chunk: {missing[0]}")
+
+    expected = [*required]
+    expected.extend(name for name in optional if counts[name] == 1)
+    expected.append(target)
+    actual = [name for name in sections if name in known]
+    if actual != expected:
+        raise ValueError(
+            f"Invalid FModel {identifier} chunk order: expected {expected}, got {actual}"
+        )
+
+
 @dataclass(slots=True)
 class UEAnim:
     metadata: UEAnimMetadata = None
     tracks: list[Track] = field(default_factory=list)
     curves: list[Curve] = field(default_factory=list)
+    target_skeleton_identity: FModelTargetSkeletonIdentity | None = None
 
     @classmethod
-    def from_archive(cls, ar: FArchiveReader) -> UEAnim:
+    def from_archive(
+        cls,
+        ar: FArchiveReader,
+        *,
+        strict_fmodel_profile: bool = False,
+    ) -> UEAnim:
         data = cls()
+        recognized_chunks: set[str] = set()
+        section_sequence: list[str] = []
         
         if ar.file_version < EUEFormatVersion.SerializeAssetMetadata:
             data.metadata = UEAnimMetadata(num_frames=ar.read_int(), frames_per_second=ar.read_float())
 
         while not ar.eof():
             section_name = ar.read_fstring()
+            section_sequence.append(section_name)
             array_size = ar.read_int()
             byte_size = ar.read_int()
 
+            if array_size < 0:
+                raise ValueError(f"Invalid top-level array_size: {array_size}")
+            extension_name = {
+                "FMODEL_TARGET_SKELETON": "FModel target skeleton",
+            }.get(section_name, f"Top-level chunk {section_name}")
+            if byte_size < 0:
+                raise ValueError(f"{extension_name} chunk declared negative byte_size")
+            if byte_size > ar.remaining():
+                raise ValueError(f"{extension_name} chunk declared byte_size exceeds available data")
+            if section_name == "FMODEL_TARGET_SKELETON":
+                if section_name in recognized_chunks:
+                    raise ValueError(f"Invalid duplicate {section_name} chunk")
+                recognized_chunks.add(section_name)
+
+            chunk = ar.chunk(byte_size)
+
             match section_name:
                 case "METADATA":
-                    data.metadata = UEAnimMetadata.from_archive(ar)
+                    data.metadata = UEAnimMetadata.from_archive(chunk)
                 case "TRACKS":
-                    data.tracks = ar.read_array(
+                    data.tracks = chunk.read_array(
                         array_size,
                         lambda ar: Track.from_archive(ar),
                     )
                 case "CURVES":
-                    data.curves = ar.read_array(
+                    data.curves = chunk.read_array(
                         array_size,
                         lambda ar: Curve.from_archive(ar),
                     )
+                case "FMODEL_TARGET_SKELETON":
+                    _validate_fmodel_identity_chunk_count(array_size, section_name)
+                    data.target_skeleton_identity = FModelTargetSkeletonIdentity.from_archive(chunk)
                 case _:
                     Log.warn(f"Unknown Animation Data: {section_name}")
-                    ar.skip(byte_size)
+                    chunk.read_to_end()
+            if not chunk.eof():
+                raise ValueError(f"Trailing bytes in {extension_name} chunk")
+
+        if strict_fmodel_profile:
+            _validate_fmodel_animation_chunk_profile(ANIM_IDENTIFIER, section_sequence)
 
         return data
 
@@ -523,8 +785,8 @@ class UEAnimMetadata:
             num_frames=ar.read_int(),
             frames_per_second=ar.read_float(),
             ref_pose_path=ar.read_fstring(),
-            additive_anim_type=EAdditiveAnimationType(int.from_bytes(ar.read_byte())),
-            ref_pose_type=EAdditiveBasePoseType(int.from_bytes(ar.read_byte())),
+            additive_anim_type=EAdditiveAnimationType(ar.read_uint8()),
+            ref_pose_type=EAdditiveBasePoseType(ar.read_uint8()),
             ref_frame_index=ar.read_int()
         )
     
@@ -617,26 +879,62 @@ class FloatKey(AnimKey):
 class UEPose:
     poses: list[UEPoseData] = field(default_factory=list)
     curve_names: list[str] = field(default_factory=list)
+    target_skeleton_identity: FModelTargetPoseIdentity | None = None
     
     @classmethod
-    def from_archive(cls, ar: FArchiveReader) -> UEPose:
+    def from_archive(
+        cls,
+        ar: FArchiveReader,
+        *,
+        strict_fmodel_profile: bool = False,
+    ) -> UEPose:
         data = cls()
 
+        recognized_chunks: set[str] = set()
+        section_sequence: list[str] = []
         while not ar.eof():
             section_name = ar.read_fstring()
+            section_sequence.append(section_name)
             array_size = ar.read_int()
             byte_size = ar.read_int()
 
+            if array_size < 0:
+                raise ValueError(f"Invalid top-level array_size: {array_size}")
+            extension_name = {
+                "FMODEL_TARGET_SKELETON": "FModel target skeleton",
+            }.get(section_name, f"Top-level chunk {section_name}")
+            if byte_size < 0:
+                raise ValueError(f"{extension_name} chunk declared negative byte_size")
+            if byte_size > ar.remaining():
+                raise ValueError(f"{extension_name} chunk declared byte_size exceeds available data")
+
+            if section_name == "FMODEL_TARGET_SKELETON":
+                if section_name in recognized_chunks:
+                    raise ValueError(f"Invalid duplicate {section_name} chunk")
+                recognized_chunks.add(section_name)
+
+            chunk = ar.chunk(byte_size)
+
             match section_name:
                 case "POSES":
-                    data.poses = ar.read_array(array_size, lambda ar: UEPoseData.from_archive(ar))
+                    data.poses = chunk.read_array(array_size, lambda ar: UEPoseData.from_archive(ar))
                 case "CURVES":
-                    data.curve_names = ar.read_array(array_size, lambda ar: ar.read_fstring())
+                    data.curve_names = chunk.read_array(array_size, lambda ar: ar.read_fstring())
+                case "FMODEL_TARGET_SKELETON":
+                    _validate_fmodel_identity_chunk_count(array_size, section_name)
+                    data.target_skeleton_identity = FModelTargetPoseIdentity.from_archive(chunk)
                 case _:
                     Log.warn(f"Unknown Pose Data: {section_name}")
-                    ar.skip(byte_size)
+                    chunk.read_to_end()
+
+            if not chunk.eof():
+                raise ValueError(f"Trailing bytes in {extension_name} chunk")
+
+        if strict_fmodel_profile:
+            _validate_fmodel_animation_chunk_profile(POSE_IDENTIFIER, section_sequence)
         
         return data
+
 
 @dataclass(slots=True)
 class UEPoseData:
@@ -718,7 +1016,7 @@ class BodySetup:
 
     def __init__(self, ar: FArchiveReader, scale):
         self.bone_name = ar.read_fstring()
-        self.physics_type = EPhysicsType(int.from_bytes(ar.read_byte(), byteorder="big"))
+        self.physics_type = EPhysicsType(ar.read_uint8())
 
         self.sphere_elems = ar.read_bulk_array(lambda ar: SphereCollision(ar, scale))
         self.box_elems = ar.read_bulk_array(lambda ar: BoxCollision(ar, scale))

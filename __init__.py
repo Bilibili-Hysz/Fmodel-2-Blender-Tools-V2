@@ -3,7 +3,7 @@
 bl_info = {
     "name": "FModel Tools Next",
     "author": "Your Name",
-    "version": (8, 0, 0),
+    "version": (8, 1, 0),
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar > FModel",
     "description": "专为 UE/FModel 设计的完整资产管线工具集",
@@ -30,13 +30,14 @@ if __package__ and "bpy" in locals():
     importlib.reload(auto_handlers)
 
 if __package__:
-    # 从新位置导入 Schemes
+    # UEFormat-only line: keep generic skeleton/morph tools, but do not expose
+    # PSK-specific repair schemes in the add-on registration surface. The old
+    # source files remain available during the migration window for rollback.
     from .Universal_tools.skeleton import scheme_auto, scheme_copy
-    from .Universal_tools.mesh import scheme_morph_merge, scheme_psk_auto, scheme_psk_mesh_fix
+    from .Universal_tools.mesh import scheme_morph_merge
 
     REGISTERED_SCHEMES = [
         scheme_auto, scheme_copy, scheme_morph_merge,
-        scheme_psk_auto, scheme_psk_mesh_fix
     ]
 else:
     REGISTERED_SCHEMES = []

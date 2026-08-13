@@ -5,6 +5,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
@@ -22,6 +23,23 @@ class ProjectIndexTests(unittest.TestCase):
     def setUpClass(cls):
         cls.project_index = load_project_index_module()
 
+    def test_canonical_schema_objects_are_cached_without_changing_validation(self):
+        canonical = self.project_index._canonical_schema_objects
+        canonical.cache_clear()
+        try:
+            with patch.object(
+                self.project_index.sqlite3,
+                "connect",
+                wraps=self.project_index.sqlite3.connect,
+            ) as connect:
+                first = canonical()
+                second = canonical()
+
+            self.assertIs(first, second)
+            self.assertEqual(connect.call_count, 1)
+        finally:
+            canonical.cache_clear()
+
     def test_ensure_schema_creates_canonical_database_and_persists_version(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "project"
@@ -33,15 +51,24 @@ class ProjectIndexTests(unittest.TestCase):
             self.assertEqual(index.path, expected_path)
             self.assertTrue(expected_path.is_file())
             self.assertFalse(status["rebuild_required"])
-            self.assertEqual(status["schema_version"], 2)
+            self.assertEqual(status["schema_version"], 3)
             connection = sqlite3.connect(expected_path)
             try:
-                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
+                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 3)
                 self.assertEqual(
                     {row[0] for row in connection.execute(
                         "SELECT name FROM sqlite_master WHERE type = 'table'"
                     )},
                     {"project", "scan_roots", "generations", "files", "assets", "relations"},
+                )
+                self.assertEqual(
+                    [row[1] for row in connection.execute("PRAGMA table_info(assets)")],
+                    [
+                        "canonical_path", "scan_root_path", "asset_type", "fingerprint",
+                        "skeleton_name", "provenance_state", "skeleton_path",
+                        "skeleton_guid", "bone_layout_hash", "provenance_fingerprint",
+                        "provenance_reason", "generation",
+                    ],
                 )
             finally:
                 connection.close()
@@ -84,7 +111,7 @@ class ProjectIndexTests(unittest.TestCase):
                 status = index.rebuild()
 
             self.assertEqual(status, {
-                "state": "ready", "schema_version": 2, "rebuild_required": False,
+                "state": "ready", "schema_version": 3, "rebuild_required": False,
             })
             self.assertTrue(index.path.is_file())
 
@@ -650,7 +677,7 @@ class ProjectIndexTests(unittest.TestCase):
             animation.unlink()
 
             original_discover = index._discover_root
-            index._discover_root = lambda scan_root: (_ for _ in ()).throw(OSError("unreadable"))
+            index._discover_root = lambda scan_root, **_kwargs: (_ for _ in ()).throw(OSError("unreadable"))
             try:
                 failed = index.scan([root])
             finally:
@@ -730,13 +757,55 @@ class ProjectIndexTests(unittest.TestCase):
             finally:
                 connection.close()
 
+    def test_default_scan_is_ueformat_only_and_legacy_scan_is_explicit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "project"
+            native = root / "Hero" / "Hero.uemodel"
+            legacy_psk = root / "Hero" / "Hero.psk"
+            legacy_fbx = root / "Hero" / "Hero.fbx"
+            native.parent.mkdir(parents=True)
+            native.write_bytes(b"native")
+            legacy_psk.write_bytes(b"psk")
+            legacy_fbx.write_bytes(b"fbx")
+
+            native_index = self.project_index.ProjectIndex(root)
+            self.assertEqual(native_index.scan_scope, "ueformat")
+            self.assertEqual(native_index.scan([root])["state"], "ready")
+            connection = sqlite3.connect(native_index.path)
+            try:
+                rows = connection.execute(
+                    "SELECT canonical_path FROM assets ORDER BY canonical_path"
+                ).fetchall()
+            finally:
+                connection.close()
+            self.assertEqual(rows, [(str(native.resolve()),)])
+
+            legacy_index = self.project_index.ProjectIndex(root, include_legacy=True)
+            self.assertEqual(legacy_index.scan_scope, "legacy-compatible")
+            self.assertEqual(legacy_index.scan([root])["state"], "ready")
+            connection = sqlite3.connect(legacy_index.path)
+            try:
+                rows = connection.execute(
+                    "SELECT canonical_path FROM assets ORDER BY canonical_path"
+                ).fetchall()
+            finally:
+                connection.close()
+            self.assertEqual(
+                rows,
+                [
+                    (str(legacy_fbx.resolve()),),
+                    (str(legacy_psk.resolve()),),
+                    (str(native.resolve()),),
+                ],
+            )
+
     def test_model_skeleton_relation_requires_explicit_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "project"
             model = root / "Hero" / "Hero.psk"
             model.parent.mkdir(parents=True)
             model.write_bytes(b"model")
-            index = self.project_index.ProjectIndex(root)
+            index = self.project_index.ProjectIndex(root, include_legacy=True)
 
             index.scan([root])
 
@@ -762,7 +831,7 @@ class ProjectIndexTests(unittest.TestCase):
                 '[{"Type": "Skeleton", "Name": "Hero"}]',
                 encoding="utf-8",
             )
-            index = self.project_index.ProjectIndex(root)
+            index = self.project_index.ProjectIndex(root, include_legacy=True)
 
             index.scan([root])
 
@@ -788,7 +857,7 @@ class ProjectIndexTests(unittest.TestCase):
                 '[{"Type": "SkeletalMesh", "Skeleton": {"ObjectName": "Skeleton\'Hero\'"}}]',
                 encoding="utf-8",
             )
-            index = self.project_index.ProjectIndex(root)
+            index = self.project_index.ProjectIndex(root, include_legacy=True)
 
             index.scan([root])
 
@@ -803,6 +872,170 @@ class ProjectIndexTests(unittest.TestCase):
                 )
             finally:
                 connection.close()
+
+
+    @staticmethod
+    def _strict_provenance(skeleton="Hero"):
+        return {
+            "state": "strict",
+            "identity": {
+                "skeleton_path": f"/Game/{skeleton}/{skeleton}",
+                "skeleton_guid": None,
+                "bone_layout_hash": "01" * 32,
+            },
+            "fingerprint": "strict-fingerprint",
+            "reason": "",
+        }
+
+    def test_unchanged_strict_ueformat_scan_skips_content_hashing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "project"
+            animation = root / "Hero" / "Run.ueanim"
+            animation.parent.mkdir(parents=True)
+            animation.write_bytes(b"animation")
+            index = self.project_index.ProjectIndex(root, asset_scope="animation")
+            with patch.object(
+                self.project_index, "_provenance_for_discovery",
+                return_value=self._strict_provenance(),
+            ):
+                self.assertEqual(index.scan([root])["state"], "ready")
+
+            with patch.object(
+                self.project_index, "_content_hash_pair",
+                wraps=self.project_index._content_hash_pair,
+            ) as content_hash:
+                self.assertEqual(index.scan([root])["state"], "ready")
+
+            content_hash.assert_not_called()
+
+    def test_force_scan_hashes_unchanged_strict_ueformat_without_reparsing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "project"
+            animation = root / "Hero" / "Run.ueanim"
+            animation.parent.mkdir(parents=True)
+            animation.write_bytes(b"animation")
+            index = self.project_index.ProjectIndex(root, asset_scope="animation")
+            with patch.object(
+                self.project_index, "_provenance_for_discovery",
+                return_value=self._strict_provenance(),
+            ):
+                index.scan([root])
+
+            with patch.object(
+                self.project_index, "_content_hash_pair",
+                wraps=self.project_index._content_hash_pair,
+            ) as content_hash, patch.object(
+                self.project_index, "_provenance_for_discovery",
+                side_effect=AssertionError("unchanged content must not be reparsed"),
+            ):
+                result = index.scan([root], force=True)
+
+            self.assertEqual(result["state"], "ready")
+            self.assertEqual(content_hash.call_count, 1)
+
+    def test_stat_only_change_updates_fingerprint_without_reparsing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "project"
+            animation = root / "Hero" / "Run.ueanim"
+            animation.parent.mkdir(parents=True)
+            animation.write_bytes(b"animation")
+            index = self.project_index.ProjectIndex(root, asset_scope="animation")
+            with patch.object(
+                self.project_index, "_provenance_for_discovery",
+                return_value=self._strict_provenance(),
+            ):
+                index.scan([root])
+            with closing(sqlite3.connect(index.path)) as connection:
+                old_fingerprint, old_mtime = connection.execute(
+                    "SELECT assets.fingerprint, files.mtime_ns FROM assets "
+                    "JOIN files ON files.path = assets.canonical_path"
+                ).fetchone()
+            stat = animation.stat()
+            os.utime(animation, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+
+            with patch.object(
+                self.project_index, "_content_hash_pair",
+                wraps=self.project_index._content_hash_pair,
+            ) as content_hash, patch.object(
+                self.project_index, "_provenance_for_discovery",
+                side_effect=AssertionError("same content must not be reparsed"),
+            ):
+                result = index.scan([root])
+
+            self.assertEqual(result["state"], "ready")
+            self.assertEqual(content_hash.call_count, 1)
+            with closing(sqlite3.connect(index.path)) as connection:
+                new_fingerprint, new_mtime = connection.execute(
+                    "SELECT assets.fingerprint, files.mtime_ns FROM assets "
+                    "JOIN files ON files.path = assets.canonical_path"
+                ).fetchone()
+            self.assertNotEqual(new_fingerprint, old_fingerprint)
+            self.assertGreater(new_mtime, old_mtime)
+
+    def test_cancelled_scan_preserves_previous_generation_and_rows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "project"
+            first = root / "Hero" / "Idle.ueanim"
+            first.parent.mkdir(parents=True)
+            first.write_bytes(b"idle")
+            index = self.project_index.ProjectIndex(root, asset_scope="animation")
+            published = index.scan([root])
+            (first.parent / "Run.ueanim").write_bytes(b"run")
+
+            cancelled = index.scan([root], cancelled=lambda: True)
+
+            self.assertEqual(cancelled, {
+                "state": "cancelled", "generation": published["generation"]
+            })
+            with closing(sqlite3.connect(index.path)) as connection:
+                self.assertEqual(connection.execute("SELECT COUNT(*) FROM assets").fetchone()[0], 1)
+                self.assertEqual(
+                    connection.execute("SELECT MAX(generation) FROM generations").fetchone()[0],
+                    published["generation"],
+                )
+
+    def test_scan_progress_is_observational_and_reports_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "project"
+            animation = root / "Hero" / "Run.ueanim"
+            animation.parent.mkdir(parents=True)
+            animation.write_bytes(b"animation")
+            events = []
+            index = self.project_index.ProjectIndex(root, asset_scope="animation")
+
+            result = index.scan([root], progress=events.append)
+
+            self.assertEqual(result["state"], "ready")
+            self.assertIn("discover", {event["phase"] for event in events})
+            self.assertIn("compare", {event["phase"] for event in events})
+            self.assertEqual(events[-1]["phase"], "published")
+
+    def test_animation_scope_excludes_and_removes_model_rows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "project"
+            animation = root / "Hero" / "Run.ueanim"
+            model = root / "Hero" / "Hero.uemodel"
+            animation.parent.mkdir(parents=True)
+            animation.write_bytes(b"animation")
+            model.write_bytes(b"model")
+            self.project_index.ProjectIndex(root).scan([root])
+
+            scoped = self.project_index.ProjectIndex(root, asset_scope="animation")
+            self.assertEqual(scoped.scan_scope, "ueformat-animation")
+            self.assertEqual(scoped.scan([root])["state"], "ready")
+
+            with closing(sqlite3.connect(scoped.path)) as connection:
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT asset_type, COUNT(*) FROM assets GROUP BY asset_type"
+                    ).fetchall(),
+                    [("animation", 1)],
+                )
+
+    def test_rejects_unknown_asset_scope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "asset scope"):
+                self.project_index.ProjectIndex(directory, asset_scope="texture")
 
 
 if __name__ == "__main__":

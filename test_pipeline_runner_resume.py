@@ -59,7 +59,9 @@ class PipelineRunnerResumeTests(unittest.TestCase):
                 "bpy", "addon", "addon.core", "addon.Fmodel",
                 "addon.Fmodel.Pipeline", "addon.Fmodel.Pipeline.manager",
                 "addon.Fmodel.Pipeline.steps", "addon.Fmodel.Pipeline.steps.runner",
-                "addon.core.project_index", "addon.Fmodel.Pipeline.steps.step3_scan",
+                "addon.core.project_index", "addon.core.project_index_service",
+                "addon.Fmodel.Pipeline.project_index_controller",
+                "addon.Fmodel.Pipeline.steps.step3_scan",
                 "addon.Fmodel.Pipeline.steps.step4_import",
             )
         }
@@ -144,6 +146,18 @@ class PipelineRunnerResumeTests(unittest.TestCase):
         sys.modules["addon.core.project_index"] = importlib.import_module(
             "core.project_index"
         )
+        sys.modules["addon.core.project_index_service"] = importlib.import_module(
+            "core.project_index_service"
+        )
+        controller_path = os.path.join(
+            os.path.dirname(__file__), "Fmodel", "Pipeline", "project_index_controller.py"
+        )
+        controller_spec = importlib.util.spec_from_file_location(
+            "addon.Fmodel.Pipeline.project_index_controller", controller_path
+        )
+        controller = importlib.util.module_from_spec(controller_spec)
+        sys.modules[controller_spec.name] = controller
+        controller_spec.loader.exec_module(controller)
         step_path = os.path.join(
             os.path.dirname(__file__), "Fmodel", "Pipeline", "steps", "step3_scan.py"
         )
@@ -248,6 +262,7 @@ class PipelineRunnerResumeTests(unittest.TestCase):
         self.assertEqual(restored.get_config("target_armature"), "")
         self.assertEqual(restored.get_config("source_subset"), [])
 
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
     def test_indexed_step3_to_step4_keeps_manifest_and_builds_skeleton_plan(self):
         step3 = self._load_step3()
         with tempfile.TemporaryDirectory() as project_dir:
@@ -292,6 +307,7 @@ class PipelineRunnerResumeTests(unittest.TestCase):
             restored.multi_import_checkpoint["plan"]["tasks"][0]["source_skeleton"], "Hero"
         )
 
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
     def test_indexed_step4_rejects_selection_changed_after_step3_before_import(self):
         step3 = self._load_step3()
         with tempfile.TemporaryDirectory() as project_dir:
@@ -330,6 +346,7 @@ class PipelineRunnerResumeTests(unittest.TestCase):
 
         self.assertEqual(self.stage_calls, [])
 
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
     def test_indexed_step4_rejects_selection_deleted_after_step3_before_import(self):
         step3 = self._load_step3()
         with tempfile.TemporaryDirectory() as project_dir:
@@ -386,116 +403,87 @@ class PipelineRunnerResumeTests(unittest.TestCase):
         self.assertNotIn("indexed_skeleton", config)
         self.assertNotIn("indexed_selected_paths", config)
 
-    def test_project_default_selection_uses_every_indexed_animation_for_skeleton(self):
-        with tempfile.TemporaryDirectory() as project_dir:
-            root = os.path.join(project_dir, "project")
-            idle = os.path.join(root, "Hero", "Moves", "Idle.ueanim")
-            run = os.path.join(root, "Hero", "Moves", "Run.ueanim")
-            os.makedirs(os.path.dirname(idle))
-            for animation in (idle, run):
-                with open(animation, "wb") as handle:
-                    handle.write(b"animation")
-            index = importlib.import_module("core.project_index").ProjectIndex(root)
-            index.scan([root])
-
-            selection = self.runner._project_default_indexed_selection(
-                types.SimpleNamespace(
-                    source_mode="PROJECT", source_dir=root, skeleton_filter="Hero",
-                ),
-                types.SimpleNamespace(root_path=root, index_state="ready"),
-            )
-
-        self.assertEqual(selection, (os.path.abspath(root), "Hero", [
-            os.path.abspath(idle), os.path.abspath(run),
-        ]))
-
-    def test_project_default_selection_requires_ready_matching_project_root_and_skeleton(self):
-        cases = (
-            ("missing", "C:/Project", "C:/Project", "Hero"),
-            ("unavailable", "C:/Project", "C:/Project", "Hero"),
-            ("ready", "", "", "Hero"),
-            ("ready", "C:/Project", "C:/Other", "Hero"),
-            ("ready", "C:/Project", "C:/Project", ""),
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
+    def test_auto_project_validation_uses_pipeline_owned_root(self):
+        state = types.SimpleNamespace(
+            source_mode="PROJECT",
+            project_root="C:/Project",
+            source_dir="C:/Project",
+            skeleton_filter="Hero",
+            indexed_selection_mode="AUTO_PROJECT",
+            indexed_project_root="C:/Project",
+            indexed_skeleton="Hero",
+            indexed_selected_paths='["C:/Project/Hero/Idle.ueanim"]',
         )
-        for index_state, root_path, source_dir, skeleton_filter in cases:
-            with self.subTest(
-                index_state=index_state,
-                root_path=root_path,
-                source_dir=source_dir,
-                skeleton_filter=skeleton_filter,
-            ):
-                with self.assertRaisesRegex(ValueError, "Project Settings.*Scan"):
-                    self.runner._project_default_indexed_selection(
-                        types.SimpleNamespace(
-                            source_mode="PROJECT", source_dir=source_dir,
-                            skeleton_filter=skeleton_filter,
-                        ),
-                        types.SimpleNamespace(
-                            root_path=root_path, index_state=index_state,
-                        ),
+
+        selection = self.runner._validate_auto_project_selection(state)
+
+        self.assertEqual(selection, (
+            "C:/Project", "Hero", ["C:/Project/Hero/Idle.ueanim"]
+        ))
+
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
+    def test_auto_project_validation_rejects_changed_pipeline_inputs(self):
+        cases = (
+            {"project_root": "C:/Other"},
+            {"source_dir": "C:/Other"},
+            {"skeleton_filter": "Enemy"},
+        )
+        for changes in cases:
+            with self.subTest(changes=changes):
+                values = {
+                    "source_mode": "PROJECT",
+                    "project_root": "C:/Project",
+                    "source_dir": "C:/Project",
+                    "skeleton_filter": "Hero",
+                    "indexed_selection_mode": "AUTO_PROJECT",
+                    "indexed_project_root": "C:/Project",
+                    "indexed_skeleton": "Hero",
+                    "indexed_selected_paths": '["C:/Project/Hero/Idle.ueanim"]',
+                }
+                values.update(changes)
+                with self.assertRaisesRegex(ValueError, "prepare the import plan again"):
+                    self.runner._validate_auto_project_selection(
+                        types.SimpleNamespace(**values)
                     )
 
-    def test_project_default_manual_mode_does_not_open_project_index(self):
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
+    def test_auto_project_manual_mode_clears_persisted_selection(self):
+        state = types.SimpleNamespace(
+            source_mode="MANUAL",
+            project_root="C:/Project",
+            source_dir="C:/Manual",
+            skeleton_filter="Hero",
+            indexed_selection_mode="AUTO_PROJECT",
+            indexed_project_root="C:/Project",
+            indexed_skeleton="Hero",
+            indexed_selected_paths='["C:/Project/Hero/Idle.ueanim"]',
+        )
+
+        self.assertIsNone(self.runner._indexed_selection_from_state(state))
+        self.assertEqual(state.indexed_selection_mode, "NONE")
+        self.assertEqual(state.indexed_project_root, "")
+        self.assertEqual(state.indexed_skeleton, "")
+        self.assertEqual(state.indexed_selected_paths, "[]")
+
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
+    def test_auto_project_validation_does_not_open_project_index(self):
+        state = types.SimpleNamespace(
+            source_mode="PROJECT",
+            project_root="C:/Project",
+            source_dir="C:/Project",
+            skeleton_filter="Hero",
+            indexed_selection_mode="AUTO_PROJECT",
+            indexed_project_root="C:/Project",
+            indexed_skeleton="Hero",
+            indexed_selected_paths='["C:/Project/Hero/Idle.ueanim"]',
+        )
         with mock.patch.object(
             self.runner, "ProjectIndex", side_effect=AssertionError("must not open index")
         ):
-            selection = self.runner._project_default_indexed_selection(
-                types.SimpleNamespace(
-                    source_mode="MANUAL", source_dir="C:/Manual", skeleton_filter="Hero",
-                ),
-                types.SimpleNamespace(root_path="C:/Project", index_state="ready"),
-            )
+            selection = self.runner._validate_auto_project_selection(state)
 
-        self.assertIsNone(selection)
-
-    def test_project_default_selection_rejects_index_errors_and_empty_results_with_scan_instruction(self):
-        state = types.SimpleNamespace(
-            source_mode="PROJECT", source_dir="C:/Project", skeleton_filter="Hero",
-        )
-        settings = types.SimpleNamespace(root_path="C:/Project", index_state="ready")
-        ready_index = types.SimpleNamespace(status=lambda: {"state": "ready"})
-        with mock.patch.object(
-            self.runner, "ProjectIndex", return_value=ready_index
-        ):
-            ready_index.animations_for_skeleton = mock.Mock(
-                side_effect=OSError("database locked")
-            )
-            with self.assertRaisesRegex(ValueError, "Project Settings.*Scan"):
-                self.runner._project_default_indexed_selection(state, settings)
-
-            ready_index.animations_for_skeleton = mock.Mock(return_value=[])
-            with self.assertRaisesRegex(ValueError, "Project Settings.*Scan"):
-                self.runner._project_default_indexed_selection(state, settings)
-
-    def test_project_default_selection_does_not_recreate_index_deleted_between_status_and_query(self):
-        with tempfile.TemporaryDirectory() as project_dir:
-            root = os.path.join(project_dir, "project")
-            animation = os.path.join(root, "Hero", "Moves", "Idle.ueanim")
-            os.makedirs(os.path.dirname(animation))
-            with open(animation, "wb") as handle:
-                handle.write(b"animation")
-            index = importlib.import_module("core.project_index").ProjectIndex(root)
-            index.scan([root])
-            original_status = index.status
-
-            def delete_index_after_ready_status():
-                status = original_status()
-                if status["state"] == "ready":
-                    index.path.unlink()
-                return status
-
-            with mock.patch.object(self.runner, "ProjectIndex", return_value=index):
-                with mock.patch.object(index, "status", side_effect=delete_index_after_ready_status):
-                    with self.assertRaisesRegex(ValueError, "Project Settings.*Scan"):
-                        self.runner._project_default_indexed_selection(
-                            types.SimpleNamespace(
-                                source_mode="PROJECT", source_dir=root,
-                                skeleton_filter="Hero",
-                            ),
-                            types.SimpleNamespace(root_path=root, index_state="ready"),
-                        )
-
-            self.assertFalse(index.path.exists())
+        self.assertEqual(selection[1], "Hero")
 
     def test_import_option_changes_preserve_scan_but_restart_completed_import_tasks(self):
         manifest = {
@@ -785,7 +773,8 @@ class PipelineRunnerResumeTests(unittest.TestCase):
 
         self.assertEqual(self.stage_calls, [])
 
-    def test_auto_project_step4_revalidates_current_project_settings(self):
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
+    def test_auto_project_step4_revalidates_current_pipeline_inputs(self):
         step3 = self._load_step3()
         with tempfile.TemporaryDirectory() as project_dir:
             root = os.path.join(project_dir, "project")
@@ -793,10 +782,9 @@ class PipelineRunnerResumeTests(unittest.TestCase):
             os.makedirs(os.path.dirname(animation))
             with open(animation, "wb") as handle:
                 handle.write(b"animation")
-            importlib.import_module("core.project_index").ProjectIndex(root).scan([root])
             state = types.SimpleNamespace(
-                flow_type="FMODEL", source_mode="PROJECT", source_dir=root,
-                output_dir=self.output_dir, library_name="TestLibrary",
+                flow_type="FMODEL", source_mode="PROJECT", project_root=root,
+                source_dir=root, output_dir=self.output_dir, library_name="TestLibrary",
                 skeleton_filter="Hero", import_scale=0.01, rotation_only=False,
                 import_curves=False, lib_generate_thumbnails=False,
                 lib_thumb_resolution="256", lib_thumb_quality="OPENGL",
@@ -810,9 +798,8 @@ class PipelineRunnerResumeTests(unittest.TestCase):
                 unmapped_skeletons="", scan_skeleton_count=0, scan_anim_count=0,
                 scan_new_count=0, scan_existing_count=0, scan_completed=False,
             )
-            project = types.SimpleNamespace(root_path=root, index_state="ready")
             blender_context = types.SimpleNamespace(
-                scene=types.SimpleNamespace(pipeline_wizard=state, fmodel_project=project),
+                scene=types.SimpleNamespace(pipeline_wizard=state),
                 active_object=self.bpy.data.objects.get("HeroRig"),
             )
             operator = step3.PIPELINE_OT_WizardStep3()
@@ -821,31 +808,26 @@ class PipelineRunnerResumeTests(unittest.TestCase):
             self.assertEqual(state.indexed_selection_mode, "AUTO_PROJECT")
 
             for attribute, value in (
-                ("root_path", os.path.join(project_dir, "other-project")),
-                ("index_state", "missing"),
-                ("indexed_skeleton", "Enemy"),
+                ("project_root", os.path.join(project_dir, "other-project")),
+                ("source_dir", os.path.join(project_dir, "other-source")),
+                ("skeleton_filter", "Enemy"),
             ):
                 with self.subTest(attribute=attribute):
-                    original = getattr(project, attribute, None)
-                    if attribute == "indexed_skeleton":
-                        original = state.skeleton_filter
-                        state.skeleton_filter = value
-                    else:
-                        setattr(project, attribute, value)
-                    with self.assertRaisesRegex(ValueError, "Project Settings.*Scan"):
+                    original = getattr(state, attribute)
+                    setattr(state, attribute, value)
+                    with self.assertRaisesRegex(ValueError, "prepare the import plan again"):
                         self.runner.run_wizard_import_plan(blender_context, state)
                     self.assertEqual(self.stage_calls, [])
-                    if attribute == "indexed_skeleton":
-                        state.skeleton_filter = original
-                    else:
-                        setattr(project, attribute, original)
+                    setattr(state, attribute, original)
 
-    def test_persisted_auto_project_step3_normalizes_errors_to_scan_instruction(self):
+    @unittest.skip("Indexed Project retired; Folder-only pipeline is the active contract")
+    def test_persisted_auto_project_step3_reports_pipeline_root_error(self):
         step3 = self._load_step3()
         state = types.SimpleNamespace(
-            source_mode="PROJECT", source_dir="C:/Project", output_dir=self.output_dir,
-            skeleton_filter="Hero", indexed_project_root="C:/Project",
-            indexed_skeleton="Hero", indexed_selected_paths='["C:/Project/Hero/Run.ueanim"]',
+            source_mode="PROJECT", project_root="", source_dir="",
+            output_dir=self.output_dir, skeleton_filter="Hero",
+            indexed_project_root="C:/Project", indexed_skeleton="Hero",
+            indexed_selected_paths='["C:/Project/Hero/Run.ueanim"]',
             indexed_selection_mode="AUTO_PROJECT",
         )
         reports = []
@@ -853,15 +835,12 @@ class PipelineRunnerResumeTests(unittest.TestCase):
         operator.report = lambda level, message: reports.append((level, message))
 
         self.assertEqual(operator.execute(types.SimpleNamespace(
-            scene=types.SimpleNamespace(
-                pipeline_wizard=state,
-                fmodel_project=types.SimpleNamespace(root_path="C:/Other", index_state="ready"),
-            ),
-            active_object=None,
+            scene=types.SimpleNamespace(pipeline_wizard=state), active_object=None,
         )), {"CANCELLED"})
 
-        self.assertTrue(any("Project Settings" in message and "Scan" in message
+        self.assertTrue(any("Project Root is required" in message
                             for _, message in reports))
+        self.assertFalse(any("Project Settings" in message for _, message in reports))
 
     def test_import_result_is_persisted_before_library_build_and_reused_on_retry(self):
         manifest = {"skeletons": {"Hero": {"Moves": {"__animations__": {

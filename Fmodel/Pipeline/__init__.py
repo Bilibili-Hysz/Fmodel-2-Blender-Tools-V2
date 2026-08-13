@@ -1,5 +1,5 @@
 # FModel_Tools/Fmodel/Pipeline/__init__.py
-# 管线模块 — 字典扫描、格式转换、资产库构建
+# 管线模块 — Folder-only 字典扫描、格式转换、资产库构建
 
 import bpy
 import importlib

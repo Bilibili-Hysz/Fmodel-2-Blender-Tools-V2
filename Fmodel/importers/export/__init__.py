@@ -1,21 +1,14 @@
-# FModel_Tools/Fmodel/importers/export/__init__.py
-# 导出器 — glTF、FBX
+"""Deprecated export namespace.
 
-import bpy
-import importlib
-from . import operator_export_gltf
-from . import operator_export_fbx
-
-if "bpy" in locals():
-    importlib.reload(operator_export_gltf)
-    importlib.reload(operator_export_fbx)
+FModel Tools is now UEFormat-only. The old glTF/FBX operator modules remain in
+the source tree during the migration window but are no longer imported or
+registered by the add-on.
+"""
 
 
 def register():
-    operator_export_gltf.register()
-    operator_export_fbx.register()
+    """Keep the old namespace import-safe without registering exporters."""
 
 
 def unregister():
-    operator_export_fbx.unregister()
-    operator_export_gltf.unregister()
+    """No UEFormat-only exporters are registered from this namespace."""

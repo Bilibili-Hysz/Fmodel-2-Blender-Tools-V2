@@ -5,6 +5,10 @@ from typing import Callable, Iterable, Mapping, Optional, Tuple
 from .types import MultiImportCheckpoint, MultiImportPlan, MultiImportTask
 from .library_files import validate_skeleton_output_names
 from .resume import make_batch_identity, make_manifest_source
+from .skeleton_compatibility import (
+    SKELETON_COMPATIBILITY_STRICT,
+    normalize_skeleton_compatibility_mode,
+)
 
 
 def _collect_source_files(node) -> list[str]:
@@ -50,12 +54,19 @@ def build_multi_import_plan(
     require_complete: bool = False,
     import_fingerprint: str = "",
     target_armature_identities: Optional[Mapping[str, dict]] = None,
+    target_armature_provenances: Optional[Mapping[str, dict]] = None,
+    skeleton_compatibility_modes: Optional[Mapping[str, str]] = None,
+    default_compatibility_mode: str = SKELETON_COMPATIBILITY_STRICT,
 ) -> Tuple[MultiImportPlan, list[str]]:
     """Build tasks only for explicit mappings; single-source keeps active-armature behavior."""
     skeletons = (manifest_data or {}).get("skeletons", {})
     if not isinstance(skeletons, dict):
         skeletons = {}
     validate_skeleton_output_names(skeletons)
+    default_compatibility_mode = normalize_skeleton_compatibility_mode(
+        default_compatibility_mode
+    )
+    configured_compatibility_modes = skeleton_compatibility_modes or {}
     available = set(available_target_armatures) if available_target_armatures is not None else None
     single_source = len(skeletons) == 1
     tasks = []
@@ -70,23 +81,58 @@ def build_multi_import_plan(
             continue
         if available is not None and target_armature not in available:
             raise ValueError(f"Target armature does not exist or is not an armature: {target_armature}")
+        compatibility_mode = normalize_skeleton_compatibility_mode(
+            configured_compatibility_modes.get(source_skeleton, default_compatibility_mode)
+        )
         source_identities = _collect_sources(source_tree, source_skeleton)
         target_identity = dict((target_armature_identities or {}).get(target_armature, {}))
         if not target_identity:
             target_identity = {"stable_id": target_armature, "structure_revision": "legacy"}
+        target_skeleton_provenance = dict(
+            (target_armature_provenances or {}).get(target_armature, {})
+        )
+        batch_target_identity = dict(target_identity)
+        if target_skeleton_provenance:
+            batch_target_identity["fmodel_skeleton_provenance"] = {
+                "state": target_skeleton_provenance.get("state", "legacy"),
+                "fingerprint": target_skeleton_provenance.get("fingerprint", ""),
+            }
+        batch_target_identity["skeleton_compatibility_mode"] = compatibility_mode
         tasks.append(MultiImportTask(
             source_skeleton=source_skeleton,
             target_armature=target_armature,
+            compatibility_mode=compatibility_mode,
             source_subset=[item["path"] for item in source_identities],
             source_identities=source_identities,
             target_identity=target_identity,
+            target_skeleton_provenance=target_skeleton_provenance,
             import_fingerprint=import_fingerprint,
-            task_id=make_batch_identity(source_identities, import_fingerprint, target_identity),
+            task_id=make_batch_identity(
+                source_identities, import_fingerprint, batch_target_identity
+            ),
         ))
 
     if require_complete and unmapped:
         raise ValueError(f"unmapped source skeletons: {', '.join(unmapped)}")
     return MultiImportPlan(tasks=tasks), unmapped
+
+
+def _provenance_compatible(current: dict, persisted: dict) -> bool:
+    """Allow legacy resume only when it cannot cross a strict identity boundary."""
+    current = current if isinstance(current, dict) else {}
+    persisted = persisted if isinstance(persisted, dict) else {}
+    current_state = str(current.get("state", "legacy") or "legacy")
+    persisted_state = str(persisted.get("state", "legacy") or "legacy")
+    if current_state != persisted_state:
+        return False
+    if current_state == "strict":
+        return bool(
+            current.get("fingerprint")
+            and current.get("fingerprint") == persisted.get("fingerprint")
+        )
+    if current_state == "invalid":
+        return current.get("reason", "") == persisted.get("reason", "")
+    return True
 
 
 def restore_checkpoint(plan: MultiImportPlan, checkpoint_data: Optional[dict]) -> MultiImportCheckpoint:
@@ -101,7 +147,10 @@ def restore_checkpoint(plan: MultiImportPlan, checkpoint_data: Optional[dict]) -
         old = persisted_tasks.get(task.task_id)
         if old is None and not persisted_tasks:
             old = legacy_tasks.get((task.source_skeleton, task.target_armature, tuple(task.source_subset)))
-        if old:
+        if old and _provenance_compatible(
+            task.target_skeleton_provenance,
+            old.target_skeleton_provenance,
+        ):
             task.status = old.status
             task.progress = old.progress
     first_pending = next(

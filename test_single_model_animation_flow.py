@@ -74,12 +74,13 @@ class FakeNonArmature:
 
 class FakeWizardState:
     """Minimal fake for WizardState fields used by the handoff."""
-    def __init__(self, source_mode="PROJECT", manual_source_dir="",
-                 source_dir="", skeleton_filter="",
+    def __init__(self, source_mode="MANUAL", manual_source_dir="",
+                 project_root="", source_dir="", skeleton_filter="",
                  import_target_skeleton="", current_step=1, output_dir="",
                  library_name=""):
         self.source_mode = source_mode
         self.manual_source_dir = manual_source_dir
+        self.project_root = project_root
         self.source_dir = source_dir
         self.skeleton_filter = skeleton_filter
         self.import_target_skeleton = import_target_skeleton
@@ -297,7 +298,8 @@ class HandoffExecutionTests(unittest.TestCase):
 
     # --- source_dir resolution ---
 
-    def test_handoff_project_default_sets_source_dir(self):
+    def test_legacy_project_handoff_sets_source_dir(self):
+        self.wizard.source_mode = "PROJECT"
         armature = FakeArmature("DisplayRig", {"FModel_Skeleton": "Hero"})
         result = self.mod._handoff_armature(self.wizard, armature, "C:/Game")
         self.assertEqual(result, {"FINISHED"})
@@ -346,7 +348,8 @@ class HandoffExecutionTests(unittest.TestCase):
         )
         self.assertEqual(result, {"FINISHED"})
         self.assertEqual(self.wizard.current_step, 1)
-        self.assertEqual(self.wizard.source_mode, "PROJECT")
+        self.assertEqual(self.wizard.source_mode, "MANUAL")
+        self.assertEqual(self.wizard.manual_source_dir, "C:/Game")
         self.assertEqual(self.wizard.source_dir, "C:/Game")
         self.assertEqual(
             self.wizard.output_dir,
@@ -420,6 +423,19 @@ class WizardStateFieldContractTests(unittest.TestCase):
                     break
         self.assertTrue(found, "source_mode EnumProperty not found in WizardState")
 
+    def test_project_root_property_exists(self):
+        self.assertTrue(os.path.isfile(self.STATE_PATH))
+        with open(self.STATE_PATH, encoding="utf-8") as f:
+            source = f.read()
+        tree = ast.parse(source)
+        found = any(
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "project_root"
+            for node in ast.walk(tree)
+        )
+        self.assertTrue(found, "project_root property not found in WizardState")
+
     def test_manual_source_dir_property_exists(self):
         self.assertTrue(os.path.isfile(self.STATE_PATH))
         with open(self.STATE_PATH, encoding="utf-8") as f:
@@ -433,7 +449,7 @@ class WizardStateFieldContractTests(unittest.TestCase):
                     break
         self.assertTrue(found, "manual_source_dir property not found in WizardState")
 
-    def test_source_mode_has_project_and_manual_items(self):
+    def test_source_mode_has_only_manual_item(self):
         self.assertTrue(os.path.isfile(self.STATE_PATH))
         with open(self.STATE_PATH, encoding="utf-8") as f:
             source = f.read()
@@ -454,10 +470,9 @@ class WizardStateFieldContractTests(unittest.TestCase):
                                         if isinstance(elt, (ast.Tuple, ast.List))
                                            and len(elt.elts) >= 1
                                     }
-                                    self.assertIn("PROJECT", item_ids)
-                                    self.assertIn("MANUAL", item_ids)
+                                    self.assertEqual(item_ids, {"MANUAL"})
                                 return
-        self.fail("source_mode EnumProperty with PROJECT/MANUAL items not found")
+        self.fail("source_mode EnumProperty with MANUAL item not found")
 
 
 if __name__ == "__main__":

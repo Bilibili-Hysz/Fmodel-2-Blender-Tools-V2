@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from core.resume import (
+    _filesystem_path,
     armature_identity,
     build_settings_fingerprint,
     import_settings_fingerprint,
@@ -79,6 +80,23 @@ class ResumeIdentityTests(unittest.TestCase):
             changed = make_manifest_source(0, "SK", "Locomotion", "Walk", str(source))
             self.assertNotEqual(first["revision"], changed["revision"])
             self.assertNotEqual(first["task_id"], changed["task_id"])
+
+    @unittest.skipUnless(os.name == "nt", "Windows extended-path contract")
+    def test_source_revision_tracks_file_beyond_windows_max_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            while len(str(parent / "long.ueanim")) <= 280:
+                parent /= "animation_path_segment"
+            parent.mkdir(parents=True)
+            source = parent / "long.ueanim"
+            source.write_bytes(b"first")
+
+            self.assertTrue(_filesystem_path(str(source)).startswith("\\\\?\\"))
+            first = make_manifest_source(0, "SK", "Moves", "Long", str(source))
+            source.write_bytes(b"second-version")
+            changed = make_manifest_source(0, "SK", "Moves", "Long", str(source))
+
+            self.assertNotEqual(first["revision"], changed["revision"])
 
     def test_armature_identity_survives_rename_but_structure_revision_does_not(self):
         armature = FakeArmature("Rig", [("root", None), ("hand", "root")])

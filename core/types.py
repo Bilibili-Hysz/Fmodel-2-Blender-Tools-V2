@@ -7,7 +7,12 @@ from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
 
-from .enums import SourceType, ImportMode
+from .enums import (
+    UEFORMAT_SOURCE_TYPE,
+    UEFORMAT_IMPORT_MODE,
+    SKELETON_COMPATIBILITY_STRICT,
+    normalize_skeleton_compatibility_mode,
+)
 
 
 # ============================================================
@@ -105,7 +110,7 @@ class SkeletonNode:
 class DictionaryManifest:
     """字典清单 - 阶段1的输出"""
     version: str = "1.0"
-    source_type: str = SourceType.UNITY_ANIM.value
+    source_type: str = UEFORMAT_SOURCE_TYPE
     source_path: str = ""
     created_at: str = ""
     skeletons: Dict[str, SkeletonNode] = field(default_factory=dict)
@@ -157,7 +162,7 @@ class DictionaryManifest:
         """从字典创建实例"""
         manifest = cls(
             version=data.get("version", "1.0"),
-            source_type=data.get("source_type", SourceType.UNITY_ANIM.value),
+            source_type=data.get("source_type", UEFORMAT_SOURCE_TYPE),
             source_path=data.get("source_path", ""),
             created_at=data.get("created_at", "")
         )
@@ -204,6 +209,10 @@ class ImportedAction:
     frame_range: Tuple[int, int] = (0, 0)
     error_message: str = ""
     task_id: str = ""
+    # Snapshot of the target FModel skeleton provenance, if available.
+    # Empty means this record came from a legacy checkpoint or a caller that
+    # does not yet provide the strict identity contract.
+    skeleton_provenance: Dict[str, Any] = field(default_factory=dict)
 
 
 # ============================================================
@@ -214,11 +223,20 @@ class ImportedAction:
 class ImportedAssetCollection:
     """导入资产集合 - 阶段2的输出"""
     version: str = "1.0"
-    import_mode: str = ImportMode.FBX_MATCH.value
+    import_mode: str = UEFORMAT_IMPORT_MODE
     imported_actions: List[ImportedAction] = field(default_factory=list)
     failed_imports: List[Dict[str, str]] = field(default_factory=list)
     task_identity: Dict = field(default_factory=dict)
+    # Collection-level snapshot used by checkpoints and library manifests.
+    skeleton_provenance: Dict[str, Any] = field(default_factory=dict)
     
+    def set_skeleton_provenance(self, provenance: Optional[Dict[str, Any]]) -> None:
+        """Attach one normalized provenance snapshot to the collection/actions."""
+        self.skeleton_provenance = dict(provenance or {})
+        for action in self.imported_actions:
+            if not action.skeleton_provenance:
+                action.skeleton_provenance = dict(self.skeleton_provenance)
+
     @property
     def success_count(self) -> int:
         return len(self.imported_actions)
@@ -228,21 +246,33 @@ class ImportedAssetCollection:
         return len(self.failed_imports)
     
     def to_dict(self) -> dict:
+        action_payloads = []
+        for action in self.imported_actions:
+            payload = asdict(action)
+            if not payload.get("skeleton_provenance") and self.skeleton_provenance:
+                payload["skeleton_provenance"] = dict(self.skeleton_provenance)
+            # Keep the old wire shape for legacy actions instead of emitting
+            # an empty compatibility field.
+            if not payload.get("skeleton_provenance"):
+                payload.pop("skeleton_provenance", None)
+            action_payloads.append(payload)
         return {
             "version": self.version,
             "import_mode": self.import_mode,
-            "imported_actions": [asdict(a) for a in self.imported_actions],
+            "imported_actions": action_payloads,
             "failed_imports": self.failed_imports,
             "task_identity": self.task_identity,
+            "skeleton_provenance": self.skeleton_provenance,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> 'ImportedAssetCollection':
         col = cls(
             version=data.get("version", "1.0"),
-            import_mode=data.get("import_mode", ImportMode.FBX_MATCH.value),
+            import_mode=data.get("import_mode", UEFORMAT_IMPORT_MODE),
             failed_imports=list(data.get("failed_imports", [])),
             task_identity=dict(data.get("task_identity", {})),
+            skeleton_provenance=dict(data.get("skeleton_provenance", {})),
         )
         imported = []
         for item in data.get("imported_actions", []):
@@ -259,8 +289,12 @@ class ImportedAssetCollection:
                     frame_range=tuple(item.get("frame_range", (0, 0))),
                     error_message=item.get("error_message", ""),
                     task_id=item.get("task_id", ""),
+                    skeleton_provenance=dict(item.get("skeleton_provenance", {})),
                 ))
         col.imported_actions = imported
+        # Old checkpoints have no provenance.  Preserve that legacy state
+        # instead of manufacturing a strict identity during deserialization.
+        col.set_skeleton_provenance(col.skeleton_provenance)
         return col
 
 
@@ -425,13 +459,20 @@ class MultiImportTask:
     """一个独立的源骨架导入任务。"""
     source_skeleton: str = ""
     target_armature: str = ""
+    compatibility_mode: str = SKELETON_COMPATIBILITY_STRICT
     source_subset: List[str] = field(default_factory=list)
     source_identities: List[Dict[str, str]] = field(default_factory=list)
     target_identity: Dict[str, str] = field(default_factory=dict)
+    target_skeleton_provenance: Dict[str, Any] = field(default_factory=dict)
     import_fingerprint: str = ""
     task_id: str = ""
     progress: float = 0.0
     status: str = "pending"
+
+    def __post_init__(self):
+        self.compatibility_mode = normalize_skeleton_compatibility_mode(
+            self.compatibility_mode
+        )
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -445,12 +486,30 @@ class MultiImportTask:
                 raise ValueError("multi-import task source_skeleton must be a string")
             if not isinstance(data.get("target_armature", ""), str):
                 raise ValueError("multi-import task target_armature must be a string")
+            if not isinstance(data.get("compatibility_mode", SKELETON_COMPATIBILITY_STRICT), str):
+                raise ValueError("multi-import task compatibility_mode must be a string")
+            try:
+                normalize_skeleton_compatibility_mode(
+                    data.get("compatibility_mode", SKELETON_COMPATIBILITY_STRICT)
+                )
+            except ValueError as error:
+                raise ValueError("multi-import task compatibility_mode is invalid") from error
             subset = data.get("source_subset", [])
             if not isinstance(subset, list) or not all(isinstance(item, str) for item in subset):
                 raise ValueError("multi-import task source_subset must be a string list")
             identities = data.get("source_identities", [])
             if not isinstance(identities, list) or not all(isinstance(item, dict) for item in identities):
                 raise ValueError("multi-import task source_identities must be an object list")
+            provenance = data.get("target_skeleton_provenance", {})
+            if not isinstance(provenance, dict):
+                raise ValueError("multi-import task target_skeleton_provenance must be an object")
+            try:
+                from .skeleton_provenance import validate_provenance_record
+                validate_provenance_record(provenance)
+            except (ImportError, TypeError, ValueError) as error:
+                raise ValueError(
+                    "multi-import task target_skeleton_provenance is invalid"
+                ) from error
             progress = data.get("progress", 0.0)
             if isinstance(progress, bool) or not isinstance(progress, (int, float)) or not 0 <= progress <= 1:
                 raise ValueError("multi-import task progress must be between zero and one")
@@ -533,8 +592,8 @@ class PipelineConfig:
     source_dir: str = ""
     output_dir: str = ""
     library_name: str = "Asset_Library"
-    source_type: str = SourceType.UNITY_ANIM.value
-    import_mode: str = ImportMode.FBX_MATCH.value
+    source_type: str = UEFORMAT_SOURCE_TYPE
+    import_mode: str = UEFORMAT_IMPORT_MODE
     
     # Unity动画特有配置
     unity_skip_processed: bool = True
@@ -545,6 +604,7 @@ class PipelineConfig:
     import_curves: bool = False
     target_armature: str = ""
     skeleton_filter: str = ""
+    skeleton_compatibility_mode: str = SKELETON_COMPATIBILITY_STRICT
     import_batch_size: int = 300
     max_import_cycles: int = 200
     large_import_threshold: int = 2000
@@ -562,6 +622,11 @@ class PipelineConfig:
     thumb_quality: str = "OPENGL"
     thumb_isolate: bool = True
     
+    def __post_init__(self):
+        self.skeleton_compatibility_mode = normalize_skeleton_compatibility_mode(
+            self.skeleton_compatibility_mode
+        )
+
     def to_dict(self) -> dict:
         return asdict(self)
     

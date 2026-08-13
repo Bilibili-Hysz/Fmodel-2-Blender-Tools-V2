@@ -27,6 +27,7 @@ temp/
 backups/
 _pipeline_tmp/
 .pytest_cache/
+.ruff_cache/
 investigation/task7_verification/output/
 
 
