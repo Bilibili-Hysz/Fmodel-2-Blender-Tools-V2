@@ -34,7 +34,7 @@ V2 当前只负责：
 
 ## 3. Vendor 合同
 
-- Vendor：`io_scene_ueformat 1.2.0`；
+- Vendor：`io_scene_ueformat 0.10.0`（canonical V10 基线；旧 FModel 定制版 1.2.0 的版本体系已随 V10 迁移切换）；
 - 注册方式：`register_headless()`；
 - V2 不重复暴露 Vendor canonical 面板和 File > Import 菜单；
 - standalone UEFormat 与内置 Vendor 不应在同一 Blender 会话同时启用；

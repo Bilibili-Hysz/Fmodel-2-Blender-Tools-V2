@@ -49,7 +49,7 @@ class _PoseOptions:
         pass
 
 
-def _fake_modules(version=(1, 2, 0)):
+def _fake_modules(version=(0, 10, 0)):
     name = "fake_io_scene_ueformat"
     root = types.ModuleType(name)
     root.__file__ = "/fixture/io_scene_ueformat/__init__.py"
@@ -116,7 +116,7 @@ def test_animation_and_pose_strict_capabilities_are_checked_independently():
 
 
 def test_legacy_addon_is_rejected_when_current_contract_is_required():
-    root, modules = _fake_modules(version=(1, 0, 0))
+    root, modules = _fake_modules(version=(0, 9, 0))
     with pytest.raises(UEFormatCapabilityError):
         resolve_ueformat_bridge(
             require_current=True,

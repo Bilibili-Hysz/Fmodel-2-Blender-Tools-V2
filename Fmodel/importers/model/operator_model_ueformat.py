@@ -156,6 +156,31 @@ class MODEL_OT_ImportUEModel(bpy.types.Operator, ImportHelper):
         capabilities = getattr(bridge, "capabilities", None)
         session.vendor_version = str(getattr(capabilities, "version_text", "") or "")
 
+    @staticmethod
+    def _make_importer(bridge, options):
+        """Construct the importer and inject the optional creation capture.
+
+        The capture is a V10 additive API. Legacy tuple-resolved importers and
+        test doubles do not expose it and continue through the one-argument
+        constructor unchanged.
+        """
+        logic_module = getattr(bridge, "logic_module", None)
+        capture_type = getattr(logic_module, "UEFormatImportCapture", None)
+        if not callable(capture_type):
+            return bridge.UEFormatImport(options), None
+
+        capture = capture_type()
+        try:
+            importer = bridge.UEFormatImport(
+                options,
+                creation_tracker=capture,
+            )
+        except TypeError as error:
+            if "creation_tracker" not in str(error):
+                raise
+            return bridge.UEFormatImport(options), None
+        return importer, capture
+
     scale_factor: bpy.props.FloatProperty(name="模型缩放 (Scale)", default=0.01, min=0.001) # type: ignore
     target_lod: bpy.props.IntProperty(name="导入 LOD 层级", default=0, min=0) # type: ignore
     import_collision: bpy.props.BoolProperty(name="导入碰撞体", default=False) # type: ignore
@@ -228,7 +253,7 @@ class MODEL_OT_ImportUEModel(bpy.types.Operator, ImportHelper):
                 session.fail_all(phase="resolve_bridge", message=str(exc), code="ueformat_capability")
                 self._persist_session(context, session)
             log_error(OperationType.IMPORT_MODEL, f"当前 UEFormat addon 能力不足: {exc}")
-            self.report({'ERROR'}, "需要 UEFormat addon 1.2.0+（含 FModel 材质和纹理能力）")
+            self.report({'ERROR'}, "需要 UEFormat addon 0.10.0+（含 FModel 材质和纹理能力）")
             return {'CANCELLED'}
         if bridge is None:
             if session is not None:
@@ -265,7 +290,7 @@ class MODEL_OT_ImportUEModel(bpy.types.Operator, ImportHelper):
             session.set_phase("build_options")
         try:
             options = bridge.UEModelOptions(**option_kwargs)
-            importer = bridge.UEFormatImport(options)
+            importer, creation_capture = self._make_importer(bridge, options)
         except Exception as exc:
             if session is not None:
                 session.fail_all(phase="build_options", message=str(exc), code="ueformat_options_invalid")
@@ -346,7 +371,11 @@ class MODEL_OT_ImportUEModel(bpy.types.Operator, ImportHelper):
                     {"object": imported_obj.name}
                 )
                 self.report({'INFO'}, "UEModel 模型导入成功！")
-            created_counts = transaction.commit() if transaction is not None else {}
+            created_counts = (
+                transaction.commit()
+                if transaction is not None
+                else creation_capture.counts if creation_capture is not None else {}
+            )
             if session is not None:
                 if created_counts:
                     for kind, count in created_counts.items():

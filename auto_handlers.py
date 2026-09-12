@@ -517,6 +517,24 @@ def _addon_version(module):
         return None
 
 
+def _current_addon_min_version():
+    """Return the minimum UEFormat version, shared with the capability bridge.
+
+    Keeping one source of truth prevents the two gates from drifting: the
+    bundled vendor moved from the legacy FModel edition (1.x) to the canonical
+    UEFormat versioning (0.10.0), and a stale literal here rejected the real
+    vendor at runtime.
+    """
+    try:
+        if __package__:
+            from .core.ueformat_bridge import CURRENT_ADDON_MIN_VERSION
+        else:
+            from core.ueformat_bridge import CURRENT_ADDON_MIN_VERSION
+        return tuple(CURRENT_ADDON_MIN_VERSION)
+    except (ImportError, AttributeError):
+        return (0, 10, 0)
+
+
 def _ueformat_submodule(module, suffix):
     """Resolve an already-loaded or importable UEFormat submodule safely."""
     direct = getattr(module, suffix.rsplit(".", 1)[-1], None)
@@ -547,7 +565,7 @@ def _constructor_fields(cls):
 def _is_current_ueformat_addon(module) -> bool:
     """Require the current FModel-aware UEFormat surface for new workflows."""
     version = _addon_version(module)
-    if version is None or version < (1, 2, 0):
+    if version is None or version < _current_addon_min_version():
         return False
     if not (
         getattr(module, "__file__", None)

@@ -17,7 +17,12 @@ from types import ModuleType
 from typing import Callable, Iterable, Mapping
 
 
-CURRENT_ADDON_MIN_VERSION = (1, 2, 0)
+# V10 baseline. The bundled vendor moved from the legacy FModel edition
+# versioning (1.x) to the canonical UEFormat versioning (0.10.0); this gate
+# must stay aligned with vendor/io_scene_ueformat/__init__.py. The option
+# signature checks above remain the real capability contract; the version gate
+# only rejects clearly older add-ons.
+CURRENT_ADDON_MIN_VERSION = (0, 10, 0)
 
 
 class UEFormatCapabilityError(RuntimeError):

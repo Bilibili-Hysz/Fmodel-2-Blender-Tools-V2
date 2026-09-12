@@ -18,16 +18,30 @@ def _literal_assignment(path: Path, name: str):
     raise AssertionError(f"missing assignment {name!r} in {path}")
 
 
+def test_bundled_vendor_version_satisfies_bridge_minimum():
+    """The bridge version gate must accept the bundled vendor.
+
+    Regression guard: the vendor moved from the legacy FModel edition (1.x)
+    to the canonical UEFormat versioning (0.10.0) while the gate still
+    required 1.2.0, so every import failed at bridge resolution even though
+    all capability signatures were present.
+    """
+    from core.ueformat_bridge import CURRENT_ADDON_MIN_VERSION
+
+    info = _literal_assignment(VENDOR / "__init__.py", "bl_info")
+    assert tuple(info["version"]) >= CURRENT_ADDON_MIN_VERSION
+
+
 def test_bundled_ueformat_vendor_is_current_fmodel_snapshot():
     info = _literal_assignment(VENDOR / "__init__.py", "bl_info")
-    assert tuple(info["version"]) == (1, 2, 0)
+    assert tuple(info["version"]) == (0, 10, 0)
     assert tuple(info["blender"]) == (4, 2, 0)
 
     manifest = (VENDOR / "blender_manifest.toml").read_text(encoding="utf-8")
     assert 'id = "io_scene_ueformat"' in manifest
-    assert 'version = "1.2.0"' in manifest
+    assert 'version = "0.10.0"' in manifest
     assert 'blender_version_min = "4.2.0"' in manifest
-    assert 'license = ["SPDX:MIT"]' in manifest
+    assert 'license = ["SPDX:GPL-3.0-or-later"]' in manifest
 
 
 def test_bundled_ueformat_vendor_contains_fmodel_surfaces_and_headless_entrypoint():

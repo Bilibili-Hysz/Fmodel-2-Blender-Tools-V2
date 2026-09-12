@@ -16,7 +16,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LIFECYCLE_REGISTRY_KEY = "_fmodel_tools_next_auto_handler_lifecycle"
 
 
-def _fake_ueformat_module(*, version=(1, 2, 0)):
+def _fake_ueformat_module(*, version=(0, 10, 0)):
     class UEModelOptions:
         def __init__(
             self,
@@ -54,7 +54,7 @@ def _fake_vendor_handle(module, *, added_paths=()):
         module=module,
         spec=types.SimpleNamespace(
             vendor_id="io_scene_ueformat",
-            version_text="1.2.0",
+            version_text="0.10.0",
         ),
         source="bundled",
         module_name="io_scene_ueformat",
@@ -491,7 +491,7 @@ class AutoHandlerLifecycleTests(unittest.TestCase):
         handle = _fake_vendor_handle(vendor)
         self.module._vendor_registered["io_scene_ueformat"] = handle
         self.assertEqual(self.module.get_vendor_status()["state"], "ready")
-        self.assertEqual(self.module.get_vendor_status()["version"], "1.2.0")
+        self.assertEqual(self.module.get_vendor_status()["version"], "0.10.0")
 
         self.module._vendor_registered.clear()
         self.module._vendor_observed.add("io_scene_ueformat")
@@ -515,11 +515,11 @@ class AutoHandlerLifecycleTests(unittest.TestCase):
             else:
                 sys.modules["io_scene_ueformat"] = previous
         self.assertEqual(status["state"], "external")
-        self.assertEqual(status["version"], "1.2.0")
+        self.assertEqual(status["version"], "0.10.0")
         self.assertTrue(status["capabilities"]["current"])
         self.assertIn("current", status["message"])
 
-        legacy = _fake_ueformat_module(version=(1, 0, 0))
+        legacy = _fake_ueformat_module(version=(0, 9, 0))
         previous = sys.modules.get("io_scene_ueformat")
         sys.modules["io_scene_ueformat"] = legacy
         try:
@@ -559,7 +559,7 @@ class AutoHandlerLifecycleTests(unittest.TestCase):
         current = _fake_ueformat_module()
         self.assertTrue(self.module._is_current_ueformat_addon(current))
 
-        legacy = _fake_ueformat_module(version=(1, 0, 0))
+        legacy = _fake_ueformat_module(version=(0, 9, 0))
         self.assertFalse(self.module._is_current_ueformat_addon(legacy))
 
     def test_current_ueformat_rejects_missing_material_option_surface(self):
