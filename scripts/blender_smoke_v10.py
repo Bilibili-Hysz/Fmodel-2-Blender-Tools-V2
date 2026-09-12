@@ -54,6 +54,13 @@ def _parse_args(argv):
         "--fixture",
         default="tests/fixtures/fmodel_v10/fmodel_v10_full.uemodel",
     )
+    parser.add_argument(
+        "--mode",
+        choices=("auto", "identity", "mesh", "mesh_armature"),
+        default="auto",
+        help="对象断言强度：identity=只读不要求对象；mesh=要求网格；"
+             "mesh_armature=要求网格+骨架+身份一致；auto 按样本推断。",
+    )
     parser.add_argument("--out", default=os.path.join(
         tempfile.gettempdir(), "fmodel_smoke_v10_result.json"))
     return parser.parse_args(argv)
@@ -76,12 +83,19 @@ def main():
     fixture = os.path.abspath(os.path.join(repo, args.fixture)
                               if not os.path.isabs(args.fixture) else args.fixture)
     reader_path = os.path.join(repo, "core", "ueformat_identity_reader.py")
-    require_objects = os.path.basename(fixture) not in CANONICAL_IDENTITY_FIXTURES
+    mode = args.mode
+    if mode == "auto":
+        if os.path.basename(fixture) in CANONICAL_IDENTITY_FIXTURES:
+            mode = "identity"
+        elif os.path.basename(fixture) == "fmodel_v10_full.uemodel":
+            mode = "mesh_armature"
+        else:
+            mode = "mesh"
 
     result = {
         "status": "fail",
         "fixture": fixture,
-        "require_objects": require_objects,
+        "mode": mode,
         "blender_version": None,
         "vendor_version": None,
         "registered": False,
@@ -175,7 +189,7 @@ def main():
         result["new_objects"] = new_objects
         result["new_materials"] = new_materials
 
-        if require_objects:
+        if mode in ("mesh", "mesh_armature"):
             meshes = []
             armatures = []
             for name in new_objects:
@@ -189,7 +203,8 @@ def main():
                     armatures.append(obj)
 
             check(bool(meshes), "未创建任何网格对象")
-            check(bool(armatures), "未创建任何骨架对象")
+            if mode == "mesh_armature":
+                check(bool(armatures), "未创建任何骨架对象")
             if meshes:
                 result["mesh_summary"] = [{
                     "name": mesh.name,
@@ -230,7 +245,7 @@ def main():
                             "骨架身份 bone_layout_hash 与读取器记录不一致",
                         )
                         check(len(armature.data.bones) > 0, "骨架没有骨骼")
-                else:
+                elif mode == "mesh_armature":
                     errors.append("骨架对象缺少 fmodel_skeleton_identity")
         else:
             print("[smoke] 身份专用样本：只验证读取与无崩溃导入")
