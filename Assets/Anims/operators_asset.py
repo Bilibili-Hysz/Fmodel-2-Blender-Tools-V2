@@ -166,8 +166,8 @@ class FMODEL_OT_build_anim_library(bpy.types.Operator):
                 temp_dir = tempfile.gettempdir()
                 temp_path = os.path.join(temp_dir, "FModel_TempProject.blend")
                 try:
-                    bpy.ops.wm.save_as_mainfile(filepath=temp_path, copy=False)
-                    self.report({'INFO'}, f"工程已自动保存到: {temp_path}")
+                    bpy.ops.wm.save_as_mainfile(filepath=temp_path, copy=True)
+                    self.report({'INFO'}, f"工程副本已保存到: {temp_path}")
                 except Exception as e:
                     self.report({'ERROR'}, f"自动保存失败: {e}")
                     return {'CANCELLED'}
