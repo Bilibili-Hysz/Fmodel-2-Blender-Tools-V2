@@ -76,13 +76,13 @@ class AssetUiStabilitySourceTests(unittest.TestCase):
         source = ANIM_MANAGER.read_text(encoding="utf-8")
         self.assertIn("r'(.+)_Vol_\\d+$'", source)
 
-    def test_ueanim_import_persists_assets_outside_redraw_exception(self):
+    def test_ueanim_import_persists_assets_without_redraw_timer(self):
         source = PIPELINE_STAGES.read_text(encoding="utf-8")
-        redraw_start = source.index("bpy.ops.wm.redraw_timer")
-        persistence = source.index("context.imported_assets = collection.to_dict()", redraw_start)
-        redraw_block = source[redraw_start:persistence]
-        self.assertNotIn("context.imported_assets = collection.to_dict()", redraw_block)
-        self.assertIn("context.imported_assets = collection.to_dict()", source[persistence:])
+        # The redraw_timer UI hack was removed from the import stage; guard
+        # against reintroduction.  Persisting imported assets must stay part
+        # of the stage's result contract on its own.
+        self.assertNotIn("bpy.ops.wm.redraw_timer", source)
+        self.assertIn("context.imported_assets = collection.to_dict()", source)
 
     def test_library_build_initializes_pending_entries_before_manifest_loading(self):
         source = PIPELINE_STAGES.read_text(encoding="utf-8")

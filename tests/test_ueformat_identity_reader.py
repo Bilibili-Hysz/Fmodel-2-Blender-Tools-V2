@@ -399,6 +399,51 @@ class UEFormatV10ProducerFixtureTests(unittest.TestCase):
             ),
         )
 
+class UEFormatV10FullFixtureTests(unittest.TestCase):
+    """Byte-level regression for the full-fidelity V10 model fixture.
+
+    ``fmodel_v10_full.uemodel`` is generated deterministically by
+    ``scripts/make_v10_full_fixture.py`` following the vendor deserializer
+    contract (real LODS geometry + SKELETON + FMODEL_SKELETON_IDENTITY).
+    Unlike the identity-only canonical fixtures above, it drives the actual
+    mesh/armature creation path in ``scripts/blender_smoke_v10.py``.
+    """
+
+    FIXTURE = "fmodel_v10_full.uemodel"
+    SHA256 = "5763552c33564858d0ef94990e97bcf37dd5125140e8b1c99b680ad8bcb60507"
+    SKELETON_PATH = "/Game/Characters/FModelV10Full_SKEL.FModelV10Full_SKEL"
+    BONE_LAYOUT_HASH = "b89e441d860d848bdd32eb8897e45c15889bb12c56952f69234e5036a58b7cc5"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.reader = load_reader()
+
+    def _fixture(self) -> Path:
+        path = FIXTURE_DIR / self.FIXTURE
+        if not path.is_file():
+            self.skipTest(f"full V10 fixture is unavailable: {path}")
+        return path
+
+    def test_fixture_bytes_match_recorded_digest(self):
+        import hashlib
+        self.assertEqual(
+            hashlib.sha256(self._fixture().read_bytes()).hexdigest(), self.SHA256)
+
+    def test_reads_full_fixture_identity(self):
+        record = self.reader.read_ueformat_identity(self._fixture())
+        self.assertEqual(record.kind, "model")
+        self.assertEqual(record.file_version, 10)
+        self.assertEqual(record.object_name, "SK_FModelV10Full")
+        self.assertTrue(record.has_strict_identity)
+        self.assertFalse(record.identity["has_skeleton_guid"])
+        self.assertEqual(record.identity["skeleton_path"], self.SKELETON_PATH)
+        self.assertEqual(record.identity["bone_layout_hash"], self.BONE_LAYOUT_HASH)
+
+    def test_full_fixture_classifies_as_strict_provenance(self):
+        provenance = self.reader.read_ueformat_provenance(self._fixture())
+        self.assertEqual(provenance.state, "strict")
+        self.assertTrue(provenance.is_strict)
+
 
 if __name__ == "__main__":
     unittest.main()
