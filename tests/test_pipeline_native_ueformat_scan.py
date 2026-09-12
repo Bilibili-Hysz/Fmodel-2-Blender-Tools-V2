@@ -54,6 +54,39 @@ def _legacy_ueanim_bytes(reader) -> bytes:
     )
 
 
+def _v10_attribute(name: str, payload: bytes, *, enveloped: bool = False) -> bytes:
+    """V10 attribute: [name][total_size][envelope+payload] or plain payload."""
+    if enveloped:
+        body = bytes([1]) + struct.pack("<i", 1) + payload
+        return _fstring(name) + struct.pack("<i", len(body)) + body
+    return _fstring(name) + struct.pack("<i", len(payload)) + payload
+
+
+def _native_ueanim_bytes_v10(reader, skeleton_path="/Game/Hero/SK_Hero_Skeleton") -> bytes:
+    """Native UEANIM in the current V10 wire layout (count header + envelopes)."""
+    layout_hash = bytes.fromhex("0123456789abcdef" * 4)
+    identity = bytearray([1])
+    identity.extend(_fstring("/Game/Hero/Animations/Run"))
+    identity.extend(_fstring(skeleton_path))
+    identity.append(0)
+    identity.extend(layout_hash)
+
+    attributes = [
+        _v10_attribute("TRACKS", struct.pack("<i", 0)),
+        _v10_attribute("FMODEL_TARGET_SKELETON", bytes(identity), enveloped=True),
+    ]
+    payload = struct.pack("<i", len(attributes)) + b"".join(attributes)
+    return (
+        reader.MAGIC
+        + _fstring(reader.ANIM_IDENTIFIER)
+        + bytes([10])
+        + _fstring("NativeRunV10")
+        + _fstring("/Game/Hero/Animations/Run.Run")
+        + bytes([0])
+        + payload
+    )
+
+
 class _FakeContext:
     def __init__(self, config):
         self.config = dict(config)
@@ -209,6 +242,45 @@ class NativeUEFormatScanTests(unittest.TestCase):
                 metadata["fmodel_skeleton_identity_fingerprint"],
                 self.core.skeleton_identity_fingerprint(metadata["fmodel_skeleton_identity"]),
             )
+
+    def test_raw_scan_reads_v10_native_animations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source_root = Path(directory)
+            asset_dir = source_root / "Hero"
+            asset_dir.mkdir()
+            asset_path = asset_dir / "Run.ueanim"
+            asset_path.write_bytes(_native_ueanim_bytes_v10(self.reader))
+
+            context = _FakeContext({"source_skeleton": "Hero"})
+            stage = self.stages.DictionaryAcquisitionStage()
+
+            self.assertTrue(stage._process_fmodel_manifests(context, str(source_root)))
+
+            manifest = self.core.DictionaryManifest.from_dict(context.dictionary_manifest)
+            entries = manifest.get_all_animations()
+            self.assertEqual(len(entries), 1)
+            skeleton, folder, name, entry = entries[0]
+            self.assertEqual(skeleton, "SK_Hero_Skeleton")
+            self.assertEqual(folder, "Hero")
+            self.assertEqual(name, "Run")
+            self.assertTrue(entry.metadata["native_ueformat"])
+            self.assertEqual(entry.metadata["skeleton_path"], "/Game/Hero/SK_Hero_Skeleton")
+            self.assertEqual(entry.metadata["format_identifier"], "UEANIM")
+            self.assertEqual(entry.metadata["format_object_name"], "NativeRunV10")
+
+    def test_v10_and_v9_native_files_scan_together(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source_root = Path(directory)
+            (source_root / "V9Run.ueanim").write_bytes(_native_ueanim_bytes(self.reader))
+            (source_root / "V10Run.ueanim").write_bytes(_native_ueanim_bytes_v10(self.reader))
+
+            context = _FakeContext({"source_skeleton": "Hero"})
+            stage = self.stages.DictionaryAcquisitionStage()
+
+            self.assertTrue(stage._process_fmodel_raw_files(context, str(source_root)))
+            manifest = self.core.DictionaryManifest.from_dict(context.dictionary_manifest)
+            names = sorted(name for _s, _f, name, _e in manifest.get_all_animations())
+            self.assertEqual(names, ["V10Run", "V9Run"])
 
     def test_legacy_files_are_not_grouped_by_directory_name(self):
         with tempfile.TemporaryDirectory() as directory:

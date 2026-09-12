@@ -5,6 +5,11 @@ portable file envelope, optionally decompresses the payload, walks top-level
 chunk headers, and decodes only the canonical FModel skeleton identity chunk.
 It is suitable for project-index metadata discovery without importing Blender,
 meshes, animation tracks, materials, or textures.
+
+Both wire generations are supported: V9 (bare chunk sequence without a header
+ObjectPath) and V10 (attribute count header, ObjectPath header field, and
+versioned FModel extension envelopes).  The identity payload itself is
+unchanged between the two.
 """
 
 from __future__ import annotations
@@ -22,13 +27,20 @@ MODEL_IDENTIFIER = "UEMODEL"
 ANIM_IDENTIFIER = "UEANIM"
 POSE_IDENTIFIER = "UEPOSE"
 IDENTITY_EXTENSION_VERSION = 1
-LATEST_UEFORMAT_VERSION = 9
+# V9 wrote the envelope as [name][count][byte_size][payload]; V10 added the
+# logical ObjectPath to the header and wraps FModel extension attributes in a
+# versioned envelope: [name][total_size][envelope=1][array_size][payload].
+LATEST_UEFORMAT_VERSION = 10
+V10_HEADER_OBJECT_PATH_VERSION = 10
+V10_ATTRIBUTE_ENVELOPE_VERSION = 1
+IDENTITY_SECTIONS = frozenset({"FMODEL_SKELETON_IDENTITY", "FMODEL_TARGET_SKELETON"})
 
 MAX_FILE_BYTES = 512 * 1024 * 1024
 MAX_STRING_BYTES = 64 * 1024
 MAX_IDENTITY_PATH_BYTES = 16 * 1024
 MAX_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
 MAX_IDENTITY_CHUNK_BYTES = 128 * 1024
+MAX_ATTRIBUTE_COUNT = 4096
 
 
 class UEFormatIdentityError(ValueError):
@@ -119,39 +131,91 @@ def _read_ueformat_identity_reader(reader) -> UEFormatIdentityRecord:
     if file_version > LATEST_UEFORMAT_VERSION:
         raise UEFormatIdentityError(f"Unsupported UEFormat file version: {file_version}")
     object_name = reader.read_fstring("object name", MAX_STRING_BYTES)
+    if file_version >= V10_HEADER_OBJECT_PATH_VERSION:
+        # V10 inserted the logical ObjectPath between the object name and the
+        # compression flag; the identity contract itself is unchanged.
+        reader.read_fstring("object path", MAX_STRING_BYTES)
     compressed = reader.read_bool()
     archive = reader
     if compressed:
         archive = _decompress_archive(reader)
 
+    v10_attributes = file_version >= V10_HEADER_OBJECT_PATH_VERSION
     identity_section = (
         "FMODEL_SKELETON_IDENTITY" if kind == "model" else "FMODEL_TARGET_SKELETON"
     )
     identity = None
     seen_identity = False
     seen_sections: set[str] = set()
+    # V10 serializes the root as an attribute set with an explicit count; V9
+    # wrote a bare chunk sequence that ends at EOF.
+    if v10_attributes:
+        attribute_count = archive.read_i32("attribute count")
+        if attribute_count < 0 or attribute_count > MAX_ATTRIBUTE_COUNT:
+            raise UEFormatIdentityError(f"Invalid attribute count: {attribute_count}")
+    else:
+        attribute_count = None
+    processed_attributes = 0
     while not archive.eof():
+        if attribute_count is not None:
+            if processed_attributes >= attribute_count:
+                raise UEFormatIdentityError("UEFormat archive has trailing data")
+            processed_attributes += 1
         section_name = archive.read_fstring("top-level section", MAX_STRING_BYTES)
-        array_size = archive.read_i32("top-level array_size")
-        byte_size = archive.read_i32("top-level byte_size")
-        if array_size < 0:
-            raise UEFormatIdentityError(
-                f"Invalid negative array_size for section {section_name}: {array_size}"
-            )
-        if byte_size < 0 or byte_size > archive.remaining():
-            raise UEFormatIdentityError(
-                f"Invalid byte_size for section {section_name}: {byte_size}"
-            )
-        if section_name in seen_sections and section_name in {
-            "FMODEL_SKELETON_IDENTITY",
-            "FMODEL_TARGET_SKELETON",
-        }:
+        if section_name in seen_sections and section_name in IDENTITY_SECTIONS:
             raise UEFormatIdentityError(f"Duplicate identity section: {section_name}")
         seen_sections.add(section_name)
 
         if section_name != identity_section:
-            archive.skip(byte_size, f"section {section_name} payload")
+            # Skip every non-target attribute, including the other FMODEL_*
+            # sections. V10 standard attributes (LODS, TRACKS, ...) carry a
+            # plain payload; the FModel envelope only wraps FMODEL_* data.
+            if v10_attributes:
+                total_size = archive.read_i32("top-level attribute size")
+                if total_size < 0 or total_size > archive.remaining():
+                    raise UEFormatIdentityError(
+                        f"Invalid attribute size for section {section_name}: {total_size}"
+                    )
+                archive.skip(total_size, f"section {section_name} payload")
+            else:
+                array_size = archive.read_i32("top-level array_size")
+                byte_size = archive.read_i32("top-level byte_size")
+                if array_size < 0:
+                    raise UEFormatIdentityError(
+                        f"Invalid negative array_size for section {section_name}: {array_size}"
+                    )
+                if byte_size < 0 or byte_size > archive.remaining():
+                    raise UEFormatIdentityError(
+                        f"Invalid byte_size for section {section_name}: {byte_size}"
+                    )
+                archive.skip(byte_size, f"section {section_name} payload")
             continue
+
+        if v10_attributes:
+            total_size = archive.read_i32("identity attribute size")
+            if total_size < 5 or total_size > archive.remaining():
+                raise UEFormatIdentityError(
+                    f"Invalid identity attribute size: {total_size}"
+                )
+            envelope_version = archive.read_u8("identity envelope version")
+            if envelope_version != V10_ATTRIBUTE_ENVELOPE_VERSION:
+                raise UEFormatIdentityError(
+                    f"Unsupported identity attribute envelope version: {envelope_version}"
+                )
+            array_size = archive.read_i32("identity array_size")
+            byte_size = total_size - 5
+        else:
+            array_size = archive.read_i32("top-level array_size")
+            byte_size = archive.read_i32("top-level byte_size")
+            if array_size < 0:
+                raise UEFormatIdentityError(
+                    f"Invalid negative array_size for section {section_name}: {array_size}"
+                )
+            if byte_size < 0 or byte_size > archive.remaining():
+                raise UEFormatIdentityError(
+                    f"Invalid byte_size for section {section_name}: {byte_size}"
+                )
+
         if seen_identity:
             raise UEFormatIdentityError(f"Duplicate expected identity section: {section_name}")
         if array_size != 1:
@@ -165,6 +229,8 @@ def _read_ueformat_identity_reader(reader) -> UEFormatIdentityRecord:
 
     if not archive.eof():
         raise UEFormatIdentityError("UEFormat archive has trailing data")
+    if attribute_count is not None and processed_attributes != attribute_count:
+        raise UEFormatIdentityError("UEFormat archive is missing declared attributes")
     if reader.remaining() != 0:
         raise UEFormatIdentityError("UEFormat envelope has trailing data")
 
