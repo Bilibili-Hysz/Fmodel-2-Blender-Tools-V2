@@ -14,10 +14,8 @@ if "bpy" in locals():
 
 def register():
     stages.register()
-    manager.register()
     steps.register()
 
 def unregister():
     steps.unregister()
-    manager.unregister()
     stages.unregister()

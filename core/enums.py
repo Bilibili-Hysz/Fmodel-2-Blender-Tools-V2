@@ -34,27 +34,21 @@ class StageStatus(Enum):
 
 class SourceType(Enum):
     """数据源类型枚举"""
-    UNITY_ANIM = "unity_anim"
     FMODEL_UEANIM = "fmodel_ueanim"
-    FBX_BATCH = "fbx_batch"
-    CUSTOM = "custom"
 
 
 class ImportMode(Enum):
     """导入模式枚举"""
-    FBX_MATCH = "fbx_match"
     UEANIM_DIRECT = "ueanim_direct"
-    LINK_EXISTING = "link_existing"
 
 
-# UEFormat-only runtime contract. Legacy enum values remain as read-only
-# migration tokens until the physical cleanup phase removes the old source code.
+# UEFormat-only runtime contract. The legacy Unity/FBX members were removed in
+# the V1 cleanup; normalize_ueformat_pipeline_config below still rewrites old
+# persisted string values to the native route, so old .blend/checkpoint data
+# keeps loading instead of silently reusing a disabled route.
 UEFORMAT_SOURCE_TYPE = SourceType.FMODEL_UEANIM.value
 UEFORMAT_IMPORT_MODE = ImportMode.UEANIM_DIRECT.value
-UEFORMAT_IMPORT_MODES = frozenset({
-    UEFORMAT_IMPORT_MODE,
-    ImportMode.LINK_EXISTING.value,
-})
+UEFORMAT_IMPORT_MODES = frozenset({UEFORMAT_IMPORT_MODE})
 
 
 def normalize_ueformat_pipeline_config(config):

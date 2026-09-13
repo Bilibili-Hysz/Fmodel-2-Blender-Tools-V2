@@ -185,10 +185,6 @@ class PipelineContext:
             "source_dir",
             "source_type",
             "skeleton_filter",
-            "unity_skip_processed",
-            "indexed_project_root",
-            "indexed_skeleton",
-            "indexed_selected_paths",
         }
         saved_config = {
             key: value for key, value in self.config.items() if key in semantic_keys

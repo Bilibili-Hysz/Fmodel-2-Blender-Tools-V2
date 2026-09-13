@@ -1047,36 +1047,6 @@ class ANIM_OT_ApplyAnim(bpy.types.Operator):
         context.scene.frame_start = min(context.scene.frame_start, int(strip.frame_start))
         context.scene.frame_end = max(context.scene.frame_end, int(strip.frame_end))
 
-        try:
-            if hasattr(context.scene, "fmodel_nla_studio"):
-                bpy.ops.fmodel.nla_refresh()
-
-                studio = context.scene.fmodel_nla_studio
-                target_index = -1
-                best_delta = 10**9
-                for i, item in enumerate(studio.items):
-                    if item.track_name != track.name or item.strip_name != strip.name:
-                        continue
-                    delta = abs(float(item.frame_start) - float(strip.frame_start))
-                    if delta < best_delta:
-                        best_delta = delta
-                        target_index = i
-
-                if target_index >= 0:
-                    studio.active_index = target_index
-
-                studio.show_advanced_tools = True
-                studio.handoff_message = (
-                    f"已部署: {strip.name} | 轨道: {track.name} | "
-                    f"范围: {int(strip.frame_start)}-{int(strip.frame_end)}"
-                )
-                studio.highlight_track_name = track.name
-                studio.highlight_strip_name = strip.name
-                studio.highlight_frame_start = float(strip.frame_start)
-                studio.highlight_cycles = 2
-        except Exception:
-            pass
-    
     def execute(self, context):
         target_arm = context.active_object
         manager = context.scene.fmodel_anim_manager
@@ -1226,144 +1196,6 @@ class ANIM_OT_GridPageNext(bpy.types.Operator):
     
     def execute(self, context):
         context.scene.fmodel_anim_manager.grid_page += 1
-        return {'FINISHED'}
-
-
-# ============================================================
-# Unity动画处理操作符
-# ============================================================
-
-class ANIM_OT_ProcessUnityAnims(bpy.types.Operator):
-    """处理Unity动画并生成资产库"""
-    bl_idname = "fmodel.process_unity_anims"
-    bl_label = "处理 Unity 动画并生成资产库"
-    bl_options = {'REGISTER', 'UNDO'}
-    
-    @classmethod
-    def poll(cls, context):
-        props = getattr(context.scene, "fmodel_assets", None)
-        return props and props.source_dir
-    
-    def execute(self, context):
-        from ...Assets.Utils import utils_asset
-        
-        props = context.scene.fmodel_assets
-        source_dir = bpy.path.abspath(props.source_dir)
-        out_dir = bpy.path.abspath(props.asset_out_dir)
-        
-        if not source_dir or not os.path.exists(source_dir):
-            self.report({'ERROR'}, t("请先选择有效的 Unity 动画源文件夹！"))
-            return {'CANCELLED'}
-        
-        if not out_dir:
-            out_dir = os.path.join(os.path.dirname(source_dir), "Unity_Anim_Library")
-            props.asset_out_dir = out_dir
-        
-        if not ensure_dir(out_dir):
-            self.report({'ERROR'}, t("创建输出目录失败"))
-            return {'CANCELLED'}
-        
-        # 创建安全副本
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_name = os.path.basename(source_dir.rstrip('/\\'))
-        copied_dir = os.path.join(out_dir, f"{base_name}_Processed_{timestamp}")
-        
-        try:
-            shutil.copytree(source_dir, copied_dir)
-            self.report({'INFO'}, f"已生成安全副本: {copied_dir}")
-        except Exception as e:
-            self.report({'ERROR'}, f"创建副本失败: {e}")
-            return {'CANCELLED'}
-        
-        # 处理动画文件
-        manifest = DictionaryManifest(
-            source_type=SourceType.UNITY_ANIM.value,
-            source_path=source_dir
-        )
-        
-        renamed_count = 0
-        
-        for root, dirs, files in os.walk(copied_dir):
-            dirs[:] = [d for d in dirs if not d.startswith('.')]
-            
-            for file in files:
-                if not file.lower().endswith('.anim'):
-                    continue
-                
-                file_path = os.path.join(root, file)
-                original_name = os.path.splitext(file)[0]
-                
-                # 跳过已处理的文件
-                if re.search(r'_[a-f0-9]{8}$', original_name):
-                    continue
-                
-                try:
-                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                        content = f.read()
-                except Exception:
-                    continue
-                
-                content_no_name = re.sub(r'^\s*m_Name:.*$', '', content, flags=re.MULTILINE)
-                content_hash = hashlib.md5(content_no_name.encode('utf-8')).hexdigest()[:8]
-                hashed_name = f"{original_name}_{content_hash}"
-                
-                # 更新文件内容和名称
-                new_content = re.sub(
-                    r'(^\s*m_Name:\s*).*$', rf'\g<1>{hashed_name}',
-                    content, count=1, flags=re.MULTILINE
-                )
-                
-                new_file_path = os.path.join(root, f"{hashed_name}.anim")
-                
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(new_content)
-                os.rename(file_path, new_file_path)
-                renamed_count += 1
-                
-                # 构建manifest
-                rel_dir = os.path.relpath(root, copied_dir).replace('\\', '/')
-                if rel_dir == '.':
-                    skel_name, catalog_path = "Generic", "Uncategorized"
-                else:
-                    parts = rel_dir.split('/')
-                    skel_name = parts[0]
-                    catalog_path = "/".join(parts[1:]) if len(parts) > 1 else "Base"
-                
-                if skel_name not in manifest.skeletons:
-                    manifest.skeletons[skel_name] = SkeletonNode(name=skel_name)
-                
-                folder = manifest.skeletons[skel_name].get_or_create_folder(catalog_path)
-                anim_entry = AnimationEntry(
-                    original_name=original_name,
-                    hashed_name=hashed_name,
-                    source_file=file_path,
-                    content_hash=content_hash
-                )
-                folder.add_animation(hashed_name, anim_entry)
-        
-        if renamed_count == 0:
-            self.report({'WARNING'}, t("未找到需要处理的Unity动画文件！"))
-            return {'CANCELLED'}
-        
-        # 保存manifest
-        manifest_path = os.path.join(out_dir, f"Unity_Anims_{timestamp}_manifest.json")
-        manifest.save_to_file(manifest_path)
-        
-        # 动态挂载
-        lib_name = props.lib_name or "Unity_Anim_Library"
-        utils_asset.mount_dynamic_library(lib_name, out_dir)
-        
-        # 更新资产库列表
-        already_linked = any(lib.name == lib_name for lib in props.project_libs)
-        if not already_linked:
-            new_lib = props.project_libs.add()
-            new_lib.name = lib_name
-            new_lib.path = out_dir
-        
-        # 触发扫描
-        bpy.ops.fmodel.scan_anims()
-        
-        self.report({'INFO'}, f"处理完成！重命名了 {renamed_count} 个文件，资产库已挂载。")
         return {'FINISHED'}
 
 
@@ -1572,7 +1404,6 @@ classes = (
     ANIM_OT_ApplyAnim,
     ANIM_OT_GridPagePrev,
     ANIM_OT_GridPageNext,
-    ANIM_OT_ProcessUnityAnims,
     ANIM_OT_BrowseLibPath,
     ANIM_OT_MountBlendFile,
     ANIM_OT_MountAllLibs,

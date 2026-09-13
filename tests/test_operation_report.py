@@ -12,7 +12,7 @@ def test_load_last_operation_reads_shared_session_and_formats_runtime(tmp_path):
     session = ImportSession(
         "UEModel",
         source_paths=(source,),
-        vendor_version="1.2.0",
+        vendor_version="0.10.0",
         export_operation_id="fmodel-export-1",
         export_manifest_path=str(tmp_path / "EXPORT_MANIFEST.json"),
         import_policy="STRICT",
@@ -30,7 +30,7 @@ def test_load_last_operation_reads_shared_session_and_formats_runtime(tmp_path):
         report,
         {
             "state": "ready",
-            "version": "1.2.0",
+            "version": "0.10.0",
             "source": "bundled",
             "source_path": "vendor/io_scene_ueformat/__init__.py",
             "tree_sha256": "abc123",

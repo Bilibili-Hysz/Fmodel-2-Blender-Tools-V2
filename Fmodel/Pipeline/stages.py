@@ -449,9 +449,8 @@ class DictionaryAcquisitionStage(PipelineStageBase):
         source_type = context.get_config("source_type", UEFORMAT_SOURCE_TYPE)
         source_dir = bpy.path.abspath(context.get_config("source_dir", ""))
 
-        # Runtime dispatch is deliberately native-only. Legacy Unity/FBX
-        # methods remain below during the migration window but cannot be reached
-        # from a UEFormat-only PipelineProperties or wizard configuration.
+        # Runtime dispatch is deliberately native-only: anything else fails
+        # closed instead of silently reusing a disabled legacy route.
         if source_type != UEFORMAT_SOURCE_TYPE:
             context.log_error(
                 self.get_stage_name(),
@@ -460,83 +459,6 @@ class DictionaryAcquisitionStage(PipelineStageBase):
             return False
         return self._process_fmodel_raw_files(context, source_dir)
     
-    def _process_unity_anims(self, context: PipelineContext, source_dir: str) -> bool:
-        """处理Unity .anim文件"""
-        manifest = DictionaryManifest(
-            source_type=SourceType.UNITY_ANIM.value,
-            source_path=source_dir
-        )
-        
-        processed_count = 0
-        skip_processed = context.get_config("unity_skip_processed", True)
-        
-        for root, dirs, files in os.walk(source_dir):
-            dirs[:] = [d for d in dirs if not d.startswith('.')]
-            
-            for file in files:
-                if not file.lower().endswith('.anim'):
-                    continue
-                
-                file_path = os.path.join(root, file)
-                original_name = os.path.splitext(file)[0]
-                
-                if skip_processed and re.search(r'_[a-f0-9]{8}$', original_name):
-                    continue
-                
-                try:
-                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                        content = f.read()
-                except Exception as e:
-                    context.log_warning(self.get_stage_name(), f"读取文件失败 {file_path}: {e}")
-                    continue
-                
-                content_no_name = re.sub(r'^\s*m_Name:.*$', '', content, flags=re.MULTILINE)
-                content_hash = hashlib.md5(content_no_name.encode('utf-8')).hexdigest()[:8]
-                hashed_name = f"{original_name}_{content_hash}"
-                
-                rel_dir = os.path.relpath(root, source_dir).replace('\\', '/')
-                if rel_dir == '.':
-                    skel_name, catalog_path = "Generic", "Uncategorized"
-                else:
-                    parts = rel_dir.split('/')
-                    skel_name = parts[0]
-                    catalog_path = "/".join(parts[1:]) if len(parts) > 1 else "Base"
-                
-                if skel_name not in manifest.skeletons:
-                    manifest.skeletons[skel_name] = SkeletonNode(name=skel_name)
-                
-                skel = manifest.skeletons[skel_name]
-                folder = skel.get_or_create_folder(catalog_path)
-                
-                anim_entry = AnimationEntry(
-                    original_name=original_name,
-                    hashed_name=hashed_name,
-                    source_file=file_path,
-                    content_hash=content_hash
-                )
-                folder.add_animation(hashed_name, anim_entry)
-                processed_count += 1
-        
-        if processed_count == 0:
-            context.log_warning(self.get_stage_name(), "未找到需要处理的动画文件")
-            return False
-        
-        context.dictionary_manifest = manifest.to_dict()
-        context.log_info(self.get_stage_name(), f"成功处理 {processed_count} 个动画文件")
-        return True
-    
-    def _process_fmodel_manifests(self, context: PipelineContext, source_dir: str) -> bool:
-        """Compatibility alias for the native scanner.
-
-        The old implementation parsed `_manifest.json`; the UEFormat-only
-        route intentionally ignores those files and scans binary resources.
-        """
-        context.log_info(
-            self.get_stage_name(),
-            "UEFormat-only 模式跳过旧 manifest，直接扫描二进制资源",
-        )
-        return self._process_fmodel_raw_files(context, source_dir)
-
     def _process_fmodel_raw_files(self, context: PipelineContext, source_dir: str) -> bool:
         """Scan native UEFormat animations without sidecar JSON dependencies."""
         skeleton_filter = self._source_skeleton(context).strip()
@@ -668,51 +590,6 @@ class DictionaryAcquisitionStage(PipelineStageBase):
                 if subfolders:
                     self._merge_fmodel_tree(skel, subfolders, current_path)
     
-    def _process_fbx_batch(self, context: PipelineContext, source_dir: str) -> bool:
-        """处理批量FBX文件"""
-        manifest = DictionaryManifest(
-            source_type=SourceType.FBX_BATCH.value,
-            source_path=source_dir
-        )
-        
-        processed_count = 0
-        
-        for root, dirs, files in os.walk(source_dir):
-            dirs[:] = [d for d in dirs if not d.startswith('.')]
-            
-            for file in files:
-                if not file.lower().endswith(('.fbx', '.FBX')):
-                    continue
-                
-                file_path = os.path.join(root, file)
-                original_name = os.path.splitext(file)[0]
-                
-                rel_dir = os.path.relpath(root, source_dir).replace('\\', '/')
-                skel_name = "Generic" if rel_dir == "." else rel_dir.split('/')[0]
-                catalog_path = "Uncategorized" if rel_dir == "." else rel_dir
-                
-                if skel_name not in manifest.skeletons:
-                    manifest.skeletons[skel_name] = SkeletonNode(name=skel_name)
-                
-                folder = manifest.skeletons[skel_name].get_or_create_folder(catalog_path)
-                anim_entry = AnimationEntry(
-                    original_name=original_name,
-                    hashed_name=original_name,
-                    source_file=file_path,
-                    content_hash=""
-                )
-                folder.add_animation(original_name, anim_entry)
-                processed_count += 1
-        
-        if processed_count == 0:
-            context.log_warning(self.get_stage_name(), "未找到FBX文件")
-            return False
-        
-        context.dictionary_manifest = manifest.to_dict()
-        context.log_info(self.get_stage_name(), f"成功扫描 {processed_count} 个FBX文件")
-        return True
-
-
 # ============================================================
 # 阶段2: 格式中转 (新增 - 统一差异化环节)
 # ============================================================
@@ -729,85 +606,20 @@ class FormatConversionStage(PipelineStageBase):
         return True, ""
     
     def execute(self, context: PipelineContext) -> bool:
-        source_type = context.get_config("source_type", SourceType.UNITY_ANIM.value)
-        
-        handlers = {
-            SourceType.FMODEL_UEANIM.value: self._convert_ueformat,
-            SourceType.UNITY_ANIM.value: self._convert_unity,
-            SourceType.FBX_BATCH.value: self._convert_fbx,
-        }
-        
-        handler = handlers.get(source_type, self._convert_default)
-        return handler(context)
+        source_type = context.get_config("source_type", SourceType.FMODEL_UEANIM.value)
+        if source_type != SourceType.FMODEL_UEANIM.value:
+            context.log_error(
+                self.get_stage_name(),
+                f"不支持的源类型: {source_type}；UEFormat-only 仅接受 {SourceType.FMODEL_UEANIM.value}",
+            )
+            return False
+        return self._convert_ueformat(context)
     
     def _convert_ueformat(self, context: PipelineContext) -> bool:
         """UEFormat格式中转 - 直接使用，无需转换"""
         context.log_info(self.get_stage_name(), "UEFormat格式无需中转，直接使用")
         return True
     
-    def _convert_unity(self, context: PipelineContext) -> bool:
-        """Unity格式中转 - 重命名.anim文件并准备FBX导入"""
-        manifest = DictionaryManifest.from_dict(context.dictionary_manifest)
-        source_dir = bpy.path.abspath(context.get_config("source_dir", ""))
-        output_dir = bpy.path.abspath(context.get_config("output_dir", ""))
-        
-        if not output_dir:
-            output_dir = os.path.join(source_dir, "_converted")
-            ensure_dir(output_dir)
-        
-        converted_count = 0
-        conversion_manifest = {"converted_files": []}
-        
-        for skel_name, skel_node in manifest.skeletons.items():
-            for folder_path, folder_node in skel_node.folders.items():
-                for anim_name, anim_entry in folder_node.animations.items():
-                    source_file = anim_entry.source_file
-                    if not os.path.exists(source_file):
-                        continue
-                    
-                    try:
-                        # 重命名文件（添加hash后缀）
-                        new_name = anim_entry.hashed_name
-                        new_path = os.path.join(
-                            output_dir,
-                            skel_name,
-                            folder_path if folder_path else "",
-                            f"{new_name}.anim"
-                        )
-                        ensure_dir(os.path.dirname(new_path))
-                        shutil.copy2(source_file, new_path)
-                        
-                        conversion_manifest["converted_files"].append({
-                            "original": source_file,
-                            "converted": new_path,
-                            "skel_name": skel_name,
-                            "folder_path": folder_path,
-                            "anim_name": anim_name
-                        })
-                        converted_count += 1
-                    except Exception as e:
-                        context.log_warning(self.get_stage_name(), f"转换失败: {anim_name} - {e}")
-        
-        # 保存转换清单
-        manifest_path = os.path.join(output_dir, "conversion_manifest.json")
-        with open(manifest_path, 'w', encoding='utf-8') as f:
-            json.dump(conversion_manifest, f, ensure_ascii=False, indent=2)
-        
-        context.conversion_manifest = conversion_manifest
-        context.log_info(self.get_stage_name(), f"成功转换 {converted_count} 个文件")
-        return converted_count > 0
-    
-    def _convert_fbx(self, context: PipelineContext) -> bool:
-        """FBX格式中转 - 直接使用，无需转换"""
-        context.log_info(self.get_stage_name(), "FBX格式无需中转，直接使用")
-        return True
-    
-    def _convert_default(self, context: PipelineContext) -> bool:
-        """默认中转处理"""
-        context.log_info(self.get_stage_name(), "未知格式，跳过中转")
-        return True
-
-
 # ============================================================
 # 阶段3: 资源导入
 # ============================================================
@@ -881,19 +693,14 @@ class AssetImportStage(PipelineStageBase):
             return ""
     
     def execute(self, context: PipelineContext) -> bool:
-        import_mode = context.get_config("import_mode", ImportMode.FBX_MATCH.value)
+        import_mode = context.get_config("import_mode", ImportMode.UEANIM_DIRECT.value)
         task_identity = self._task_identity(context)
 
         persisted = context.imported_assets or {}
         persisted_checkpoint = context.get_config("import_checkpoint", {})
         current_manifest_sources = self._current_manifest_sources(context)
         if (
-            import_mode in (
-                ImportMode.FBX_MATCH.value,
-                ImportMode.UEANIM_DIRECT.value,
-                ImportMode.LINK_EXISTING.value,
-            )
-            and persisted.get("import_mode") == import_mode
+            persisted.get("import_mode") == import_mode
             and persisted.get("task_identity") == task_identity
             and persisted.get("imported_actions")
             and reusable_import_results(
@@ -910,121 +717,20 @@ class AssetImportStage(PipelineStageBase):
             if all(resolved):
                 context.log_info(self.get_stage_name(), "复用当前任务已持久化的导入结果")
                 return True
-            if import_mode == ImportMode.LINK_EXISTING.value:
-                context.log_warning(
-                    self.get_stage_name(),
-                    "已持久化动作不完整，将重新解析且保留现有外部动作",
-                )
             context.imported_assets = None
         
-        handlers = {
-            ImportMode.FBX_MATCH.value: self._import_fbx_match,
-            ImportMode.UEANIM_DIRECT.value: self._import_ueanim_direct,
-            ImportMode.LINK_EXISTING.value: self._import_link_existing,
-        }
-        
-        handler = handlers.get(import_mode)
-        if not handler:
-            context.log_error(self.get_stage_name(), f"不支持的导入模式: {import_mode}")
+        if import_mode != ImportMode.UEANIM_DIRECT.value:
+            context.log_error(
+                self.get_stage_name(),
+                f"不支持的导入模式: {import_mode}；UEFormat-only 仅接受 {ImportMode.UEANIM_DIRECT.value}",
+            )
             return False
-        
+
         try:
-            return handler(context)
+            return self._import_ueanim_direct(context)
         finally:
             self._finish_progress()
 
-    def _import_fbx_match(self, context: PipelineContext) -> bool:
-        """匹配已导入的FBX动画"""
-        manifest = DictionaryManifest.from_dict(context.dictionary_manifest)
-        task_identity = self._task_identity(context)
-        collection = ImportedAssetCollection(
-            import_mode=ImportMode.FBX_MATCH.value,
-            task_identity=task_identity,
-        )
-        attach_provenance = getattr(self, "_attach_skeleton_provenance", None)
-        if callable(attach_provenance):
-            attach_provenance(collection, task_identity)
-
-        all_actions = list(bpy.data.actions)
-        source_skeleton = self._source_skeleton(context)
-        source_subset = set(task_identity["source_subset"])
-        task_id_by_ref = {
-            self._source_manifest_ref(item["skeleton"], item["folder"], item["name"]): item["task_id"]
-            for item in self._current_manifest_sources(context)
-        }
-        scoped_task = bool(source_skeleton or source_subset)
-        claimed_actions = set()
-        matched_count = 0
-        
-        for skel, folder_path, anim_name, anim_entry in manifest.get_all_animations():
-            if source_skeleton and not self._skeleton_match(skel, source_skeleton):
-                continue
-            source_file = anim_entry.source_file
-            normalized_source = self._normalized_source_path(source_file)
-            if source_subset and normalized_source not in source_subset:
-                continue
-            hashed_name = anim_entry.hashed_name
-            
-            verified_candidates = []
-            untagged_candidates = []
-            expected_ref = self._source_manifest_ref(skel, folder_path, anim_name)
-            for action in all_actions:
-                if datablock_identity(action) in claimed_actions:
-                    continue
-                if scoped_task:
-                    action_source = action.get("Pipeline_Source", "")
-                    action_ref = action.get("Pipeline_SourceRef", "")
-                    if not action_source and not action_ref:
-                        if action.name == hashed_name:
-                            untagged_candidates.append(action)
-                        continue
-                    if normalized_source and self._normalized_source_path(action_source) != normalized_source:
-                        continue
-                    if action_ref and action_ref != expected_ref:
-                        continue
-                    verified_candidates.append(action)
-                elif hashed_name.lower() in action.name.lower():
-                    verified_candidates.append(action)
-
-            candidates = verified_candidates or untagged_candidates
-            target_action = candidates[0] if len(candidates) == 1 else None
-            
-            if target_action:
-                claimed_actions.add(datablock_identity(target_action))
-                target_action = copy_action_for_pipeline(target_action)
-                target_action["Pipeline_Owned"] = True
-                target_action["Pipeline_Source"] = source_file
-                target_action["Pipeline_SourceRef"] = expected_ref
-                imported = ImportedAction(
-                    action_name=target_action.name,
-                    source_manifest_ref=expected_ref,
-                    source_file=source_file,
-                    import_status="success",
-                    frame_range=tuple(target_action.frame_range) if target_action.frame_range else (0, 0),
-                    task_id=task_id_by_ref.get(expected_ref, ""),
-                )
-                collection.imported_actions.append(imported)
-                matched_count += 1
-            else:
-                collection.failed_imports.append({
-                    "source_file": anim_entry.source_file,
-                    "error": "ambiguous matching actions" if candidates else "未找到匹配的动作",
-                    "expected_name": hashed_name
-                })
-        
-        context.imported_assets = collection.to_dict()
-        expected_task_ids = [
-            item["task_id"] for item in task_identity.get("source_identities", [])
-        ]
-        if matched_count > 0 and not collection.failed_imports:
-            context.set_config("import_checkpoint", {
-                "state": "complete",
-                "expected_task_ids": expected_task_ids,
-                "failed_imports": [],
-            })
-        context.log_info(self.get_stage_name(), f"成功匹配 {matched_count} 个动作")
-        return matched_count > 0 and not collection.failed_imports
-    
     def _import_ueanim_direct(self, context: PipelineContext) -> bool:
         """直接导入.ueanim文件"""
         try:
@@ -1636,12 +1342,6 @@ class AssetImportStage(PipelineStageBase):
 
             cursor += len(batch)
             self._report_progress(context, cursor, total_entries, self.get_stage_name())
-
-            # 让Blender主线程有机会处理UI与事件，降低卡死感
-            try:
-                bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
-            except Exception:
-                pass
         resumed_count = 0
         if resume_enabled and cursor >= total_entries and not aborted_by_failures and not collection.failed_imports:
             valid_resumed = []
@@ -1687,208 +1387,6 @@ class AssetImportStage(PipelineStageBase):
             return False
         return imported_count + resumed_count > 0
     
-    def _import_link_existing(self, context: PipelineContext) -> bool:
-        """链接现有资产库"""
-        task_identity = self._task_identity(context)
-        collection = ImportedAssetCollection(
-            import_mode=ImportMode.LINK_EXISTING.value,
-            task_identity=task_identity,
-        )
-        attach_provenance = getattr(self, "_attach_skeleton_provenance", None)
-        if callable(attach_provenance):
-            attach_provenance(collection, task_identity)
-
-        source_skeleton = self._source_skeleton(context)
-
-        def sidecar_action_refs(sidecar):
-            skeletons = [
-                name for name, tree in sidecar.items()
-                if name != "__processed_sources__" and isinstance(name, str)
-                and name and isinstance(tree, dict)
-            ]
-            selected_skeletons = [source_skeleton] if source_skeleton else skeletons
-            if source_skeleton and source_skeleton not in skeletons:
-                return [], {}
-
-            refs = {}
-
-            def collect_actions(tree, folders):
-                entries = tree.get("__actions__", [])
-                if not isinstance(entries, list):
-                    raise ValueError("库包动作目录格式无效")
-                catalog_path = "/".join(folders) or "Uncategorized"
-                for entry in entries:
-                    if not isinstance(entry, (list, tuple)) or not entry or not isinstance(entry[0], str) or not entry[0]:
-                        raise ValueError("库包动作元数据无效")
-                    action_name = entry[0]
-                    ref = f"{skeleton}/{catalog_path}/{action_name}"
-                    if action_name in refs:
-                        raise ValueError(f"库包动作名称不唯一: {action_name}")
-                    refs[action_name] = ref
-                for name in sorted(tree):
-                    if name == "__actions__":
-                        continue
-                    child = tree[name]
-                    if not isinstance(name, str) or not name or not isinstance(child, dict):
-                        raise ValueError("库包目录格式无效")
-                    collect_actions(child, folders + [name])
-
-            for skeleton in selected_skeletons:
-                collect_actions(sidecar[skeleton], [])
-            return selected_skeletons, refs
-        
-        source_dir = bpy.path.abspath(context.get_config("source_dir", ""))
-        if not source_dir or not os.path.exists(source_dir):
-            context.log_error(self.get_stage_name(), "源目录无效")
-            return False
-        
-        blend_files = [f for f in os.listdir(source_dir) if f.endswith('.blend')]
-        if not blend_files:
-            context.log_warning(self.get_stage_name(), "未找到blend文件")
-            return False
-        
-        source_subset = set(self._task_identity(context)["source_subset"])
-        scoped_task = bool(source_skeleton or source_subset)
-        source_dir = self._normalized_source_path(context.get_config("source_dir", ""))
-        imported_count = 0
-        task_source_failed = False
-        for blend_file in blend_files:
-            blend_path = os.path.join(source_dir, blend_file)
-            existing_actions = {id(action) for action in bpy.data.actions}
-            staged_actions = []
-            sidecar_path = os.path.splitext(blend_path)[0] + "_manifest.json"
-            declared_in_scope = not source_skeleton
-            try:
-                with open(sidecar_path, "r", encoding="utf-8") as handle:
-                    sidecar = json.load(handle)
-                # A malformed bundle can still be ignored when its declared
-                # skeleton is outside this task. In-scope bundles continue
-                # through the strict sidecar validation below.
-                if source_skeleton and isinstance(sidecar, dict):
-                    declared_skeletons = {
-                        name for name, tree in sidecar.items()
-                        if name != "__processed_sources__" and isinstance(name, str)
-                    }
-                    if source_skeleton not in declared_skeletons:
-                        continue
-                    declared_in_scope = True
-                skeletons, action_refs = sidecar_action_refs(sidecar)
-                processed_sources = sidecar.get("__processed_sources__", [])
-            except (OSError, ValueError, TypeError, AttributeError) as exc:
-                if not declared_in_scope and source_skeleton not in os.path.splitext(blend_file)[0]:
-                    continue
-                task_source_failed = True
-                collection.failed_imports.append({
-                    "source_file": blend_path,
-                    "error": f"无法安全确认库包骨架元数据: {exc}",
-                })
-                continue
-            if scoped_task:
-                if source_skeleton and source_skeleton not in skeletons:
-                    continue
-                if source_subset:
-                    if not isinstance(processed_sources, list):
-                        task_source_failed = True
-                        collection.failed_imports.append({
-                            "source_file": blend_path,
-                            "error": "库包缺少可验证的源文件元数据",
-                        })
-                        continue
-                    scoped_sources = set()
-                    for source in processed_sources:
-                        if not isinstance(source, str):
-                            continue
-                        source_path = source.split("::", 1)[-1]
-                        if os.path.isabs(source_path):
-                            scoped_sources.add(self._normalized_source_path(source_path))
-                        elif source_dir:
-                            scoped_sources.add(self._normalized_source_path(os.path.join(source_dir, source_path)))
-                    # Linking is bundle-granular. A partial overlap would link
-                    # actions belonging to another task, so only accept a fully
-                    # provable subset.
-                    if not scoped_sources or not scoped_sources.issubset(source_subset):
-                        continue
-            try:
-                normalized_bundle = self._normalized_source_path(blend_path)
-                existing_local = {
-                    action.name: action for action in bpy.data.actions
-                    if action.get("Pipeline_SourceBundle", "") == normalized_bundle
-                    and action.name in action_refs
-                }
-                for action_name, action in existing_local.items():
-                    staged_actions.append(ImportedAction(
-                        action_name=action.name,
-                        source_manifest_ref=action_refs[action_name],
-                        source_file=blend_path,
-                        source_bundle=blend_path,
-                        import_status="success",
-                        frame_range=tuple(action.frame_range) if action.frame_range else (0, 0),
-                    ))
-                if set(existing_local) == set(action_refs):
-                    loaded_actions = []
-                else:
-                    with bpy.data.libraries.load(blend_path, link=True) as (data_from, data_to):
-                        data_to.actions = [
-                            action for action in data_from.actions
-                            if getattr(action, "name", action) in action_refs
-                            and getattr(action, "name", action) not in existing_local
-                        ]
-                    loaded_actions = data_to.actions
-                loaded_names = [
-                    getattr(action, "name", action) for action in loaded_actions if action
-                ]
-                missing_names = {
-                    name for name in action_refs
-                    if name not in existing_local and loaded_names.count(name) != 1
-                }
-                if missing_names:
-                    task_source_failed = True
-                    collection.failed_imports.append({
-                        "source_file": blend_path,
-                        "error": f"库包动作未完整加载: {', '.join(sorted(missing_names))}",
-                    })
-                    continue
-                for action in loaded_actions:
-                    if action:
-                        source_manifest_ref = action_refs.get(action.name)
-                        if not source_manifest_ref:
-                            task_source_failed = True
-                            collection.failed_imports.append({
-                                "source_file": blend_path,
-                                "error": f"库包动作缺少可验证的目录元数据: {action.name}",
-                            })
-                            continue
-                        local_action = copy_action_for_pipeline(action)
-                        local_action["Pipeline_Owned"] = True
-                        local_action["Pipeline_SourceBundle"] = self._normalized_source_path(blend_path)
-                        local_action["Pipeline_SourceRef"] = source_manifest_ref
-                        imported = ImportedAction(
-                            action_name=local_action.name,
-                            source_manifest_ref=source_manifest_ref,
-                            source_file=blend_path,
-                            source_bundle=blend_path,
-                            import_status="success",
-                            frame_range=tuple(local_action.frame_range) if local_action.frame_range else (0, 0)
-                        )
-                        staged_actions.append(imported)
-            except Exception as e:
-                for action in list(bpy.data.actions):
-                    if id(action) not in existing_actions:
-                        try:
-                            bpy.data.actions.remove(action)
-                        except (ReferenceError, RuntimeError, ValueError):
-                            pass
-                task_source_failed = True
-                collection.failed_imports.append({"source_file": blend_path, "error": str(e)})
-            else:
-                collection.imported_actions.extend(staged_actions)
-                imported_count += len(staged_actions)
-        
-        context.imported_assets = collection.to_dict()
-        context.log_info(self.get_stage_name(), f"成功链接 {imported_count} 个动作")
-        return imported_count > 0 and not task_source_failed
-
-
 # ============================================================
 # 阶段3: 建立资产库
 # ============================================================

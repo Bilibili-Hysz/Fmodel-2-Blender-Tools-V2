@@ -75,6 +75,28 @@ class CreationTrackerTests(unittest.TestCase):
         capture.track("objects", item)
         self.assertEqual(capture.objects, (item,))
 
+    def test_discard_untracks_wrappers_invalidated_after_tracking(self):
+        class DyingObject:
+            def __init__(self):
+                self.calls = 0
+
+            def as_pointer(self):
+                self.calls += 1
+                if self.calls == 1:
+                    return 4242
+                raise ReferenceError("StructRNA of type Object has been removed")
+
+        item = DyingObject()
+        capture = self.module.UEFormatImportCapture()
+        capture.track("objects", item)
+        self.assertEqual(capture.counts, {"objects": 1})
+
+        # The template-object flow removes the datablock before calling
+        # discard, so the wrapper can no longer produce its tracked pointer.
+        capture.discard("objects", item)
+        self.assertEqual(capture.objects, ())
+        self.assertEqual(capture.counts, {})
+
 
 if __name__ == "__main__":
     unittest.main()

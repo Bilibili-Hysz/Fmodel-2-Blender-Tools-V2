@@ -56,7 +56,7 @@ from .operation_report import (
 
 from .import_transaction import ImportRollbackReport, ImportTransaction
 
-# Indexed Project services are legacy-only and intentionally not imported at addon startup.
+# Indexed Project services were removed with the V1 cleanup; nothing imports them.
 
 from .resume import (
     armature_identity, build_settings_fingerprint, import_settings_fingerprint,

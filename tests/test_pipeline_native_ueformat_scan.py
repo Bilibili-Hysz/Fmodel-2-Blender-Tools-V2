@@ -197,7 +197,7 @@ class NativeUEFormatScanTests(unittest.TestCase):
             context = _FakeContext({"source_skeleton": "Hero"})
             stage = self.stages.DictionaryAcquisitionStage()
 
-            self.assertTrue(stage._process_fmodel_manifests(context, str(source_root)))
+            self.assertTrue(stage._process_fmodel_raw_files(context, str(source_root)))
 
             manifest = self.core.DictionaryManifest.from_dict(context.dictionary_manifest)
             skeleton, _folder, _name, entry = manifest.get_all_animations()[0]
@@ -219,7 +219,7 @@ class NativeUEFormatScanTests(unittest.TestCase):
             })
             stage = self.stages.DictionaryAcquisitionStage()
 
-            self.assertTrue(stage._process_fmodel_manifests(context, str(source_root)))
+            self.assertTrue(stage._process_fmodel_raw_files(context, str(source_root)))
 
             manifest = self.core.DictionaryManifest.from_dict(context.dictionary_manifest)
             entries = manifest.get_all_animations()
@@ -254,7 +254,7 @@ class NativeUEFormatScanTests(unittest.TestCase):
             context = _FakeContext({"source_skeleton": "Hero"})
             stage = self.stages.DictionaryAcquisitionStage()
 
-            self.assertTrue(stage._process_fmodel_manifests(context, str(source_root)))
+            self.assertTrue(stage._process_fmodel_raw_files(context, str(source_root)))
 
             manifest = self.core.DictionaryManifest.from_dict(context.dictionary_manifest)
             entries = manifest.get_all_animations()

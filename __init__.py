@@ -1,5 +1,5 @@
 # FModel_Tools/__init__.py
-# 插件入口 — 模块注册与 Scheme 注入
+# 插件入口 — 模块注册
 bl_info = {
     "name": "FModel Tools Next",
     "author": "Your Name",
@@ -29,39 +29,16 @@ if __package__ and "bpy" in locals():
     importlib.reload(Universal_tools)
     importlib.reload(auto_handlers)
 
-if __package__:
-    # UEFormat-only line: keep generic skeleton/morph tools, but do not expose
-    # PSK-specific repair schemes in the add-on registration surface. The old
-    # source files remain available during the migration window for rollback.
-    from .Universal_tools.skeleton import scheme_auto, scheme_copy
-    from .Universal_tools.mesh import scheme_morph_merge
-
-    REGISTERED_SCHEMES = [
-        scheme_auto, scheme_copy, scheme_morph_merge,
-    ]
-else:
-    REGISTERED_SCHEMES = []
-
 
 def register():
-    # 1. 动态注入 Scheme 属性
-    if not hasattr(ui.FMODEL_CoreProperties, "__annotations__"):
-        ui.FMODEL_CoreProperties.__annotations__ = {}
-    enum_items = []
-    for i, scheme in enumerate(REGISTERED_SCHEMES):
-        bpy.utils.register_class(scheme.SCHEME_PROPS)
-        enum_items.append((scheme.SCHEME_ID, scheme.SCHEME_LABEL, scheme.SCHEME_DESC, scheme.SCHEME_ICON, i))
-        ui.FMODEL_CoreProperties.__annotations__[f"props_{scheme.SCHEME_ID.lower()}"] = bpy.props.PointerProperty(type=scheme.SCHEME_PROPS)
-    ui.FMODEL_CoreProperties.__annotations__['fix_scheme'] = bpy.props.EnumProperty(items=enum_items, default=REGISTERED_SCHEMES[0].SCHEME_ID)
-
-    # 2. 模块化注册
+    # 模块化注册
     core.register()
     ui.register()
     Fmodel.register()
     Assets.register()
     Universal_tools.register()
 
-    # 3. 注册自动触发器
+    # 注册自动触发器
     auto_handlers.register_handlers()
 
 
@@ -73,9 +50,6 @@ def unregister():
     Fmodel.unregister()
     ui.unregister()
     core.unregister()
-
-    for scheme in reversed(REGISTERED_SCHEMES):
-        bpy.utils.unregister_class(scheme.SCHEME_PROPS)
 
 
 if __name__ == "__main__":

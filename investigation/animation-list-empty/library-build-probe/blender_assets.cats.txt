@@ -1,3 +1,0 @@
-VERSION 1
-
-43a21c8c-1694-5b9e-9842-cb74c27a373b:SK_AlfDefault_U_Body01_Skeleton/ArtRes/Probe:Probe

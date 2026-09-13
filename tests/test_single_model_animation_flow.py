@@ -423,19 +423,6 @@ class WizardStateFieldContractTests(unittest.TestCase):
                     break
         self.assertTrue(found, "source_mode EnumProperty not found in WizardState")
 
-    def test_project_root_property_exists(self):
-        self.assertTrue(os.path.isfile(self.STATE_PATH))
-        with open(self.STATE_PATH, encoding="utf-8") as f:
-            source = f.read()
-        tree = ast.parse(source)
-        found = any(
-            isinstance(node, ast.AnnAssign)
-            and isinstance(node.target, ast.Name)
-            and node.target.id == "project_root"
-            for node in ast.walk(tree)
-        )
-        self.assertTrue(found, "project_root property not found in WizardState")
-
     def test_manual_source_dir_property_exists(self):
         self.assertTrue(os.path.isfile(self.STATE_PATH))
         with open(self.STATE_PATH, encoding="utf-8") as f:

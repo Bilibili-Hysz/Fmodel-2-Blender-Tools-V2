@@ -76,7 +76,7 @@ def _install_modules():
         setattr(import_helpers, name, _fake_class(name))
 
     panels = types.ModuleType(f"{MODULE_NAME}.panels")
-    for name in ("UEFORMAT_PT_Animation", "UEFORMAT_PT_Model"):
+    for name in ("UEFORMAT_PT_Panel",):
         setattr(panels, name, _fake_class(name))
 
     settings = types.ModuleType(f"{MODULE_NAME}.settings")
@@ -120,8 +120,7 @@ class UEFormatVendorHeadlessTests(unittest.TestCase):
         self.module.register(headless=True)
 
         registered_names = {cls.__name__ for cls in self.registered}
-        self.assertNotIn("UEFORMAT_PT_Animation", registered_names)
-        self.assertNotIn("UEFORMAT_PT_Model", registered_names)
+        self.assertNotIn("UEFORMAT_PT_Panel", registered_names)
         self.assertIn("UFImportUEModel", registered_names)
         self.assertIn("UFImportUEPose", registered_names)
         self.assertEqual(self.menu_callbacks, [])
@@ -135,8 +134,7 @@ class UEFormatVendorHeadlessTests(unittest.TestCase):
         self.module.register()
 
         registered_names = {cls.__name__ for cls in self.registered}
-        self.assertIn("UEFORMAT_PT_Animation", registered_names)
-        self.assertIn("UEFORMAT_PT_Model", registered_names)
+        self.assertIn("UEFORMAT_PT_Panel", registered_names)
         self.assertEqual(len(self.menu_callbacks), 1)
 
         self.module.unregister()

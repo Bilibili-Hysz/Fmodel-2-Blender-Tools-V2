@@ -110,6 +110,11 @@ def _execute_scan():
 @persistent
 def on_file_load_post(dummy):
     # Folder-only pipeline: file loading only reinitializes the normal runtime.
+    # Reset the depsgraph import cache so tokens from the previous file cannot
+    # mask re-imported objects in the new one.
+    global _first_run, _imported_objects_cache
+    _first_run = True
+    _imported_objects_cache = set()
     _schedule_lifecycle_timer(_init_environment, 0.8)
 
 

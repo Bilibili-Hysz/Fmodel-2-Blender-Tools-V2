@@ -49,25 +49,6 @@ EXCLUDED_DIRECTORY_NAMES = {
 }
 EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
 EXCLUDED_FILE_NAMES = {".DS_Store", "Thumbs.db"}
-EXCLUDED_RUNTIME_RELATIVE_PATHS = {
-    # Indexed Project / Project Assets are retained only for legacy .blend
-    # migration and must not enter the active Folder-only installation.
-    "fmodel/project_assets.py",
-    "fmodel/pipeline/project_index_controller.py",
-    "core/project_index.py",
-    "core/project_index_service.py",
-    "core/project_index_worker.py",
-    # UEFormat-only boundary: keep historical source available in the repo,
-    # but do not copy inactive PSK/PSA/glTF/FBX operators or PSK schemes into
-    # the Blender runtime payload.
-    "fmodel/importers/animation/operator_anim_psa.py",
-    "fmodel/importers/model/operator_model_gltf.py",
-    "fmodel/importers/model/operator_model_psk.py",
-    "fmodel/importers/export/operator_export_fbx.py",
-    "fmodel/importers/export/operator_export_gltf.py",
-    "universal_tools/mesh/scheme_psk_auto.py",
-    "universal_tools/mesh/scheme_psk_mesh_fix.py",
-}
 
 
 @dataclass(frozen=True)
@@ -106,12 +87,6 @@ def default_addons_directory(blender_version: str = DEFAULT_BLENDER_VERSION) -> 
 def _is_excluded(path: Path) -> bool:
     excluded_parts = {part.lower() for part in path.parts}
     if any(name.lower() in excluded_parts for name in EXCLUDED_DIRECTORY_NAMES):
-        return True
-    normalized = path.as_posix().lower()
-    if any(
-        normalized == relative or normalized.endswith("/" + relative)
-        for relative in EXCLUDED_RUNTIME_RELATIVE_PATHS
-    ):
         return True
     return path.name in EXCLUDED_FILE_NAMES or path.suffix.lower() in EXCLUDED_SUFFIXES
 

@@ -132,37 +132,6 @@ class WizardState(bpy.types.PropertyGroup):
         default='MANUAL',
         update=_sync_animation_source,
     )
-    # Legacy Indexed Project fields are retained only so old .blend files
-    # can be opened and normalized; they are not read by the active pipeline.
-    project_root: bpy.props.StringProperty(
-        name="项目根目录", subtype='DIR_PATH', update=_sync_animation_source
-    )
-    project_index_state: bpy.props.StringProperty(name="动画索引状态", default="missing")
-    project_index_schema_version: bpy.props.IntProperty(name="动画索引架构", default=0)
-    project_index_generation: bpy.props.IntProperty(name="动画索引生成", default=0)
-    project_index_animation_count: bpy.props.IntProperty(name="已索引动画", default=0)
-    project_index_match_count: bpy.props.IntProperty(name="匹配动画", default=0)
-    project_index_last_scan_ns: bpy.props.StringProperty(name="动画索引上次扫描", default="")
-    project_index_message: bpy.props.StringProperty(name="动画索引消息", default="")
-    project_index_job_id: bpy.props.StringProperty(
-        name="动画索引任务", default="", options={'SKIP_SAVE'}
-    )
-    project_index_request_generation: bpy.props.IntProperty(
-        name="动画索引请求代次", default=0, options={'SKIP_SAVE'}
-    )
-    project_index_progress: bpy.props.FloatProperty(
-        name="动画索引进度", default=0.0, min=0.0, max=1.0,
-        subtype='FACTOR', options={'SKIP_SAVE'},
-    )
-    project_index_progress_phase: bpy.props.StringProperty(
-        name="动画索引进度阶段", default="", options={'SKIP_SAVE'}
-    )
-    project_index_progress_path: bpy.props.StringProperty(
-        name="动画索引进度路径", default="", options={'SKIP_SAVE'}
-    )
-    project_index_cancel_requested: bpy.props.BoolProperty(
-        name="已请求取消动画索引", default=False, options={'SKIP_SAVE'}
-    )
     manual_source_dir: bpy.props.StringProperty(
         name="手动源目录", subtype='DIR_PATH', update=_sync_animation_source
     )
@@ -172,20 +141,6 @@ class WizardState(bpy.types.PropertyGroup):
     skeleton_filter: bpy.props.StringProperty(
         name="骨架过滤", default="", update=_sync_animation_source
     )
-
-    # Legacy indexed-selection fields; inactive in Folder-only mode.
-    indexed_selection_mode: bpy.props.EnumProperty(
-        name="索引选择来源",
-        items=[
-            ('NONE', "None", "No indexed selection"),
-            ('AUTO_PROJECT', "Project Default", "Generated from Project Default"),
-            ('EXPLICIT', "Indexed Selector", "Selected in Project Assets"),
-        ],
-        default='NONE',
-    )
-    indexed_project_root: bpy.props.StringProperty(name="索引项目目录", subtype='DIR_PATH')
-    indexed_skeleton: bpy.props.StringProperty(name="索引骨架", default="")
-    indexed_selected_paths: bpy.props.StringProperty(name="索引动画路径", default="[]")
 
     # Step 3: 扫描结果
     scan_completed: bpy.props.BoolProperty(default=False)

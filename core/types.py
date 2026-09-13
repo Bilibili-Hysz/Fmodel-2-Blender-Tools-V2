@@ -594,10 +594,7 @@ class PipelineConfig:
     library_name: str = "Asset_Library"
     source_type: str = UEFORMAT_SOURCE_TYPE
     import_mode: str = UEFORMAT_IMPORT_MODE
-    
-    # Unity动画特有配置
-    unity_skip_processed: bool = True
-    
+
     # 导入选项
     import_scale: float = 0.01
     rotation_only: bool = False

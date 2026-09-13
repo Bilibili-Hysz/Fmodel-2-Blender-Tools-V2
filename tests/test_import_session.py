@@ -11,7 +11,7 @@ def test_import_session_tracks_success_and_created_counts():
     session = ImportSession(
         "UEModel",
         source_paths=("C:/exports/hero.uemodel",),
-        vendor_version="1.2.0",
+        vendor_version="0.10.0",
     )
     session.set_phase("import_model")
     session.record_success("C:/exports/hero.uemodel")
@@ -25,7 +25,7 @@ def test_import_session_tracks_success_and_created_counts():
     assert data["schema_version"] == 1
     assert data["started_at_utc"].endswith("Z")
     assert data["finished_at_utc"].endswith("Z")
-    assert json.loads(session.to_json())["vendor_version"] == "1.2.0"
+    assert json.loads(session.to_json())["vendor_version"] == "0.10.0"
 
 
 def test_import_session_carries_optional_export_identity_and_policy():

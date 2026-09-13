@@ -8,9 +8,6 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 UEFORMAT = ROOT / "Fmodel" / "importers" / "animation" / "operator_anim_ueformat.py"
-PSA = ROOT / "Fmodel" / "importers" / "animation" / "operator_anim_psa.py"
-GLTF = ROOT / "Fmodel" / "importers" / "export" / "operator_export_gltf.py"
-FBX = ROOT / "Fmodel" / "importers" / "export" / "operator_export_fbx.py"
 MODEL_OPERATORS = ROOT / "Assets" / "Models" / "operators.py"
 
 
@@ -86,98 +83,6 @@ class BatchResultTests(unittest.TestCase):
                 operator = self._ueformat_operator(name, {"bad"})
                 context = SimpleNamespace(active_object=FakeObject("Rig", "ARMATURE"))
                 self.assertEqual(operator.execute(context), {"FINISHED"})
-
-    def test_psa_cancels_when_every_file_fails_and_finishes_when_partial(self):
-        for failures, expected in (({"good", "bad"}, {"CANCELLED"}), ({"bad"}, {"FINISHED"})):
-            bpy = SimpleNamespace(
-                types=SimpleNamespace(Operator=FakeOperator),
-                props=SimpleNamespace(StringProperty=lambda **_kwargs: None, CollectionProperty=lambda **_kwargs: None),
-                data=SimpleNamespace(actions=[]),
-            )
-            bpy.ops = SimpleNamespace(psa=SimpleNamespace(import_file=lambda filepath: (
-                (_ for _ in ()).throw(RuntimeError("bad file")) if filepath in failures else None
-            )))
-            cls = load_class(PSA, "ANIM_OT_ImportPSA", {
-                "bpy": bpy, "os": __import__("os"), "tempfile": __import__("tempfile"), "ImportHelper": object,
-            })
-            operator = cls()
-            operator.directory = ""
-            operator.files = [SimpleNamespace(name="good"), SimpleNamespace(name="bad")]
-            operator.create_safe_psa = lambda path: (path, [])
-            context = SimpleNamespace(active_object=FakeObject("Rig", "ARMATURE"))
-            with self.subTest(failures=failures):
-                self.assertEqual(operator.execute(context), expected)
-
-
-class IndividualExportSelectionTests(unittest.TestCase):
-    def _run_export(self, path, class_name, export_name, failures):
-        first = FakeObject("First", selected=True)
-        second = FakeObject("Second", selected=True)
-        ignored = FakeObject("Camera", "CAMERA", selected=True)
-        objects = [first, second, ignored]
-        active = SimpleNamespace(value=second)
-
-        def select_all(action):
-            self.assertEqual(action, "DESELECT")
-            for obj in objects:
-                obj.selected = False
-
-        calls = []
-        def export(**kwargs):
-            calls.append(kwargs)
-            if len(calls) in failures:
-                raise RuntimeError("export failure")
-
-        bpy = SimpleNamespace(
-            types=SimpleNamespace(Operator=FakeOperator),
-            props=SimpleNamespace(StringProperty=lambda **_kwargs: None, EnumProperty=lambda **_kwargs: None,
-                                  BoolProperty=lambda **_kwargs: None, FloatProperty=lambda **_kwargs: None),
-            ops=SimpleNamespace(object=SimpleNamespace(select_all=select_all), export_scene=SimpleNamespace(**{export_name: export})),
-        )
-        cls = load_class(path, class_name, {"bpy": bpy, "os": __import__("os"), "ExportHelper": object})
-        operator = cls()
-        operator.filepath = "C:/exports/all.glb"
-        operator.export_individual = True
-        operator.export_animations = True
-        operator.export_apply = True
-        if class_name.endswith("GLTF_Batch"):
-            operator.export_format = "GLB"
-            operator.export_skins = True
-            operator.export_morph = True
-            operator.export_yup = True
-        else:
-            operator.export_morph = True
-            operator.export_scale = 1.0
-            operator.export_axis_forward = "-Z"
-            operator.export_axis_up = "Y"
-
-        context = SimpleNamespace(
-            selected_objects=objects,
-            view_layer=SimpleNamespace(objects=SimpleNamespace(active=None)),
-        )
-        context.view_layer.objects.active = active.value
-        result = operator.execute(context)
-        expected = {"CANCELLED"} if len(failures) == 2 else {"FINISHED"}
-        self.assertEqual(result, expected)
-        if failures == {1, 2}:
-            self.assertIn(({'ERROR'}, "所有对象导出失败"), operator.reports)
-        self.assertEqual([obj.selected for obj in objects], [True, True, True])
-        self.assertIs(context.view_layer.objects.active, active.value)
-
-    def test_gltf_restores_selection_and_active_after_success_and_failure(self):
-        self._run_export(GLTF, "EXPORT_OT_GLTF_Batch", "gltf", set())
-        self._run_export(GLTF, "EXPORT_OT_GLTF_Batch", "gltf", {2})
-
-    def test_gltf_cancels_when_every_individual_export_fails(self):
-        self._run_export(GLTF, "EXPORT_OT_GLTF_Batch", "gltf", {1, 2})
-
-    def test_fbx_restores_selection_and_active_after_success_and_failure(self):
-        self._run_export(FBX, "EXPORT_OT_FBX_Batch", "fbx", set())
-        self._run_export(FBX, "EXPORT_OT_FBX_Batch", "fbx", {2})
-
-    def test_fbx_cancels_when_every_individual_export_fails(self):
-        self._run_export(FBX, "EXPORT_OT_FBX_Batch", "fbx", {1, 2})
-
 
 class ModelSaveCleanupTests(unittest.TestCase):
     def _save_model(self, fail_write, fail_cleanup=False):

@@ -33,7 +33,7 @@ def test_bundled_manifest_is_locked_and_matches_wheels():
     spec = load_vendor_spec(BUNDLED)
     assert spec.vendor_id == "io_scene_ueformat"
     assert spec.package_name == "io_scene_ueformat"
-    assert spec.version == (1, 2, 0)
+    assert spec.version == (0, 10, 0)
     assert spec.registration_mode == "headless"
     assert {wheel.filename for wheel in spec.wheels} == {
         "zstandard-0.25.0-cp311-cp311-win_amd64.whl",

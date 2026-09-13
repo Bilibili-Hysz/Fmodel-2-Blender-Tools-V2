@@ -150,24 +150,6 @@ class AutoHandlerLifecycleTests(unittest.TestCase):
             else:
                 sys.modules[name] = module
 
-    @unittest.skip("Indexed Project lifecycle retired; kept as historical compatibility coverage")
-    def test_project_index_refresh_adapter_calls_compatibility_bridge(self):
-        scene = types.SimpleNamespace(pipeline_wizard=object())
-        refresh = mock.Mock(return_value={"state": "ready"})
-        fmodel = types.ModuleType("Fmodel")
-        fmodel.__path__ = []
-        project_assets = types.ModuleType("Fmodel.project_assets")
-        project_assets.refresh_pipeline_project_index = refresh
-
-        with mock.patch.dict(
-            sys.modules,
-            {"Fmodel": fmodel, "Fmodel.project_assets": project_assets},
-        ):
-            result = self.module._refresh_pipeline_project_index_state(scene)
-
-        self.assertEqual(result, {"state": "ready"})
-        refresh.assert_called_once_with(scene)
-
     def test_init_environment_does_not_refresh_retired_pipeline_index(self):
         scene = types.SimpleNamespace(pipeline_wizard=object())
         self.module.bpy.context.scene = scene
@@ -533,28 +515,6 @@ class AutoHandlerLifecycleTests(unittest.TestCase):
         self.assertIn("lacks", status["message"])
 
 
-    @unittest.skip("Indexed Project lifecycle retired; kept as historical compatibility coverage")
-    def test_file_load_cancels_previous_project_index_job_before_refresh(self):
-        state = types.SimpleNamespace(project_index_state="scanning")
-        self.module.bpy.context.scene = types.SimpleNamespace(pipeline_wizard=state)
-        controller = types.SimpleNamespace(
-            cancel_all_project_jobs=mock.Mock(),
-            reset_project_job_state=mock.Mock(),
-        )
-        fmodel = types.ModuleType("Fmodel")
-        fmodel.__path__ = []
-        pipeline = types.ModuleType("Fmodel.Pipeline")
-        pipeline.__path__ = []
-        pipeline.project_index_controller = controller
-        with mock.patch.dict(sys.modules, {
-            "Fmodel": fmodel,
-            "Fmodel.Pipeline": pipeline,
-            "Fmodel.Pipeline.project_index_controller": controller,
-        }):
-            self.module._cancel_loaded_file_project_index_jobs()
-
-        controller.cancel_all_project_jobs.assert_called_once_with()
-        controller.reset_project_job_state.assert_called_once_with(state)
     def test_current_ueformat_requires_fmodel_material_and_scene_surfaces(self):
         current = _fake_ueformat_module()
         self.assertTrue(self.module._is_current_ueformat_addon(current))

@@ -5,11 +5,13 @@ import tempfile
 
 from scripts.sync_to_blender_addon import (
     RUNTIME_DIRECTORIES,
-    EXCLUDED_RUNTIME_RELATIVE_PATHS,
     RUNTIME_FILES,
     iter_runtime_files,
     sync_runtime,
 )
+
+
+SOURCE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _make_fixture(root: Path) -> None:
@@ -25,10 +27,6 @@ def _make_fixture(root: Path) -> None:
     (root / "vendor" / "__pycache__" / "ignored.pyc").write_bytes(b"ignored")
     (root / "Shaders" / "Backup").mkdir()
     (root / "Shaders" / "Backup" / "ignored.md").write_text("ignored", encoding="utf-8")
-    for relative in EXCLUDED_RUNTIME_RELATIVE_PATHS:
-        retired = root / relative
-        retired.parent.mkdir(parents=True, exist_ok=True)
-        retired.write_text("retired" + chr(92) + "n", encoding="utf-8")
     (root / "docs").mkdir()
     (root / "docs" / "ignored.md").write_text("ignored", encoding="utf-8")
 
@@ -44,10 +42,9 @@ def test_runtime_file_selection_excludes_caches_and_backups():
     assert all("__pycache__" not in path for path in selected)
     assert all("Backup" not in path for path in selected)
     assert all(not path.startswith("docs/") for path in selected)
-    assert not (set(EXCLUDED_RUNTIME_RELATIVE_PATHS) & selected)
 
 
-def test_runtime_file_selection_excludes_retired_format_sources():
+def test_retired_format_sources_are_removed_from_the_source_tree():
     retired = {
         "Fmodel/importers/animation/operator_anim_psa.py",
         "Fmodel/importers/model/operator_model_gltf.py",
@@ -56,16 +53,21 @@ def test_runtime_file_selection_excludes_retired_format_sources():
         "Fmodel/importers/export/operator_export_gltf.py",
         "Universal_tools/mesh/scheme_psk_auto.py",
         "Universal_tools/mesh/scheme_psk_mesh_fix.py",
+        "Universal_tools/skeleton/scheme_auto.py",
+        "Universal_tools/skeleton/scheme_copy.py",
+        "Universal_tools/mesh/scheme_morph_merge.py",
+        "core/project_index.py",
+        "core/project_index_service.py",
+        "core/project_index_worker.py",
+        "Fmodel/project_assets.py",
+        "Fmodel/Pipeline/project_index_controller.py",
+        "Assets/Utils/incremental_preview.py",
+        "Assets/Utils/link_existing_library.py",
     }
-    excluded = {path.lower() for path in EXCLUDED_RUNTIME_RELATIVE_PATHS}
-    assert {path.lower() for path in retired} <= excluded
-
-    with tempfile.TemporaryDirectory() as directory:
-        source = Path(directory)
-        _make_fixture(source)
-        selected = {path.relative_to(source).as_posix() for path in iter_runtime_files(source)}
-
-    assert not ({path.lower() for path in retired} & {path.lower() for path in selected})
+    for relative in retired:
+        assert not (SOURCE_ROOT / relative).exists(), relative
+    assert not (SOURCE_ROOT / "investigation").exists()
+    assert not (SOURCE_ROOT / "Shaders" / "Backup").exists()
 
 
 def test_sync_replaces_stale_target_and_keeps_a_backup():
@@ -105,4 +107,3 @@ def test_sync_refuses_a_target_outside_the_addons_directory():
         else:
             raise AssertionError("expected unsafe package target to be rejected")
         assert not outside.exists()
-''
