@@ -5,7 +5,7 @@ import struct
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, Sequence
 
-from .protocol import (
+from .runtime_protocol import (
     MAX_FMODEL_IDENTITY_PATH_BYTES,
     _read_strict_identity_fstring,
     _validate_logical_unreal_path,
@@ -148,5 +148,6 @@ def compute_skeleton_layout_hash(bones: Sequence[tuple[str, int] | _BoneLike]) -
         buffer.extend(name_bytes)
         buffer.extend(struct.pack("<i", parent_index))
     return hashlib.sha256(buffer).digest()
+
 
 

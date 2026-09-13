@@ -2,10 +2,10 @@
   "schema_version": 1,
   "vendor_id": "io_scene_ueformat",
   "package_name": "io_scene_ueformat",
-  "version": "1.2.0",
-  "source_repository": "UEFormat FModel fork",
-  "source_commit": "f0deb75",
-  "source_snapshot": "fmodel_working_tree_snapshot",
+  "version": "0.10.0",
+  "source_repository": "h4lfheart/UEFormat FModel edition",
+  "source_commit": "a7462ea7400dea4ac4dbda881b1477385f956d84",
+  "source_snapshot": "canonical_v10_source_migration_worktree_2026-09-01",
   "registration_mode": "headless",
   "capabilities": [
     "uemodel",
@@ -24,28 +24,23 @@
     "**/*.pyo",
     "**/*.pyd"
   ],
-  "file_count": 33,
-  "tree_sha256": "8b31b3a685dc67d3b484b368aa12fb2c81fb4aa5d0309da2219acd20b8cf6453",
+  "file_count": 73,
+  "tree_sha256": "8027d2864a74650ad452d88c3a494876c8c0f4534f6c85772fbfd5d3987279d2",
   "files": [
     {
       "path": "README.md",
-      "size": 3255,
-      "sha256": "263e367aa7eb0184ee97c2c2bd7cb43d9936a3c3c7bd319838523ba82360410d"
-    },
-    {
-      "path": "io_scene_ueformat/LICENSE.txt",
-      "size": 1198,
-      "sha256": "d5ccb0e63a23263d0803ce21eac25bf2b11cfdaa22a87e9eb03ae37d3fb4554f"
+      "size": 3625,
+      "sha256": "d13f7695d13a6b45643fe4f71d4e5f6cb755e201fc212b3faed17d47034db923"
     },
     {
       "path": "io_scene_ueformat/__init__.py",
-      "size": 854,
-      "sha256": "c85c9f81506cb491ea0f9a63946e673cc826ad83a39b8509db50d03a00ba2fc2"
+      "size": 1317,
+      "sha256": "d825148a02baf03dfec3537f9d9922ced586a21e84768826bb36c6c0b2d1da22"
     },
     {
       "path": "io_scene_ueformat/blender_manifest.toml",
-      "size": 501,
-      "sha256": "ca8365fba4299bdcda1501bf2c4e51b094a7dab8109df04493b42c643495ee07"
+      "size": 508,
+      "sha256": "589852402ee91c2df9096f98a91b8a808a595c2a55dcfce92f7efe505281e5ea"
     },
     {
       "path": "io_scene_ueformat/importer/__init__.py",
@@ -54,68 +49,233 @@
     },
     {
       "path": "io_scene_ueformat/importer/animation_time.py",
-      "size": 1820,
-      "sha256": "0718b7ddb4d6acc7df706553ffba49c2e4f8ae8e48e6b9ae12a32e1d23da652b"
+      "size": 2305,
+      "sha256": "604081c1f0858d3bc1b37f95ef5f71c96bd7538f057de3817eb63c6cbe8dac3f"
     },
     {
-      "path": "io_scene_ueformat/importer/classes.py",
-      "size": 40144,
-      "sha256": "05867dc50f0515eda63211dcde8b2890c732005f215a3d8893739d6c2e0bcfa4"
+      "path": "io_scene_ueformat/importer/archive/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "io_scene_ueformat/importer/archive/reader.py",
+      "size": 5788,
+      "sha256": "a0879a0328cdb757befcb1ada09f613e2adb9097e8c80ccdd9688dd34411f5db"
+    },
+    {
+      "path": "io_scene_ueformat/importer/constants.py",
+      "size": 106,
+      "sha256": "3fe7efe865231f9e37d3b98235d5cddac63176374ca654f847bc3bb63134e676"
+    },
+    {
+      "path": "io_scene_ueformat/importer/create/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "io_scene_ueformat/importer/create/anim.py",
+      "size": 11895,
+      "sha256": "5a75a47b2543f92820b2113153922239b9c981c4781822b51b975978489e451d"
+    },
+    {
+      "path": "io_scene_ueformat/importer/create/model.py",
+      "size": 9289,
+      "sha256": "4dcd4f31cf2c98f56d2a8b611417d40baaf61981d77858bb457bd36aba787209"
+    },
+    {
+      "path": "io_scene_ueformat/importer/create/pose.py",
+      "size": 10803,
+      "sha256": "29e7717e70875de4acf52072d614fc23da12e8fd0cd2859b9ba3ff11a88e1080"
+    },
+    {
+      "path": "io_scene_ueformat/importer/create/skeleton.py",
+      "size": 9738,
+      "sha256": "11fee114b856d9d1075fed1244f716c19977285e0301d79cb02228de7314f027"
+    },
+    {
+      "path": "io_scene_ueformat/importer/create/space.py",
+      "size": 2971,
+      "sha256": "63ef352579f9c879859e901956f06916f90d667dca9684f289ed3d5e4a228b6e"
     },
     {
       "path": "io_scene_ueformat/importer/creation_tracker.py",
-      "size": 2415,
-      "sha256": "1d45c95ca33475ef1f0f09a5f19cfb98ee75bc55366d637797f80486a9e604a9"
+      "size": 5432,
+      "sha256": "eb2a43f13743433e1f8952363a9cc572458a1dec5d76929b7095dd79a5700e63"
     },
     {
-      "path": "io_scene_ueformat/importer/fmodel.py",
-      "size": 23742,
-      "sha256": "be398622670d813d5436a4dc0f823cc72535835ffa8f9a15c23a1f8d758167fd"
+      "path": "io_scene_ueformat/importer/deserialize/__init__.py",
+      "size": 89,
+      "sha256": "ee490b8157bd62fc01deffd3b011fb78a64a1b58addb5ce545bbf8601cb5615a"
     },
     {
-      "path": "io_scene_ueformat/importer/identity.py",
-      "size": 5797,
-      "sha256": "37defbd2be28b440b1f6516dbb98deff07f9cefb0bdfb0a0a201a294176e4d63"
+      "path": "io_scene_ueformat/importer/deserialize/anim.py",
+      "size": 2592,
+      "sha256": "66a024e0529c9af7d1b7b164ffa8a090f7332d0af0bcfd85a5a5598dc0832a81"
+    },
+    {
+      "path": "io_scene_ueformat/importer/deserialize/attributes.py",
+      "size": 780,
+      "sha256": "f4e10e73286265a55c503922ef3ef4efbae1633bd90d26f0d9fa65a74b4f71a5"
+    },
+    {
+      "path": "io_scene_ueformat/importer/deserialize/lod.py",
+      "size": 3574,
+      "sha256": "2004aecd37ad47386d089140cce3a3a89cce46cd11ea927cff1da0ec52ce1c2e"
+    },
+    {
+      "path": "io_scene_ueformat/importer/deserialize/model.py",
+      "size": 1623,
+      "sha256": "62ba7cc85125197d3e9476313f86977d7e5df2a2594af2dc8fa927c43cb38e8b"
+    },
+    {
+      "path": "io_scene_ueformat/importer/deserialize/pose.py",
+      "size": 1766,
+      "sha256": "e7f9b2bc1c8026789efa4ff08e669085d9b8ef28e082fa9a71c93aa8de1cdb9c"
+    },
+    {
+      "path": "io_scene_ueformat/importer/deserialize/skeleton.py",
+      "size": 1795,
+      "sha256": "8184ec13a9c45ca2a546392c0026aa5f1a438a15d3d08568e36b54dfabcec449"
+    },
+    {
+      "path": "io_scene_ueformat/importer/dto/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "io_scene_ueformat/importer/dto/anim.py",
+      "size": 1550,
+      "sha256": "143fc97c57a5df247d57715e4e833494aea021e3f0842bae32e8c84cd112c826"
+    },
+    {
+      "path": "io_scene_ueformat/importer/dto/model.py",
+      "size": 1768,
+      "sha256": "223c1c1ffd77b17f2d3d5e131a3048c973ddf9def8d9ece76b6b64587605890d"
+    },
+    {
+      "path": "io_scene_ueformat/importer/dto/pose.py",
+      "size": 772,
+      "sha256": "64f3e3a13354d0043e30794ba895c15c5cb6c43b4b6f0cc2e22c48d9e8ecb1a6"
+    },
+    {
+      "path": "io_scene_ueformat/importer/dto/skeleton.py",
+      "size": 987,
+      "sha256": "9e008079a076ba45ac718aa930b45ba2816cef9db5a0c9f11a3f4c056ac32816"
+    },
+    {
+      "path": "io_scene_ueformat/importer/extensions/__init__.py",
+      "size": 304,
+      "sha256": "e47b9f9df081e9099e977f69125e65ce0717427f413fb6f6f4fd190eb0972c8c"
+    },
+    {
+      "path": "io_scene_ueformat/importer/extensions/fmodel/__init__.py",
+      "size": 2028,
+      "sha256": "a77cb1009e548620450de760edcb55aeef9315c16bcf69633831092f71a54c5e"
+    },
+    {
+      "path": "io_scene_ueformat/importer/extensions/fmodel/attributes.py",
+      "size": 3470,
+      "sha256": "ae9e1035a0b879d550b73dc31e41627081510bd7646f18986967a85991789adb"
+    },
+    {
+      "path": "io_scene_ueformat/importer/extensions/fmodel/contract.py",
+      "size": 1780,
+      "sha256": "569bef8149cc6002c2dcabf84a94bd4b069e9254e5682f42829566808ca11b45"
+    },
+    {
+      "path": "io_scene_ueformat/importer/extensions/fmodel/envelope.py",
+      "size": 1547,
+      "sha256": "0668c0632c61cc99fa34c064a1450acd074ce407267c31996539c2d6950fb11e"
+    },
+    {
+      "path": "io_scene_ueformat/importer/extensions/fmodel/identity.py",
+      "size": 3829,
+      "sha256": "56db2b6a50cb252f664e3d59e18837437aca6f2b6209abc4661d3c212872015d"
+    },
+    {
+      "path": "io_scene_ueformat/importer/extensions/fmodel/legacy.py",
+      "size": 4579,
+      "sha256": "2aae2c1ce0a6f193b449687161a1482996831d702111f69e32ec86abbf32c5f2"
+    },
+    {
+      "path": "io_scene_ueformat/importer/extensions/fmodel/materials.py",
+      "size": 18489,
+      "sha256": "20f8b53a7aeac7ff0ae299b0691384fbad4b6929a81ce4d57a181d8f128f8b17"
+    },
+    {
+      "path": "io_scene_ueformat/importer/extensions/fmodel/routing.py",
+      "size": 2095,
+      "sha256": "3ace28402ca1e6829ebb26916edaa2a0acf07b2eb36ffbd07ad1ee4d837ccffc"
+    },
+    {
+      "path": "io_scene_ueformat/importer/fmodel_payload.py",
+      "size": 1420,
+      "sha256": "7354af90488ab2301a70de339fc2fa2228f2f8258e670868cafd2887ad806ee1"
+    },
+    {
+      "path": "io_scene_ueformat/importer/fmodel_v10_adapter.py",
+      "size": 10475,
+      "sha256": "c58e6df356f7a5ad6da68273828015553cbd57d2c7fc39bd1cc45866b91a50dd"
+    },
+    {
+      "path": "io_scene_ueformat/importer/import_context.py",
+      "size": 16586,
+      "sha256": "ecefb1bfe3b8d14387b32dcb7c3b98fd029cc02454bee090490af706ada76dd2"
+    },
+    {
+      "path": "io_scene_ueformat/importer/legacy/__init__.py",
+      "size": 720,
+      "sha256": "dfe69709cc005763330e503d9ae5bcdc0f72b90c34c87b80346713663c69c397"
+    },
+    {
+      "path": "io_scene_ueformat/importer/legacy/anim.py",
+      "size": 2533,
+      "sha256": "00ad62c79b87c2cb9318ff310a0dc5affea14c6120e4d666e78a78c1accc6404"
+    },
+    {
+      "path": "io_scene_ueformat/importer/legacy/chunks.py",
+      "size": 690,
+      "sha256": "2e6f9902c5933595730b78595909a53c1a5ec588c81bd9e3b645c8b330cd024b"
+    },
+    {
+      "path": "io_scene_ueformat/importer/legacy/lod.py",
+      "size": 3145,
+      "sha256": "916180d6ae4faf4b28fac098b29f5ff660ef6befc43e3bb275c6ee10a7736208"
+    },
+    {
+      "path": "io_scene_ueformat/importer/legacy/model.py",
+      "size": 1364,
+      "sha256": "bde0baab0d1ea0f3ee9a14b2a27f4ed8393a527d4297e3aa2333f7525452e448"
+    },
+    {
+      "path": "io_scene_ueformat/importer/legacy/model_pre_lod.py",
+      "size": 3171,
+      "sha256": "c7e072ea2cd98813c6a368a2301c7228fb48afa12b1741bb8cde5d16ab711f72"
+    },
+    {
+      "path": "io_scene_ueformat/importer/legacy/pose.py",
+      "size": 1496,
+      "sha256": "36a1bb4ddc81a75e71eb8db8f84af93ad7eff46a586f554998aa6300d758b0ef"
+    },
+    {
+      "path": "io_scene_ueformat/importer/legacy/skeleton.py",
+      "size": 1776,
+      "sha256": "261a40a315026329b7021342e433d60158af4186183a700d771ecee76b6c16c7"
     },
     {
       "path": "io_scene_ueformat/importer/logic.py",
-      "size": 45650,
-      "sha256": "7541487c5af436c24f9dc37b3b03312d6e3f1985b4bf976b0f5357f970b956f7"
-    },
-    {
-      "path": "io_scene_ueformat/importer/material_builder.py",
-      "size": 35444,
-      "sha256": "f86bf4d8df5123bb82ea7562923bed0b4fda31447d57c150bfb57919e12d9414"
-    },
-    {
-      "path": "io_scene_ueformat/importer/material_images.py",
-      "size": 6214,
-      "sha256": "431123d4c1d346a13fd2ae6e5c601ecaf37c6acbd6fb04fb9b68dd1d3bd8d22c"
-    },
-    {
-      "path": "io_scene_ueformat/importer/materials.py",
-      "size": 14772,
-      "sha256": "5cac804107c9622035e40a39ff7771f073d39de26d5750123b2a4e28f1548109"
+      "size": 958,
+      "sha256": "5492b5ce4d60582ea9bd073cc3eaecc21c6f600930655c58240e1a134b690062"
     },
     {
       "path": "io_scene_ueformat/importer/mesh_batch.py",
-      "size": 1685,
-      "sha256": "71f1947ba099b986f06653e715bcff9f65f97e0bd4aa3ac8908ee2d635285e74"
+      "size": 1645,
+      "sha256": "fc5ac90db1b113525bf68ebed8705a57763e0a4fb2cee1e2e039bdc1dee9c171"
     },
     {
       "path": "io_scene_ueformat/importer/morph_batch.py",
-      "size": 1442,
-      "sha256": "7b9e2e0f11daf92bb016846318189ff11a08cbfca774d1ef9ebab44739b24f27"
-    },
-    {
-      "path": "io_scene_ueformat/importer/protocol.py",
-      "size": 8368,
-      "sha256": "bbe02eb7134e51f5761b6561575fe55b875ba32f23165bf16d488292bed9f0e5"
-    },
-    {
-      "path": "io_scene_ueformat/importer/reader.py",
-      "size": 5217,
-      "sha256": "5f224c6eda24948eb47d71ac30ff2f7930979cea2c44326ca621037f5575f915"
+      "size": 1409,
+      "sha256": "5dc1007c8508408b4673795f866f1619ab401ddd2432471f56cb3114867863eb"
     },
     {
       "path": "io_scene_ueformat/importer/reorient_utils.py",
@@ -123,19 +283,59 @@
       "sha256": "6295daf9dce3818da2d3dae0c0faf41cc91e0aea088b8a44f6516af823500acb"
     },
     {
-      "path": "io_scene_ueformat/importer/resources.py",
-      "size": 17992,
-      "sha256": "c4fac698a1ef4bfaa198e3dc3ba3a50d868e89193d3d088c4a82435d0bbba337"
+      "path": "io_scene_ueformat/importer/runtime_fmodel.py",
+      "size": 25726,
+      "sha256": "88c24071f9ba63b31a4d7d82ffdb104415a0a32ca80d1658f3e536329cf729fe"
     },
     {
-      "path": "io_scene_ueformat/importer/topology.py",
-      "size": 5225,
-      "sha256": "655b85fee9c3ba84485b3b22c2cff50b1ae449bfdfc4b7309ceb2351d047f375"
+      "path": "io_scene_ueformat/importer/runtime_identity.py",
+      "size": 5959,
+      "sha256": "a7c3886d196da23040be110918b39cae0f7d3fc949c7116433641025624b1331"
+    },
+    {
+      "path": "io_scene_ueformat/importer/runtime_material_builder.py",
+      "size": 36438,
+      "sha256": "6b509d36cd24eeec82a5275a61ff6c61a75eeb891383053ee1355b519a306156"
+    },
+    {
+      "path": "io_scene_ueformat/importer/runtime_material_images.py",
+      "size": 7444,
+      "sha256": "6731cb2d2816d8b2d5e74d2ed792d9486e6b957eb0f9f810906b13dc249a0be5"
+    },
+    {
+      "path": "io_scene_ueformat/importer/runtime_materials.py",
+      "size": 15170,
+      "sha256": "d370ed532550ce003cac3acd98a75894d9bed2dedc2d79ed15c1cb747cda9954"
+    },
+    {
+      "path": "io_scene_ueformat/importer/runtime_protocol.py",
+      "size": 8594,
+      "sha256": "1b5c9ce08f0382120589c504cf48c8b7a715104f7e5aba9d6b3b8327548d6f9a"
+    },
+    {
+      "path": "io_scene_ueformat/importer/runtime_resources.py",
+      "size": 18518,
+      "sha256": "6879d352426ccec0303aefd77612e2bbc8d25ccd974e07890f35b989547af9a0"
     },
     {
       "path": "io_scene_ueformat/importer/utils.py",
-      "size": 5867,
-      "sha256": "905164a35b0ca73f28f04ef1feead6309426c93816f115b3596c95586c07043f"
+      "size": 9288,
+      "sha256": "462071238439bb68dd5a2db9d70e53cb82271d9cfeee36ddd2c94dbab1a8f5cd"
+    },
+    {
+      "path": "io_scene_ueformat/importer/validation.py",
+      "size": 9954,
+      "sha256": "4809419b359cde1adaf69eeaa32937bda474bbb313cdf0c0fcdf9b8460b14726"
+    },
+    {
+      "path": "io_scene_ueformat/importer/version.py",
+      "size": 504,
+      "sha256": "e3b1cbb642520d5d2e967287024b9e04550ceaea17625d2845c316030a61a7e7"
+    },
+    {
+      "path": "io_scene_ueformat/importer/wire.py",
+      "size": 4376,
+      "sha256": "37aa93911b8a35753a4b5621adc38db174dfa94c52a9cc1f1933f3fcf6de3864"
     },
     {
       "path": "io_scene_ueformat/logging.py",
@@ -144,28 +344,28 @@
     },
     {
       "path": "io_scene_ueformat/op/__init__.py",
-      "size": 2850,
-      "sha256": "9cb98efd1572bbc63de49f2ec0cb5a2e6af2e1fa55bcb27ce48a9da905bfb6f3"
+      "size": 2114,
+      "sha256": "f8306182c35ae3e611753d6dc1201a6044a3407cb869266818e182a18e54f221"
     },
     {
       "path": "io_scene_ueformat/op/import_helpers.py",
-      "size": 6737,
-      "sha256": "e27d77b61e01e7b305e1e263286045154556fd9e3063c6faea0779673913b414"
+      "size": 6213,
+      "sha256": "f322e87130a5a63a4ca470e4d2c5a2d7b3b3d0c59f902739c981f965fe584dff"
     },
     {
       "path": "io_scene_ueformat/op/panels.py",
-      "size": 4309,
-      "sha256": "0f8e51536c7d693dbba7934014e7ead5c449bbb3ef811998892559e73831e2d0"
+      "size": 3939,
+      "sha256": "38605d24a47741ad474da93a6bd5deb7561be0ddbc7d0e2cf099ce2e3d6b76a2"
     },
     {
       "path": "io_scene_ueformat/op/settings.py",
-      "size": 2057,
-      "sha256": "9d37f07553c053183aadd29273ad7529250a6be4d2531e5b4bf9c24943226741"
+      "size": 2184,
+      "sha256": "4e3cb0e27fa1ce7339bdfd7140ebcef52db0a361a8cff3683c653603b69352cf"
     },
     {
       "path": "io_scene_ueformat/options.py",
-      "size": 1606,
-      "sha256": "dcb21b06f27a35901dafa6ddc222bb518b88a50da8ced1315d28341050adcd0f"
+      "size": 2159,
+      "sha256": "36dcd07794dfdb740fb0d7c22b9ad09cf03f3a64cbf28a5c12709ac26cd1cf18"
     },
     {
       "path": "io_scene_ueformat/typing.py",
@@ -189,8 +389,8 @@
     },
     {
       "path": "vendor_manifest.toml",
-      "size": 1444,
-      "sha256": "0fb2ee4b9c3cf6fad2504eaaebbe857964861e48d40a4f7cf13cf01d83af7283"
+      "size": 1445,
+      "sha256": "c7ad74697666f305af8025acec2058addf4a8f4d404b05b65d55735e53a4fa12"
     }
   ]
 }

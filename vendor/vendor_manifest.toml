@@ -1,10 +1,10 @@
 schema_version = 1
 vendor_id = "io_scene_ueformat"
 package_name = "io_scene_ueformat"
-version = "1.2.0"
-source_repository = "UEFormat FModel fork"
-source_commit = "f0deb75"
-source_snapshot = "fmodel_working_tree_snapshot"
+version = "0.10.0"
+source_repository = "h4lfheart/UEFormat FModel edition"
+source_commit = "a7462ea7400dea4ac4dbda881b1477385f956d84"
+source_snapshot = "canonical_v10_source_migration_worktree_2026-09-01"
 tree_manifest = "vendor_tree_manifest.json"
 registration_mode = "headless"
 blender_min = "4.2.0"
@@ -41,10 +41,6 @@ platform_tag = "win_amd64"
 sha256 = "1f830a0dac88719af0ae43b8b2d6aef487d437036468ef3c2ea59c51f9d55fd5"
 
 [[licenses]]
-file = "io_scene_ueformat/LICENSE.txt"
-spdx = "MIT"
-
-[[licenses]]
 file = "zstandard-0.25.0-cp311-cp311-win_amd64.whl"
 spdx = "see wheel metadata"
 
@@ -55,5 +51,3 @@ spdx = "see wheel metadata"
 [[licenses]]
 file = "zstandard-0.25.0-cp313-cp313-win_amd64.whl"
 spdx = "see wheel metadata"
-
-

@@ -5,13 +5,16 @@ These third-party Blender plug-ins are shipped as runtime dependencies of
 
 ## `io_scene_ueformat`
 
-- **Bundled version:** `1.2.0`
+- **Bundled version:** `0.10.0`
 - **Supported formats:** `.uemodel`, `.ueanim`, `.uepose`
 - **Upstream family:** `h4lfheart/UEFormat` Blender add-on
-- **FModel snapshot:** local FModel fork branch `fmodel/material-links-v1`,
-  snapshot based on commit `f0deb75` plus the source working-tree changes present
-  when this vendor was refreshed on **2026-08-07**.
-- **License:** see `io_scene_ueformat/LICENSE.txt`
+- **FModel snapshot:** canonical addon branch `fmodel/material-links-v1`,
+  based on commit `a7462ea7400dea4ac4dbda881b1477385f956d84` plus the verified
+  V10 working-tree overlay synchronized on **2026-09-01**. The commit is the
+  base reference, not a claim that the overlay is committed there.
+- **Runtime identity:** 71 UEFormat files, tree SHA-256
+  `bf114da499913048d1cf49b9c477d24b6d30bd7bcc08695bd93744561ad50edd`.
+- **License:** see the canonical addon `blender_manifest.toml` declaration and the\n  repository licensing files.
 
 The snapshot includes the FModel-aware importer surfaces used by V2:
 
@@ -42,12 +45,13 @@ other interpreter builds are ignored rather than placed on `sys.path`.
 
 ## Refresh procedure
 
-1. Copy only the canonical Blender package into the matching `vendor/` folder.
-2. Preserve the V2 headless wrapper in `io_scene_ueformat/__init__.py` and
-   `io_scene_ueformat/op/__init__.py`; do not overwrite it with a standalone
-   `register()` implementation.
-3. Update `bl_info`, `blender_manifest.toml`, this document, and the vendor
-   contract test together.
+1. Run the workspace `scripts/sync_ueformat_runtime.py --sync-to-v2` command
+   with an explicit recovery backup root. It replaces the Vendor package
+   atomically from the canonical standalone runtime.
+2. Confirm that the canonical package still exposes `register_headless()` and
+   that V2's headless loader remains the only registration path used by the
+   host application.
+3. Update `vendor_manifest.toml`, this document, and the tree manifest together.
 4. Re-run `test_ueformat_vendor_contract.py`,
    `test_ueformat_vendor_headless.py`, and the full test suite.
 

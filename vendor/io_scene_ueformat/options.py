@@ -14,6 +14,14 @@ if TYPE_CHECKING:
 class UEFormatOptions:
     link: bool = True
     scale_factor: float = 0.01
+    # FModel attributes are additive to the public UEFormat body.  Keeping the
+    # gate explicit lets a caller import a strictly standard file without even
+    # decoding the optional attributes, while the normal FModel workflow keeps
+    # the feature enabled by default.
+    enable_fmodel_extensions: bool = True
+    # Compatibility spelling for programmatic callers of the migration branch.
+    # UI settings only serialize ``enable_fmodel_extensions``.
+    enable_fmodel_v10_extensions: bool | None = None
 
     @classmethod
     def from_settings(cls, settings: UFSettings) -> UEFormatOptions:
@@ -32,7 +40,7 @@ class UEModelOptions(UEFormatOptions):
     import_morph_targets: bool = True
     import_virtual_bones: bool = False
     target_lod: int = 0
-    allowed_reorient_children: dict[str, list[str]] | None = None
+    allowed_reorient_children: dict = None
     import_fmodel_materials: bool = True
     build_fmodel_material_nodes: bool = True
     load_fmodel_embedded_textures: bool = True

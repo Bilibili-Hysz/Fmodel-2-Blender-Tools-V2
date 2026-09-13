@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from .protocol import (
+from .runtime_protocol import (
     MAX_FMODEL_IDENTITY_PATH_BYTES,
     MAX_FMODEL_TEXTURE_ID_BYTES,
     MAX_FMODEL_TEXTURES,

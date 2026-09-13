@@ -1,15 +1,13 @@
-import json
 from pathlib import Path
 from typing import Generic, TypeVar
 
-import bpy
 from bpy.props import CollectionProperty, StringProperty
 from bpy.types import Operator, OperatorFileListElement, FileHandler
 from bpy_extras.io_utils import ImportHelper, poll_file_object_drop
 
-from .panels import UEFORMAT_PT_Layout
-from ..importer.logic import UEFormatImport
-from ..importer.material_builder import FModelMaterialImportOptions
+from .panels import UEFORMAT_PT_Panel
+from ..importer.import_context import UEFormatImport
+from ..importer.creation_tracker import UEFormatImportCapture
 from ..options import UEAnimOptions, UEFormatOptions, UEModelOptions, UEPoseOptions
 from ..typing import UFormatContext
 
@@ -17,22 +15,9 @@ T = TypeVar("T", bound=UEFormatOptions)
 
 
 def _set_last_import_report(settings, summary: str, report: str, *, status: str) -> None:
-    """Persist the latest operator result without hiding the original error."""
     settings.last_import_summary = summary
     settings.last_import_report = report
     settings.last_import_status = status
-
-
-def _material_options(settings) -> FModelMaterialImportOptions:
-    return FModelMaterialImportOptions(
-        import_materials=settings.import_fmodel_materials,
-        build_nodes=settings.build_fmodel_material_nodes,
-        load_embedded=settings.load_fmodel_embedded_textures,
-        load_external=settings.load_fmodel_external_textures,
-        keep_unmapped=settings.keep_fmodel_unmapped_parameters,
-        ue_export_root=settings.fmodel_ue_export_root or None,
-        bundle_root=settings.fmodel_bundle_root or None,
-    )
 
 
 class UFImportBase(Operator, ImportHelper, Generic[T]):
@@ -46,27 +31,25 @@ class UFImportBase(Operator, ImportHelper, Generic[T]):
     options_class: type[T]
 
     def execute(self, context: UFormatContext) -> set[str]:
-        settings = context.scene.uf_settings
-        options = self.options_class.from_settings(settings)
-        material_options = None
-        if isinstance(options, UEModelOptions):
-            material_options = _material_options(settings)
+        options = self.options_class.from_settings(context.scene.uf_settings)
 
         directory = Path(self.directory)
-        paths = []
+        paths: list[Path] = []
+        capture = UEFormatImportCapture()
         for file in self.files:
             file: OperatorFileListElement
             path = directory / file.name
             try:
-                UEFormatImport(options, material_options).import_file(path)
+                UEFormatImport(options, creation_tracker=capture).import_file(path)
             except Exception as error:
+                capture.rollback()
                 kind = {
                     UEModelOptions: "Model",
                     UEAnimOptions: "Animation",
                     UEPoseOptions: "Pose",
                 }[self.options_class]
                 _set_last_import_report(
-                    settings,
+                    context.scene.uf_settings,
                     f"{kind} import failed",
                     "\n".join((
                         "UE Format Import Report",
@@ -78,17 +61,18 @@ class UFImportBase(Operator, ImportHelper, Generic[T]):
                     status="FAILED",
                 )
                 raise
-            paths.append(str(path))
+            paths.append(path)
+
+        capture.clear()
 
         kind = {
             UEModelOptions: "Model",
             UEAnimOptions: "Animation",
             UEPoseOptions: "Pose",
         }[self.options_class]
-        summary = f"{kind} import: {len(paths)} file(s)"
         _set_last_import_report(
-            settings,
-            summary,
+            context.scene.uf_settings,
+            f"{kind} import: {len(paths)} file(s)",
             "\n".join((
                 "UE Format Import Report",
                 f"Kind: {kind}",
@@ -115,8 +99,8 @@ class UFImportUEModel(UFImportBase):
     options_class = UEModelOptions
 
     def draw(self, context: UFormatContext) -> None:
-        UEFORMAT_PT_Layout.draw_general_options(self, context.scene.uf_settings)
-        UEFORMAT_PT_Layout.draw_model_options(
+        UEFORMAT_PT_Panel.draw_general_options(self, context.scene.uf_settings)
+        UEFORMAT_PT_Panel.draw_model_options(
             self,
             context.scene.uf_settings,
             import_menu=True,
@@ -133,8 +117,8 @@ class UFImportUEAnim(UFImportBase):
     options_class = UEAnimOptions
 
     def draw(self, context: UFormatContext) -> None:
-        UEFORMAT_PT_Layout.draw_general_options(self, context.scene.uf_settings)
-        UEFORMAT_PT_Layout.draw_anim_options(
+        UEFORMAT_PT_Panel.draw_general_options(self, context.scene.uf_settings)
+        UEFORMAT_PT_Panel.draw_anim_options(
             self,
             context.scene.uf_settings,
             import_menu=True,
@@ -151,8 +135,8 @@ class UFImportUEPose(UFImportBase):
     options_class = UEPoseOptions
 
     def draw(self, context: UFormatContext) -> None:
-        UEFORMAT_PT_Layout.draw_general_options(self, context.scene.uf_settings)
-        UEFORMAT_PT_Layout.draw_pose_options(
+        UEFORMAT_PT_Panel.draw_general_options(self, context.scene.uf_settings)
+        UEFORMAT_PT_Panel.draw_pose_options(
             self,
             context.scene.uf_settings,
             import_menu=True,

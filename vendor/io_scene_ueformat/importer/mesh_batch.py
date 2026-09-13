@@ -7,7 +7,7 @@ def material_indices_for_sections(sections, polygon_count: int) -> list[int]:
     """Build Blender polygon material indices from UEFormat section ranges.
 
     UEFormat stores section offsets in triangle indices. Blender stores one
-    material index per polygon, so each section range is converted once and then
+    material index per polygon, so each section range is converted once and
     written through ``Mesh.polygons.foreach_set`` by the caller.
     """
     if isinstance(polygon_count, bool) or not isinstance(polygon_count, int) or polygon_count < 0:

@@ -2,18 +2,27 @@ from __future__ import annotations
 
 import io
 import struct
-import numpy as np
-import numpy.typing as npt
 from typing import TYPE_CHECKING, BinaryIO, Literal, TypeVar, overload
 
-from ..importer.utils import bytes_to_str
-from .protocol import EUEFormatVersion
+import numpy as np
+import numpy.typing as npt
+
+from ..version import EUEFormatVersion
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from types import TracebackType
 
 R = TypeVar("R")
+MAX_ARRAY_COUNT = 1_000_000
+# This is a scalar-element bound, not a vertex bound: a normal is four
+# scalars and a large but valid mesh can therefore exceed one million scalar
+# values while remaining well below the archive/resource limits.
+MAX_VECTOR_COUNT = 16_000_000
+
+
+def bytes_to_str(in_bytes: bytes) -> str:
+    return in_bytes.rstrip(b"\x00").decode()
 
 
 class FArchiveReader:
@@ -22,7 +31,7 @@ class FArchiveReader:
         self.size = len(data)
         self.data.seek(0)
         self.file_version = EUEFormatVersion.BeforeCustomVersionWasAdded
-        self.metadata = {}
+        self.metadata: dict = {}
 
     def __enter__(self) -> FArchiveReader:
         self.data.seek(0)
@@ -54,7 +63,7 @@ class FArchiveReader:
         return self._read_exact(size, "Read size")
 
     def read_to_end(self) -> bytes:
-        return self.data.read(self.size - self.data.tell())
+        return self._read_exact(self.size - self.data.tell(), "Read-to-end size")
 
     def read_bool(self) -> bool:
         return struct.unpack("?", self._read_exact(1, "Boolean"))[0]
@@ -68,22 +77,17 @@ class FArchiveReader:
         if size < 0:
             raise ValueError(f"Invalid negative FString length: {size}")
         string = self._read_exact(size, "FString length")
-        ret = bytes_to_str(string)
-        return ret
-
-    def read_bounded_fstring(self, maximum_size: int, description: str) -> str:
-        (size,) = struct.unpack("i", self._read_exact(4, f"{description} length"))
-        if size < 0:
-            raise ValueError(f"Invalid negative {description} length: {size}")
-        if size > maximum_size:
-            raise ValueError(f"Invalid {description} length exceeds maximum {maximum_size}: {size}")
-        return bytes_to_str(self._read_exact(size, f"{description} length"))
+        return bytes_to_str(string)
 
     def read_int(self) -> int:
         return struct.unpack("i", self._read_exact(4, "Integer"))[0]
 
     def read_int_vector(self, size: int) -> tuple[int, ...]:
-        if size <= 0:
+        if size < 0:
+            raise ValueError(f"Invalid negative integer vector size: {size}")
+        if size > MAX_VECTOR_COUNT:
+            raise ValueError(f"Integer vector size exceeds maximum {MAX_VECTOR_COUNT}: {size}")
+        if size == 0:
             return ()
         return struct.unpack(str(size) + "I", self._read_exact(size * 4, "Integer vector"))
 
@@ -91,33 +95,39 @@ class FArchiveReader:
         return struct.unpack("h", self._read_exact(2, "Short"))[0]
 
     def read_ushort(self) -> int:
-        return struct.unpack("<H", self._read_exact(2, "Unsigned short"))[0]
-
-    def read_uint8(self) -> int:
-        return struct.unpack("B", self._read_exact(1, "Unsigned byte"))[0]
+        return struct.unpack("H", self._read_exact(2, "Unsigned short"))[0]
 
     def read_byte(self) -> bytes:
-        """Return one byte for compatibility with the upstream reader API."""
         return struct.unpack("c", self._read_exact(1, "Byte"))[0]
 
     def read_float(self) -> float:
         return struct.unpack("f", self._read_exact(4, "Float"))[0]
 
     @overload
-    def read_float_vector(self, size: Literal[1]) -> tuple[float]: ...
+    def read_float_vector(self, size: Literal[1]) -> npt.NDArray[np.floating]: ...
     @overload
-    def read_float_vector(self, size: Literal[2]) -> tuple[float, float]: ...
+    def read_float_vector(self, size: Literal[2]) -> npt.NDArray[np.floating]: ...
     @overload
-    def read_float_vector(self, size: Literal[3]) -> tuple[float, float, float]: ...
+    def read_float_vector(self, size: Literal[3]) -> npt.NDArray[np.floating]: ...
     @overload
-    def read_float_vector(self, size: Literal[4]) -> tuple[float, float, float, float]: ...
+    def read_float_vector(self, size: Literal[4]) -> npt.NDArray[np.floating]: ...
     @overload
-    def read_float_vector(self, size: int) -> tuple[float, ...]: ...
+    def read_float_vector(self, size: int) -> npt.NDArray[np.floating]: ...
 
-    def read_float_vector(self, size: int) -> npt.NDArray[float]:
+    def read_float_vector(self, size: int) -> npt.NDArray[np.floating]:
+        if size < 0:
+            raise ValueError(f"Invalid negative float vector size: {size}")
+        if size > MAX_VECTOR_COUNT:
+            raise ValueError(f"Float vector size exceeds maximum {MAX_VECTOR_COUNT}: {size}")
+        if size == 0:
+            return np.zeros(0)
         return np.array(struct.unpack(str(size) + "f", self._read_exact(size * 4, "Float vector")))
 
     def read_byte_vector(self, size: int) -> tuple[int, ...]:
+        if size < 0:
+            raise ValueError(f"Invalid negative byte vector size: {size}")
+        if size > MAX_VECTOR_COUNT:
+            raise ValueError(f"Byte vector size exceeds maximum {MAX_VECTOR_COUNT}: {size}")
         return struct.unpack(str(size) + "B", self._read_exact(size, "Byte vector"))
 
     def skip(self, size: int) -> None:
@@ -134,13 +144,12 @@ class FArchiveReader:
     ) -> list[R]:
         if count < 0:
             raise ValueError(f"Invalid negative array count: {count}")
+        if count > MAX_ARRAY_COUNT:
+            raise ValueError(f"Array count exceeds maximum {MAX_ARRAY_COUNT}: {count}")
         return [predicate(self) for _ in range(count)]
 
     def chunk(self, size: int) -> FArchiveReader:
-        if size < 0:
-            raise ValueError(f"Invalid negative chunk byte_size: {size}")
-        new_reader = FArchiveReader(self._read_exact(size, "Chunk byte_size"))
+        new_reader = FArchiveReader(self.read(size))
         new_reader.file_version = self.file_version
         new_reader.metadata = self.metadata
-        
         return new_reader

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import TYPE_CHECKING
 
-from .protocol import (
+from .runtime_protocol import (
     FMODEL_PBR_INTERFACES_VERSION,
     MAX_FMODEL_IDENTITY_PATH_BYTES,
     MAX_FMODEL_MATERIAL_TEXTURE_BINDINGS,
@@ -22,7 +22,7 @@ from .protocol import (
     _validate_max_count,
     _validate_top_level_count,
 )
-from .resources import TextureResource
+from .runtime_resources import TextureResource
 
 _RELATIVE_LOCATION_MODE = 1
 _EMBEDDED_LOCATION_MODE = 3
@@ -378,3 +378,4 @@ class FModelMaterialParameter:
     @property
     def uv_set(self) -> int:
         return self.texture.uv_set
+

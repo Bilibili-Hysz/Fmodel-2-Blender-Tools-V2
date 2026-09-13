@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING
 
 import bpy
 
-from .materials import FModelMaterialLinks
-from .fmodel import material_links_metadata
+from .runtime_materials import FModelMaterialLinks
+from .runtime_fmodel import material_links_metadata
 
 if TYPE_CHECKING:
-    from .classes import Material
-    from .materials import FModelMaterialLinks, FModelMaterialParameter
-    from .material_images import FModelImageRepository
+    from .dto.model import MaterialDto as Material
+    from .runtime_materials import FModelMaterialLinks, FModelMaterialParameter
+    from .runtime_material_images import FModelImageRepository
 
 
 _COLOR_SEMANTICS = {"base_color", "emissive"}
@@ -185,6 +185,26 @@ def source_slot_mapping_for_lod_materials(lod_materials, material_links) -> dict
             mapping[slot.slot_index] = dense_by_source[source_index]
         elif slot.slot_index in dense_by_source:
             mapping[slot.slot_index] = dense_by_source[slot.slot_index]
+    return mapping
+
+
+def section_ordinal_mapping_for_lod_materials(lod_materials, material_links) -> dict[int, int]:
+    """Map V10 link slots to the standard ``MATERIALS`` section ordinal.
+
+    UEFormat V10's standard MATERIALS record does not serialize the original
+    Unreal source-slot field.  For V10, FModel slot_index is therefore the
+    dense standard MATERIALS section ordinal; source_material_index remains
+    provenance only and must never be used as the Blender material index.
+    """
+
+    mapping: dict[int, int] = {}
+    for slot in material_links.slots:
+        if slot.slot_index < 0 or slot.slot_index >= len(lod_materials):
+            raise ValueError(
+                f"Invalid FModel V10 material mapping: slot {slot.slot_index} is outside "
+                f"the LOD MATERIALS section range 0..{max(-1, len(lod_materials) - 1)}",
+            )
+        mapping[slot.slot_index] = slot.slot_index
     return mapping
 
 
@@ -765,3 +785,5 @@ def _build_v2_material(material, mesh, slot, interfaces, images, warn, options) 
     # auto-shrink pass changing child coordinates during graph construction.
     custom_frame.shrink = True
     pbr_frame.shrink = True
+
+

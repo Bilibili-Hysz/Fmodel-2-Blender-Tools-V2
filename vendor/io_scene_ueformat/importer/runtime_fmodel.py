@@ -13,19 +13,19 @@ import os
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Mapping
 
-from .materials import (
+from .runtime_materials import (
     FModelMaterialLinks,
     FModelMaterialParameter,
     FModelMaterialTextures,
     FModelTextureMapKind,
 )
-from .identity import (
+from .runtime_identity import (
     FModelSkeletonIdentity,
     FModelTargetPoseIdentity,
     FModelTargetSkeletonIdentity,
 )
-from .protocol import _validate_logical_unreal_path
-from .resources import TextureResource, TextureResourceKind
+from .runtime_protocol import _validate_logical_unreal_path
+from .runtime_resources import TextureResource, TextureResourceKind
 
 
 RELATIVE_LOCATION_MODE = 1
@@ -63,6 +63,12 @@ def apply_material_texture_bindings(
         if not slots:
             raise ValueError(
                 "Invalid FModel texture binding material_id does not exist in FMODEL_MATERIALS: "
+                f"{binding.material_id}"
+            )
+        material_identities = {slot.unreal_material_path for slot in slots}
+        if len(material_identities) > 1:
+            raise ValueError(
+                "Invalid FModel texture binding material_id is ambiguous across Unreal material identities: "
                 f"{binding.material_id}"
             )
         record = textures_by_id[binding.texture_id]
@@ -155,20 +161,22 @@ class FModelResourceResolver:
             self._validate_relative_uri(texture.uri, "relative", allow_leading_parents=True)
             candidate = self.model_path.parent.joinpath(*PurePosixPath(texture.uri).parts)
             relative_root = self.ue_export_root or self._infer_relative_root(texture.uri)
-            return self._resolve_within_root(
+            candidate = self._resolve_within_root(
                 relative_root,
                 candidate,
                 "relative URI escapes configured or inferred export root",
             )
+            return self._validate_external_resource(candidate, texture)
         if texture.location_mode == BUNDLE_LOCATION_MODE:
             if self.bundle_root is None:
                 raise ValueError("FModel bundle resource resolution requires bundle_root")
             self._validate_relative_uri(texture.uri, "bundle")
-            return self._resolve_within_root(
+            candidate = self._resolve_within_root(
                 self.bundle_root,
                 self.bundle_root.joinpath(*PurePosixPath(texture.uri).parts),
                 "bundle URI escapes bundle_root",
             )
+            return self._validate_external_resource(candidate, texture)
         if texture.location_mode == EMBEDDED_LOCATION_MODE:
             if texture.uri:
                 self._validate_relative_uri(texture.uri, "embedded")
@@ -206,12 +214,28 @@ class FModelResourceResolver:
             )
             if not candidate.exists():
                 continue
-            if not candidate.is_file():
-                raise ValueError(f"FModel identity texture is not a file: {texture.uri}")
-            self._verify_identity_texture(candidate, texture)
-            return candidate
+            return self._validate_external_resource(candidate, texture)
 
         raise FileNotFoundError(f"FModel identity texture was not found for export-root URI: {texture.uri}")
+
+    @classmethod
+    def _validate_external_resource(cls, path: Path, texture: TextureResource) -> Path:
+        """Validate file shape and integrity for identity-backed resources."""
+        if texture.kind is not TextureResourceKind.IDENTITY:
+            return path
+        if texture.identity_embedded:
+            raise ValueError(
+                f"FModel identity texture {texture.stable_id!r} is marked embedded, "
+                "but the V10 identity table carries no payload bytes"
+            )
+        if texture.expected_byte_length is None or len(texture.expected_content_hash) != 32:
+            raise ValueError(f"FModel identity texture {texture.stable_id!r} has incomplete integrity metadata")
+        if not path.exists():
+            raise FileNotFoundError(f"FModel identity texture was not found: {texture.uri}")
+        if not path.is_file():
+            raise ValueError(f"FModel identity texture is not a file: {texture.uri}")
+        cls._verify_identity_texture(path, texture)
+        return path
 
     def _identity_resource_roots(self, uri: str) -> list[Path]:
         configured: list[Path] = []
@@ -342,7 +366,7 @@ def material_links_metadata(material_links: FModelMaterialLinks) -> dict[str, ob
 
 
 def skeleton_identity_metadata(
-    identity: FModelSkeletonIdentity | FModelTargetSkeletonIdentity,
+    identity: FModelSkeletonIdentity | FModelTargetSkeletonIdentity | FModelTargetPoseIdentity,
 ) -> dict[str, object]:
     """Return a lossless JSON-safe FModel skeleton identity record."""
     metadata: dict[str, object] = {
@@ -567,3 +591,5 @@ def _parameter_value_metadata(parameter) -> object:
     if parameter.kind == 3:
         return list(parameter.value)
     return parameter.value
+
+
