@@ -447,6 +447,7 @@ class ASSET_OT_OpenModelSelector(bpy.types.Operator):
 # 预览图标缓存
 _preview_icons = None
 _preview_cache = {}
+_PREVIEW_CACHE_LIMIT = 512
 
 
 def _get_preview_icon(image_path):
@@ -457,6 +458,9 @@ def _get_preview_icon(image_path):
         return 0
     if image_path in _preview_cache:
         return _preview_cache[image_path]
+    if len(_preview_cache) >= _PREVIEW_CACHE_LIMIT:
+        # 简单全量驱逐：预览键随目录内容变化，重建成本低
+        _preview_cache.clear()
     try:
         thumb = _preview_icons.load(image_path, image_path, 'IMAGE')
         _preview_cache[image_path] = thumb.icon_id
@@ -466,11 +470,16 @@ def _get_preview_icon(image_path):
         return 0
 
 
-def _scan_models(context):
-    """扫描模型目录，返回模型列表"""
-    model_dir = get_model_dir(context)
-    if not os.path.isdir(model_dir):
-        return []
+_MODEL_SCAN_CACHE = {"key": None, "models": ()}
+
+
+def _invalidate_model_scan_cache():
+    """Drop the cached model listing so the next draw rescans the directory."""
+    _MODEL_SCAN_CACHE["key"] = None
+    _MODEL_SCAN_CACHE["models"] = ()
+
+
+def _scan_model_dir(model_dir):
     models = []
     for f in os.listdir(model_dir):
         if f.endswith('_mesh.blend'):
@@ -492,6 +501,28 @@ def _scan_models(context):
                 "preview": preview_path,
             })
     return sorted(models, key=lambda m: m["name"])
+
+
+def _scan_models(context):
+    """扫描模型目录，返回模型列表。
+
+    draw 链每个重绘帧都会调用本函数；结果按 (目录, 目录 mtime) 缓存，
+    目录内容变化（保存/删除/上传预览写盘）自动失效。绝不无条件扫盘。
+    """
+    model_dir = get_model_dir(context)
+    if not os.path.isdir(model_dir):
+        _invalidate_model_scan_cache()
+        return []
+    try:
+        cache_key = (model_dir, os.path.getmtime(model_dir))
+    except OSError:
+        cache_key = (model_dir, None)
+    if _MODEL_SCAN_CACHE["key"] == cache_key:
+        return _MODEL_SCAN_CACHE["models"]
+    models = _scan_model_dir(model_dir)
+    _MODEL_SCAN_CACHE["key"] = cache_key
+    _MODEL_SCAN_CACHE["models"] = models
+    return models
 
 
 class FMODEL_MT_ModelBrowser(bpy.types.Menu):
@@ -603,6 +634,18 @@ class ASSET_OT_DeleteModel(bpy.types.Operator):
 # 注册
 # ============================================================
 
+class MODEL_OT_RefreshModelBrowser(bpy.types.Operator):
+    """刷新模型浏览器缓存"""
+    bl_idname = "fmodel.refresh_model_browser"
+    bl_label = "刷新模型列表"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        _invalidate_model_scan_cache()
+        self.report({'INFO'}, "模型列表缓存已刷新")
+        return {'FINISHED'}
+
+
 _classes = (
     ASSET_OT_SaveModel,
     ASSET_OT_CaptureModelPreview,
@@ -612,6 +655,7 @@ _classes = (
     FMODEL_MT_ModelBrowser,
     ASSET_OT_ImportModelFromBrowser,
     ASSET_OT_DeleteModel,
+    MODEL_OT_RefreshModelBrowser,
 )
 
 

@@ -5,12 +5,11 @@
 import bpy
 import os
 import json
-import re
 from bpy_extras.io_utils import ExportHelper
 
-from .core.i18n import localize_status_message, t
+from .core.i18n import t
 from .Assets.Anims.anim_manager import (
-    _sync_manager_library_index, get_custom_icon, inspect_action_metadata,
+    _sync_manager_library_index, inspect_action_metadata,
 )
 
 
@@ -760,7 +759,9 @@ class FMODEL_PT_LibrarySettings(bpy.types.Panel):
 
 
 def _model_draw_panel(self, context):
-    from .Assets.Models.operators import get_model_dir, _scan_models, _get_preview_icon
+    from .Assets.Models.operators import (
+        get_model_dir, _scan_models, _get_preview_icon, _invalidate_model_scan_cache,
+    )
     layout = self.layout
 
     if not hasattr(context.scene, "fmodel_model_assets"):
@@ -774,6 +775,7 @@ def _model_draw_panel(self, context):
     row.scale_y = 1.3
     row.operator("fmodel.save_model", text=t("保存模型"), icon='EXPORT')
     row.operator("fmodel.open_model_selector", text=t("浏览导入"), icon='IMPORT')
+    row.operator("fmodel.refresh_model_browser", text="", icon='FILE_REFRESH')
 
     active_lib_path = get_model_dir(context)
     if active_lib_path:
@@ -1168,6 +1170,8 @@ class FMODEL_OT_ToggleTreeNode(bpy.types.Operator):
     node_id: bpy.props.StringProperty()
 
     def execute(self, context):
+        if len(_LIB_TREE_EXPANDED) > 1024:
+            _LIB_TREE_EXPANDED.clear()
         _LIB_TREE_EXPANDED[self.node_id] = not _LIB_TREE_EXPANDED.get(self.node_id, False)
         return {'FINISHED'}
 

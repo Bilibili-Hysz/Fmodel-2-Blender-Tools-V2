@@ -5,18 +5,9 @@ import bpy
 import os
 import json
 import re
-import hashlib
-import shutil
-from datetime import datetime
 from ...core.i18n import t
 from bpy.app.handlers import persistent
 import bpy.utils.previews
-
-from ...core import (
-    SourceType,
-    get_or_create_catalog_uuid, ensure_dir,
-    DictionaryManifest, SkeletonNode, FolderNode, AnimationEntry
-)
 from .library_scanner import (
     _load_bundle_tree, _load_library_index, repair_library_metadata, retained_bundle_files,
 )

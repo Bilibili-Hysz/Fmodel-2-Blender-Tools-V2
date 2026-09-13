@@ -375,7 +375,9 @@ class PipelineContext:
         finally:
             if os.path.exists(temporary_path):
                 os.remove(temporary_path)
-        self.save_to_blender_text()
+        # 成功路径不再写入 Blender 文本：sidecar 检查点是唯一持久化通道，
+        # 避免用户 .blend 被 text datablock 污染。save_to_blender_text 仅
+        # 保留给显式的失败恢复调用方。
 
     @classmethod
     def load_from_checkpoint(cls, output_dir: str) -> Optional['PipelineContext']:

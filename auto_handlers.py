@@ -144,6 +144,7 @@ def _init_environment():
 # ============================================================
 
 _imported_objects_cache = set()
+_IMPORTED_OBJECTS_CACHE_LIMIT = 8192
 _first_run = True
 _scene_update_lock = threading.RLock()
 
@@ -230,6 +231,10 @@ def on_depsgraph_update_post(scene, depsgraph):
                 token = _object_token(obj)
                 if token not in _imported_objects_cache:
                     new_objects.append(obj)
+                if len(_imported_objects_cache) >= _IMPORTED_OBJECTS_CACHE_LIMIT:
+                    # 有界保护：极长会话防无限增长；清空后最坏情况是
+                    # 多触发一次防抖扫描。
+                    _imported_objects_cache.clear()
                 _imported_objects_cache.add(token)
 
     relevant_objects = [obj for obj in new_objects if _relevant_import_object(obj)]

@@ -75,7 +75,7 @@ def test_i18n_contains_fallbacks_for_new_visible_terms():
         "最近操作",
         "严格身份",
         "按名称兼容",
-        "启用旧版材质后处理",
+        "单骨架快速打包",
     ):
         assert term in keys, f"missing en_US fallback for {term}"
 
