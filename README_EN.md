@@ -104,21 +104,21 @@ needed by V2. For `.uemodel`, `.ueanim`, and `.uepose`:
 ```
 
 V2 reads the binary skeleton path, optional GUID, bone-layout hash, and provenance
-fingerprint first. The UEFormat-only line no longer exposes the JSON fallback in its
-user-facing import path; the fallback remains only as a temporary migration component.
+fingerprint first. The UEFormat-only line no longer exposes a JSON fallback in its
+user-facing import path.
 
 ### Materials and textures
 The canonical UEFormat importer handles native model materials/textures when the
-current FModel capability bridge is available. The former `Universal_tools/material` JSON resolver remains registered as a
-manual migration and repair tool for old projects, but it is not part of the
-UEFormat-only native import path.
+current FModel capability bridge is available. The former `Universal_tools/material`
+JSON resolver and the custom shader node-group manager were retired together with
+the legacy cleanup; canonical materials are built entirely by the vendor importer.
 Keep external textures (`.png`, `.tga`, `.dds`, etc.) and preserve their
 `Content/Textures/...` relative layout whenever the selected importer needs them.
 
 ### JSON that remains intentional
 JSON is not removed globally. It remains an explicit compatibility or state format for:
 
-- V2 checkpoints, reports, library manifests, shader presets, and other internal state;
+- V2 checkpoints, reports, library manifests, and other internal state;
 - read-only migration inputs for old projects during the transition window.
 
 ### Recommended settings
@@ -140,7 +140,7 @@ standalone `io_scene_ueformat` addon. Do not enable both in one session.
 
 ## Bundled UEFormat Vendor
 
-The release includes the FModel-aware `io_scene_ueformat` **1.2.0** vendor. It
+The release includes the FModel-aware `io_scene_ueformat` **0.10.0** vendor. It
 imports `.uemodel`, `.ueanim`, and `.uepose` and carries the FModel
 material/texture and strict skeleton surfaces used by V2.
 
@@ -168,7 +168,7 @@ Enable **FModel Tools** in Blender Preferences.
 ## Requirements
 
 - Blender 5.0+
-- Bundled runtime dependency: `io_scene_ueformat` 1.2.0 (headless registration)
+- Bundled runtime dependency: `io_scene_ueformat` 0.10.0 (headless registration)
 - PSK/PSA/glTF/FBX support is disabled in the UEFormat-only line
 
 ---

@@ -4,7 +4,6 @@
 import bpy
 import os
 from bpy_extras.io_utils import ImportHelper
-from ....Universal_tools import material as mat_module
 from ....core import log_info, log_error, log_success, backup_before, OperationType
 from ...Pipeline.steps.single_model_flow import prepare_imported_armature_for_animation
 
@@ -190,12 +189,6 @@ class MODEL_OT_ImportUEModel(bpy.types.Operator, ImportHelper):
     reorient_bones: bpy.props.BoolProperty(name="重定向骨骼轴向", default=False) # type: ignore
     bone_length: bpy.props.FloatProperty(name="骨骼显示长度", default=4.0, min=0.1) # type: ignore
 
-    auto_link_mat: bpy.props.BoolProperty(
-        name="启用旧版材质后处理",
-        description="标准 FModel 材质由 UEFormat 导入器独立处理；此项仅控制旧版 JSON/启发式材质回退",
-        default=True,
-    ) # type: ignore
-    
     auto_backup: bpy.props.BoolProperty(
         name="导入前自动备份",
         description="在导入前自动备份当前工程",
@@ -220,8 +213,7 @@ class MODEL_OT_ImportUEModel(bpy.types.Operator, ImportHelper):
         box_bone.prop(self, "import_virtual_bones")
 
         box_mat = layout.box()
-        box_mat.label(text="材质后处理", icon="MATERIAL")
-        box_mat.prop(self, "auto_link_mat")
+        box_mat.label(text="导入备份", icon="MATERIAL")
         box_mat.prop(self, "auto_backup")
 
     def execute(self, context):
@@ -345,32 +337,13 @@ class MODEL_OT_ImportUEModel(bpy.types.Operator, ImportHelper):
 
             # Use the importer result, never context.active_object, for auto setup.
             prepare_imported_armature_for_animation(context, arm_obj)
-            
-            if self.auto_link_mat and not bridge.capabilities.supports_fmodel_materials:
-                try:
-                    mat_module.auto_resolve_materials_for_import(meshes, safe_path)
-                except Exception as e:
-                    print(f"[FModel] legacy JSON 材质解析失败: {e}")
-                log_success(
-                    OperationType.IMPORT_MODEL,
-                    f"UEModel 导入成功",
-                    {"object": imported_obj.name, "meshes": len(meshes)}
-                )
-                self.report({'INFO'}, "UEModel 导入成功！")
-            elif self.auto_link_mat and bridge.capabilities.supports_fmodel_materials:
-                log_success(
-                    OperationType.IMPORT_MODEL,
-                    "UEModel 导入成功（canonical FModel 材质已由 UEFormat importer 处理）",
-                    {"object": imported_obj.name, "meshes": len(meshes)},
-                )
-                self.report({'INFO'}, "UEModel 导入成功（FModel 材质已处理）")
-            else:
-                log_success(
-                    OperationType.IMPORT_MODEL,
-                    f"UEModel 导入成功",
-                    {"object": imported_obj.name}
-                )
-                self.report({'INFO'}, "UEModel 模型导入成功！")
+
+            log_success(
+                OperationType.IMPORT_MODEL,
+                "UEModel 导入成功（canonical FModel 材质已由 UEFormat importer 处理）",
+                {"object": imported_obj.name, "meshes": len(meshes)},
+            )
+            self.report({'INFO'}, "UEModel 导入成功（FModel 材质已处理）")
             created_counts = (
                 transaction.commit()
                 if transaction is not None

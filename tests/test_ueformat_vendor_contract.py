@@ -73,8 +73,18 @@ def test_bundled_ueformat_vendor_carries_runtime_zstandard_wheels():
     assert any("cp313-cp313-win_amd64" in name for name in wheels)
 
 
-def test_legacy_material_resolver_remains_manual_only_in_native_docs():
+def test_legacy_material_resolver_and_custom_shaders_are_retired():
+    for relative in (
+        "Universal_tools/material",
+        "core/material_ownership.py",
+        "Shaders/shaders.json",
+        "Shaders/shaders.blend",
+        "Shaders/Customshaders.blend",
+        "Shaders/Customshaders.json",
+        "Shaders/GameProfiles",
+        "Shaders/PRESET_SPEC.md",
+    ):
+        assert not (ROOT / relative).exists(), relative
     readme = (ROOT / "README_EN.md").read_text(encoding="utf-8")
-    assert "remains registered as a" in readme
-    assert "not part of the" in readme
-    assert "UEFormat-only native import path" in readme
+    assert "retired together with" in readme
+    assert "remains registered as a" not in readme

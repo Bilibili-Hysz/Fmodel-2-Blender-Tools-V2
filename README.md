@@ -37,17 +37,15 @@ provenance fingerprint directly from the resource; same-name FModel JSON is not
 required for that path. The Folder scanner and pipeline checkpoint use the
 binary identity first and consult JSON only as an optional legacy fallback.
 
-JSON is intentionally retained in three bounded roles:
+JSON is intentionally retained in bounded roles:
 
 - legacy exports and legacy model/skeleton compatibility;
-- optional old FModel dictionary/manifests and material resolver inputs;
-- V2-owned checkpoints, reports, library manifests, presets, and other internal
-  state.
+- V2-owned checkpoints, reports, library manifests, and other internal state.
 
 The canonical UEFormat importer remains responsible for native mesh/material/
-texture import when its current capability bridge is available. The older
-`Universal_tools/material` JSON resolver is still useful for legacy assets or
-manual material repair; removing it would not improve native UEFormat imports.
+texture import when its current capability bridge is available. The former
+`Universal_tools/material` JSON resolver and the custom shader node-group manager
+have been retired; canonical materials are built entirely by the vendor importer.
 
 A native binary resource may therefore be tested without a sidecar JSON. Keep
 textures and their original relative paths available when the selected importer
@@ -65,7 +63,7 @@ standalone `io_scene_ueformat` addon. Do not enable both in one session.
 
 ## Bundled UEFormat Vendor
 
-V2 bundles the FModel-aware `io_scene_ueformat` **1.2.0** implementation. It
+V2 bundles the FModel-aware `io_scene_ueformat` **0.10.0** implementation. It
 supports `.uemodel`, `.ueanim`, and `.uepose`, including FModel
 material/texture provenance and strict skeleton identity.
 

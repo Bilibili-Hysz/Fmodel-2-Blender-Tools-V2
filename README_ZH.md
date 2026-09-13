@@ -27,37 +27,18 @@
 
 ---
 
-### 2. 材质工具（Material Tools）
+### 2. 材质（Materials）
 
-自动解析 UE JSON 材质数据，构建 PBR/NPR 着色器节点图。
+标准 FModel 材质与纹理由 UEFormat 导入器（vendor）在导入时直接构建：
+Principled 节点图 + BaseColor / Normal / ORM 纹理链，无需任何 JSON 或
+手动节点组操作。外部纹理保持 `Content/Textures/...` 相对布局即可被自动解析。
 
-**Phase 1 — 资产发现**  
-解析 FModel 导出的模型 JSON 和材质实例 JSON，提取贴图路径和标量/向量参数。
-
-**Phase 2 — 通道解析**  
-UE 参数名 → 标准通道映射，支持：
-- GameProfile 精确匹配
-- CUE4Parse 材质参数字典（200+ 条目）
-- 内置关键词匹配
-- ORM 贴图自动检测（`_ORM`/`_ARM`/`_MRAO` 后缀 → 自动分流至 AO/Roughness/Metallic）
-
-**Phase 3 — 节点构建**  
-自动创建 Blender 材质节点图：贴图 → 工具节点链 → 着色器组连接，支持 NormalMap / Invert / ORM Decode 等工具节点。
-
-**手动模式**：支持材质解析 / 应用 / 报告导出等手动操作。
+旧版 JSON 材质解析回退与自定义着色器节点组管理器已随 V1 遗留清理一并退役；
+`Shaders/Tools Nodes/` 下的独立编辑器工具脚本（DecodeORM 等）保留供手动使用。
 
 ---
 
-### 3. 着色器管理器（Shader Manager）
-
-- **模板导入**：从 `Shaders/shaders.blend` 一键导入 PBR Standard / NPR Toon 等预设着色器
-- **自定义着色器**：保存场景节点组为模板，支持跨文件复用
-- **接口映射**：自动识别节点组接口，一键映射到标准通道（Base Color / Normal / Roughness 等）
-- **预设系统**：支持 JSON 格式预设导出/加载，材质工具面板直接调用
-
----
-
-### 4. 资产库（Asset Library）
+### 3. 资产库（Asset Library）
 
 **动画资产**  
 - 树/列表/卡片三种视图模式
@@ -150,7 +131,7 @@ Blender 安装方式应二选一：使用 V2 内置 runtime，或单独安装 st
 
 ## 内置 UEFormat Vendor
 
-Release 内置 FModel 适配版 `io_scene_ueformat` **1.2.0**，支持
+Release 内置 FModel 适配版 `io_scene_ueformat` **0.10.0**，支持
 `.uemodel`、`.ueanim` 和 `.uepose`，并包含 V2 所需的 FModel
 材质/贴图和 strict skeleton 能力。
 
@@ -183,7 +164,7 @@ python scripts/generate_vendor_tree_manifest.py --check
 ## 需求
 
 - Blender 5.0+
-- 内置 Vendor 依赖：`io_scene_ueformat` 1.2.0（headless 注册）
+- 内置 Vendor 依赖：`io_scene_ueformat` 0.10.0（headless 注册）
 - UEFormat-only 版本已停用 PSK、PSA、glTF 和 FBX 支持
 
 ---

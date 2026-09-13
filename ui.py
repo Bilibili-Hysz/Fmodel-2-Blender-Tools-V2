@@ -45,6 +45,11 @@ class PIPELINE_OT_PickSkeleton(bpy.types.Operator):
 class FMODEL_AddonPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text=t("FModel Tools Next — UEFormat 原生管线"), icon='INFO')
+        layout.label(text=t("运行时状态见 3D 视图侧栏：FModel 工具箱"), icon='SEQ_PREVIEW')
+
 
 class FMODEL_CoreProperties(bpy.types.PropertyGroup):
     # Compatibility state retained for existing .blend files. The product
@@ -268,20 +273,6 @@ def _draw_ueformat_runtime_status(layout):
 # 1. 主面板
 # ============================================================
 
-class FMODEL_PT_ProjectSettings(bpy.types.Panel):
-    """Legacy placeholder; intentionally not registered in the active UI."""
-    bl_label = "项目设置"
-    bl_idname = "FMODEL_PT_project_settings"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = 'FModel'
-    bl_options = {'DEFAULT_CLOSED'}
-
-    def draw(self, context):
-        layout = self.layout
-        layout.label(text=t("Indexed Project 已停用"), icon='INFO')
-        layout.label(text=t("请在动画管线中选择动画文件夹"), icon='FILE_FOLDER')
-
 class FMODEL_PT_Toolbox(bpy.types.Panel):
     bl_label = "FModel 工具箱"
     bl_idname = "FMODEL_PT_toolbox"
@@ -315,13 +306,6 @@ class FMODEL_PT_Toolbox(bpy.types.Panel):
         col_in.operator("fmodel.import_anim_ueanim", text=t("动画 (.ueanim)"), icon='ANIM_DATA')
         col_in.operator("fmodel.import_anim_uepose", text=t("姿势 (.uepose)"), icon='ARMATURE_DATA')
         col_out.label(text=t("UEFormat 原生导入；通用格式导出暂不支持"))
-
-        material_header, material_body = layout.panel(
-            'FMODEL_PT_toolbox_material_tools', default_closed=True,
-        )
-        material_header.label(text=t("材质工具"), icon='MATERIAL')
-        if material_body:
-            _draw_material_tools(material_body, context)
 
         report_header, report_body = layout.panel(
             'FMODEL_PT_toolbox_last_operation', default_closed=False,
@@ -600,67 +584,6 @@ class FMODEL_PT_PipelineDebug(bpy.types.Panel):
 
 
 # ============================================================
-# 3. 材质工具 (new optimized)
-# ============================================================
-
-def _draw_material_tools(layout, context):
-    props = context.scene.fmodel_material
-
-    box_path = layout.box()
-    box_path.label(text=t("贴图搜索"), icon='FILEBROWSER')
-    col_path = box_path.column(align=True)
-    col_path.prop(props, "umodel_tex_dir", text="纹理目录")
-    col_path.prop(props, "umodel_mat_path", text="材质目录")
-    col_path.prop(props, "search_depth", text="搜索深度（层）")
-
-    box_auto = layout.box()
-    box_auto.label(text=t("自动解析"), icon='AUTO')
-    box_auto.prop(props, "auto_resolve_on_import", text="导入时自动解析材质")
-    if props.auto_resolve_on_import:
-        row_h = box_auto.row()
-        row_h.prop(props, "heuristic_fallback_enabled", text="无JSON时猜测式匹配")
-        if props.heuristic_fallback_enabled:
-            box_auto.label(text=t("⚠ 匹配基于文本相似度，可能将错误的贴图链接到材质"), icon='ERROR')
-
-    box_v2 = layout.box()
-    box_v2.label(text=t("手动预设应用"), icon='SHADING_RENDERED')
-    row_preset = box_v2.row(align=True)
-    row_preset.prop(props, "resolver_preset", text="预设")
-    row_preset.prop(props, "preset_category_filter", text="", icon='FILTER')
-
-    from .Universal_tools.material.presets import get_preset
-    preset = get_preset(props.resolver_preset)
-    if preset and hasattr(preset, 'draw_options'):
-        box_opts = box_v2.box()
-        box_opts.label(text=f"{preset.PRESET_LABEL} 选项", icon='PREFERENCES')
-        preset.draw_options(box_opts, props)
-
-    row_v2 = box_v2.row(align=True)
-    row_v2.scale_y = 1.1
-    row_v2.operator("fmodel.analyze_material_resolution", text=t("分析(选中)"), icon='VIEWZOOM').mode = 'ACTIVE'
-    row_v2.operator("fmodel.analyze_material_resolution", text=t("分析(全场景)"), icon='SCENE_DATA').mode = 'BATCH'
-    row_apply = box_v2.row(align=True)
-    row_apply.scale_y = 1.1
-    row_apply.operator("fmodel.apply_material_resolution_v2", text=t("应用(选中)"), icon='CHECKBOX_HLT').mode = 'ACTIVE'
-    row_apply.operator("fmodel.apply_material_resolution_v2", text=t("应用(全场景)"), icon='SCENE_DATA').mode = 'BATCH'
-    box_v2.prop(props, "analyze_only", text="仅分析不写入")
-    box_adv = box_v2.box()
-    row_adv = box_adv.row()
-    row_adv.prop(props, "strict_mode", text="严格模式", emboss=False)
-    row_adv.prop(props, "strict_apply_only", text="仅严格应用", emboss=False)
-    box_adv.prop(props, "report_out_path", text="报告路径")
-    row_report = box_adv.row(align=True)
-    row_report.operator("fmodel.export_material_report", text=t("导出报告"), icon='EXPORT').mode = 'BATCH'
-    row_report.operator("fmodel.open_material_report", text=t("打开报告"), icon='FILE_FOLDER')
-    if props.last_summary:
-        box_v2.label(text=props.last_summary, icon='INFO')
-    if props.last_failed_count > 0:
-        box_v2.label(text=f"失败材质: {props.last_failed_count}", icon='ERROR')
-    if props.last_error_summary:
-        box_v2.label(text=props.last_error_summary[:120], icon='ERROR')
-
-
-# ============================================================
 # 4. 拓展工具 (new - with per-panel poll)
 # ============================================================
 
@@ -822,6 +745,10 @@ class FMODEL_PT_LibrarySettings(bpy.types.Panel):
         row_scan.scale_y = 1.2
         row_scan.operator("fmodel.scan_anims", text=t("扫描全部"), icon='VIEWZOOM')
         row_scan.operator("fmodel.scan_local_anims", text=t("本地"), icon='FILE_REFRESH')
+
+        layout.separator()
+        row_build = layout.row(align=True)
+        row_build.operator("fmodel.build_anim_library", text=t("单骨架快速打包"), icon='PACKAGE')
 
         repair = layout.row(align=True)
         repair.operator("fmodel.repair_library_metadata", text="修复缺失动画元数据", icon='TOOL_SETTINGS')
@@ -1293,13 +1220,6 @@ class FMODEL_OT_RemoveLibrary(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class ASSETS_UL_LibList(bpy.types.UIList):
-    """旧版资产库列表（保留以防兼容性问题）"""
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
-        row = layout.row(align=True)
-        row.prop(item, "name", text="", emboss=False, icon='FILE_FOLDER')
-
-
 class PIPELINE_OT_ClearContext(bpy.types.Operator):
     bl_idname = "pipeline.clear_context"
     bl_label = "清空管线上下文"
@@ -1342,206 +1262,6 @@ class PIPELINE_OT_ExportContextJson(bpy.types.Operator, ExportHelper):
 
 
 # ============================================================
-# GameProfile 管理器
-# ============================================================
-
-_PROFILES_DIR = os.path.join(os.path.dirname(__file__), "Shaders", "GameProfiles")
-
-
-def _list_profiles():
-    if not os.path.isdir(_PROFILES_DIR):
-        return []
-    return sorted([f[:-5] for f in os.listdir(_PROFILES_DIR) if f.endswith(".json")])
-
-
-def _load_profile(game_id):
-    fp = os.path.join(_PROFILES_DIR, f"{game_id}.json")
-    if not os.path.exists(fp):
-        return {}
-    with open(fp, 'r', encoding='utf-8') as f:
-        return json.load(f)
-
-
-def _save_profile(game_id, data):
-    os.makedirs(_PROFILES_DIR, exist_ok=True)
-    fp = os.path.join(_PROFILES_DIR, f"{game_id}.json")
-    with open(fp, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-
-def _get_profile_enum(self, context):
-    return [(p, p, "") for p in _list_profiles()] or [("__NONE__", "(无预设)", "")]
-
-
-class GP_OT_CreateProfile(bpy.types.Operator):
-    bl_idname = "fmodel.gp_create_profile"
-    bl_label = "新建预设"
-    game_id: bpy.props.StringProperty(name="游戏ID", default="new_game")
-    display_name: bpy.props.StringProperty(name="显示名", default="新游戏")
-
-    def execute(self, context):
-        game_id = self.game_id.strip().lower().replace(" ", "_")
-        if not game_id:
-            return {'CANCELLED'}
-        data = {"game_id": game_id, "display_name": self.display_name,
-                 "param_mapping": {}, "parent_inheritance": True,
-                 "colorspace_rules": {}, "tool_groups_default": []}
-        _save_profile(game_id, data)
-        context.scene.fmodel_gp_editor.active_profile = game_id
-        return {'FINISHED'}
-
-    def invoke(self, context, event):
-        return context.window_manager.invoke_props_dialog(self, width=300)
-
-
-class GP_OT_DeleteProfile(bpy.types.Operator):
-    bl_idname = "fmodel.gp_delete_profile"
-    bl_label = "删除预设"
-    game_id: bpy.props.StringProperty()
-
-    def execute(self, context):
-        fp = os.path.join(_PROFILES_DIR, f"{self.game_id}.json")
-        if os.path.exists(fp):
-            os.remove(fp)
-        if context.scene.fmodel_gp_editor.active_profile == self.game_id:
-            context.scene.fmodel_gp_editor.active_profile = ""
-        return {'FINISHED'}
-
-    def invoke(self, context, event):
-        return context.window_manager.invoke_confirm(self, event, title=f"删除 {self.game_id}？")
-
-
-class GP_OT_SaveProfile(bpy.types.Operator):
-    bl_idname = "fmodel.gp_save_profile"
-    bl_label = "保存预设"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        state = context.scene.fmodel_gp_editor
-        game_id = state.active_profile.strip()
-        if not game_id:
-            return {'CANCELLED'}
-        mapping = {}
-        for item in state.mappings:
-            if item.ue_param.strip():
-                mapping[item.ue_param.strip().lower()] = item.channel.strip() if item.channel.strip() else None
-        data = _load_profile(game_id)
-        data["game_id"] = game_id
-        data["display_name"] = state.display_name or game_id
-        data["param_mapping"] = mapping
-        data["parent_inheritance"] = state.parent_inheritance
-        _save_profile(game_id, data)
-        self.report({'INFO'}, f"已保存: {game_id}")
-        return {'FINISHED'}
-
-
-class GP_OT_AddMapping(bpy.types.Operator):
-    bl_idname = "fmodel.gp_add_mapping"
-    bl_label = "添加映射"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        item = context.scene.fmodel_gp_editor.mappings.add()
-        item.ue_param = "new_param"
-        return {'FINISHED'}
-
-
-class GP_OT_RemoveMapping(bpy.types.Operator):
-    bl_idname = "fmodel.gp_remove_mapping"
-    bl_label = "移除映射"
-    bl_options = {'REGISTER', 'UNDO'}
-    index: bpy.props.IntProperty()
-
-    def execute(self, context):
-        state = context.scene.fmodel_gp_editor
-        if 0 <= self.index < len(state.mappings):
-            state.mappings.remove(self.index)
-        return {'FINISHED'}
-
-
-class GPMappingItem(bpy.types.PropertyGroup):
-    ue_param: bpy.props.StringProperty(name="UE参数名")
-    channel: bpy.props.EnumProperty(
-        name="通道",
-        items=lambda s, c: _gp_channel_enum(),
-    )
-
-
-def _gp_channel_enum():
-    from .Universal_tools.material.shader_manager import STANDARD_INTERFACES
-    items = [("", "(未映射)", "")]
-    for ch_id, info in STANDARD_INTERFACES.items():
-        items.append((ch_id, info["label"], ""))
-    items.append(("other", "Other", ""))
-    return items
-
-
-def _gp_on_profile_changed(self, context):
-    """active_profile selected → load profile data from JSON"""
-    if not self.active_profile or self.active_profile == "__NONE__":
-        return
-    profile = _load_profile(self.active_profile)
-    self.mappings.clear()
-    self.display_name = profile.get("display_name", self.active_profile)
-    self.parent_inheritance = profile.get("parent_inheritance", True)
-    for ue_param, channel in profile.get("param_mapping", {}).items():
-        item = self.mappings.add()
-        item.ue_param = ue_param
-        item.channel = channel or ""
-
-
-class GPEditorState(bpy.types.PropertyGroup):
-    active_profile: bpy.props.EnumProperty(name="预设", items=_get_profile_enum, update=_gp_on_profile_changed)
-    display_name: bpy.props.StringProperty(name="显示名")
-    parent_inheritance: bpy.props.BoolProperty(name="继承父材质", default=True)
-    mappings: bpy.props.CollectionProperty(type=GPMappingItem)
-
-
-class FMODEL_PT_GameProfileManager(bpy.types.Panel):
-    bl_label = "游戏配置 (GameProfile)"
-    bl_idname = "FMODEL_PT_game_profile"
-    bl_space_type = 'NODE_EDITOR'
-    bl_region_type = 'UI'
-    bl_category = 'FModel'
-
-    def draw(self, context):
-        layout = self.layout
-        state = context.scene.fmodel_gp_editor
-
-        row = layout.row(align=True)
-        row.prop(state, "active_profile", text="")
-        row.operator("fmodel.gp_create_profile", text="", icon='ADD')
-        if state.active_profile and state.active_profile != "__NONE__":
-            row.operator("fmodel.gp_delete_profile", text="", icon='TRASH').game_id = state.active_profile
-
-        if not state.active_profile or state.active_profile == "__NONE__":
-            layout.label(text=t("选择或新建 GameProfile"), icon='INFO')
-            return
-
-        profile = _load_profile(state.active_profile)
-        layout.prop(state, "display_name")
-        layout.prop(state, "parent_inheritance")
-
-        layout.separator()
-        layout.label(text=f"参数映射 ({len(state.mappings)})", icon='MODIFIER')
-
-        for i, item in enumerate(state.mappings):
-            row = layout.row(align=True)
-            row.prop(item, "ue_param", text="")
-            row.prop(item, "channel", text="")
-            op = row.operator("fmodel.gp_remove_mapping", text="", icon='X')
-            op.index = i
-
-        row = layout.row(align=True)
-        row.operator("fmodel.gp_add_mapping", text=t("添加映射"), icon='ADD')
-        row.operator("fmodel.gp_save_profile", text=t("保存"), icon='FILE_TICK')
-
-    @classmethod
-    def poll(cls, context):
-        return hasattr(context.scene, "fmodel_gp_editor")
-
-
-# ============================================================
 # Registration
 # ============================================================
 
@@ -1554,12 +1274,9 @@ _classes = (
     FMODEL_OT_SelectTreeNode,
     FMODEL_OT_AddLibrary,
     FMODEL_OT_RemoveLibrary,
-    ASSETS_UL_LibList,
     PIPELINE_OT_ClearContext,
     PIPELINE_OT_ExportContextJson,
     PIPELINE_OT_PickSkeleton,
-    # Project Settings is retained only as an unregistered migration notice.
-    # Animation Pipeline exposes Folder as the sole active source mode.
     FMODEL_PT_Toolbox,
     FMODEL_PT_Pipeline,
     FMODEL_PT_PipelineDebug,
@@ -1574,15 +1291,6 @@ _classes = (
     FMODEL_PT_Mesh,
     FMODEL_PT_Skeleton,
     FMODEL_PT_Animation,
-    # GameProfile manager
-    GP_OT_CreateProfile,
-    GP_OT_DeleteProfile,
-    GP_OT_SaveProfile,
-    GP_OT_AddMapping,
-    GP_OT_RemoveMapping,
-    GPMappingItem,
-    GPEditorState,
-    FMODEL_PT_GameProfileManager,
 )
 
 
@@ -1590,11 +1298,9 @@ def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
     bpy.types.Scene.fmodel_core = bpy.props.PointerProperty(type=FMODEL_CoreProperties)
-    bpy.types.Scene.fmodel_gp_editor = bpy.props.PointerProperty(type=GPEditorState)
 
 
 def unregister():
-    del bpy.types.Scene.fmodel_gp_editor
     del bpy.types.Scene.fmodel_core
     for cls in reversed(_classes):
         bpy.utils.unregister_class(cls)
