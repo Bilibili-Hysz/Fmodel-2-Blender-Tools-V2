@@ -2,6 +2,7 @@ import os
 import sys
 
 import bpy
+from ....core.workflow import resolve_target, synchronize_target
 
 from ..manager import PipelineManager
 from ....core import (
@@ -24,12 +25,15 @@ def _load_or_create_context(config_dict: dict) -> PipelineContext:
 
 
 def _build_config_from_wizard(state, context) -> dict:
+    scene = getattr(context, "scene", None)
+    if hasattr(scene, "fmodel_workflow"):
+        synchronize_target(scene, resolve_target(context))
     source_type = SourceType.FMODEL_UEANIM.value
     import_mode = ImportMode.UEANIM_DIRECT.value
 
     cfg = PipelineConfig(
-        source_dir=state.source_dir,
-        output_dir=state.output_dir,
+        source_dir=bpy.path.abspath(state.source_dir) if state.source_dir else "",
+        output_dir=bpy.path.abspath(state.output_dir) if state.output_dir else "",
         library_name=state.library_name,
         skeleton_filter=state.skeleton_filter,
         source_type=source_type,
@@ -52,12 +56,15 @@ def _build_config_from_wizard(state, context) -> dict:
         clean_threshold=float(getattr(state, "clean_threshold", 0.001)),
         clean_flat_channels=bool(getattr(state, "clean_flat_channels", True)),
         skeleton_compatibility_mode=getattr(
-            state, "skeleton_compatibility_mode", "strict"
+            state, "skeleton_compatibility_mode", "ueformat"
         ),
     ).to_dict()
 
     handoff_target = getattr(state, "import_target_skeleton", "")
-    obj = context.active_object
+    obj = resolve_target(context)
+    if hasattr(getattr(context, "scene", None), "fmodel_workflow"):
+        cfg["target_armature"] = obj.name if obj else ""
+        return cfg
     if handoff_target:
         cfg["target_armature"] = handoff_target
     elif obj and obj.type == 'ARMATURE':
@@ -74,7 +81,7 @@ def _mapping_dict(state) -> dict:
 
 
 def _mapping_compatibility_dict(state) -> dict:
-    default_mode = getattr(state, "skeleton_compatibility_mode", "strict")
+    default_mode = getattr(state, "skeleton_compatibility_mode", "ueformat")
     return {
         item.source_skeleton: getattr(item, "compatibility_mode", default_mode)
         for item in state.skeleton_mappings
@@ -116,7 +123,7 @@ def populate_skeleton_mappings(state, pipeline_context, active_object=None):
         )
         item.compatibility_mode = getattr(
             restored_task, "compatibility_mode",
-            getattr(state, "skeleton_compatibility_mode", "strict"),
+            getattr(state, "skeleton_compatibility_mode", "ueformat"),
         )
     state.unmapped_skeletons = ", ".join(
         item.source_skeleton for item in state.skeleton_mappings
@@ -164,7 +171,7 @@ def build_plan_from_wizard(state, pipeline_context, active_object=None):
             _mapping_compatibility_dict(state) if len(skeletons) > 1 else {}
         ),
         default_compatibility_mode=getattr(
-            state, "skeleton_compatibility_mode", "strict"
+            state, "skeleton_compatibility_mode", "ueformat"
         ),
     )
     validate_generated_output_filenames(
@@ -187,7 +194,7 @@ def run_wizard_import_plan(
     manager = PipelineManager()
     pipeline_context = _load_or_create_context(cfg)
     checkpoint, unmapped = build_plan_from_wizard(
-        state, pipeline_context, context.active_object
+        state, pipeline_context, resolve_target(context)
     )
     if unmapped and report_unmapped:
         report_unmapped(unmapped)
@@ -221,7 +228,7 @@ def run_wizard_import_plan(
 
     persist(checkpoint)
     initial_compatibility_mode = pipeline_context.get_config(
-        "skeleton_compatibility_mode", "strict"
+        "skeleton_compatibility_mode", "ueformat"
     )
     try:
         success = bool(checkpoint.plan.tasks) and run_pending_tasks(

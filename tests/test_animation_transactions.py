@@ -1,6 +1,7 @@
 """Regression tests for animation import transaction rollbacks."""
 
 import ast
+from core.workflow import resolve_target
 import json
 import os
 from pathlib import Path
@@ -23,6 +24,7 @@ def load_definitions(path, names, globals_):
         if isinstance(node, (ast.ClassDef, ast.FunctionDef)) and node.name in names
     ]
     module = ast.Module(body=definitions, type_ignores=[])
+    globals_.setdefault("resolve_target", resolve_target)
     exec(compile(module, str(path), "exec"), globals_)
 
 
@@ -129,7 +131,14 @@ class AnimationOperatorTransactionTests(unittest.TestCase):
             ),
             data=SimpleNamespace(actions=actions, objects=SimpleNamespace(get=lambda _name: None)),
         )
-        globals_ = {"bpy": bpy, "os": fake_os, "t": lambda value: value}
+        from core import action_safety
+        globals_ = {"bpy": bpy, "os": fake_os, "t": lambda value: value,
+                    "validate_library_action": lambda *args: ""}
+        globals_.update({name: getattr(action_safety, name) for name in (
+            "animation_state", "append_nla_strip", "append_nla_strip_to_new_track", "assign_action",
+            "get_or_create_nla_track", "overwrite_nla_strip", "remove_owned_action", "replace_action",
+            "restore_animation_state", "datablock_identity",
+        )})
         load_definitions(
             ANIM_MANAGER,
             {"_AnimationTransaction", "ANIM_OT_PreviewAnim", "ANIM_OT_ApplyAnim"},
@@ -214,6 +223,44 @@ class AnimationOperatorTransactionTests(unittest.TestCase):
         self.assertEqual(len(tracks), 1)
         self.assertEqual(tracks[0].name, "OldTrack")
         self.assertEqual([strip.name for strip in tracks[0].strips], ["OldStrip"])
+        self.assertIs(tracks[0], old_track)
+        self.assertIs(tracks[0].strips[0], self.old_strip)
+        self.assertEqual(tracks[0].strips[0].frame_end, 9.0)
+
+    def test_transaction_rollback_preserves_existing_nla_and_only_removes_additions(self):
+        from core.action_safety import datablock_identity
+        actions = ActionCollection([self.old_action])
+        globals_, _bpy = self._globals(actions)
+        globals_["datablock_identity"] = datablock_identity
+        tracks = FakeTracks()
+        original = tracks.new()
+        original.name = "Keep"
+        original.strips.append(self.old_strip)
+        tracks.active = original
+        self.old_strip.repeat = 3.5
+        self.old_strip.action_slot = self.old_slot
+        context, arm = self._context(
+            FailingAnimationData(self.old_action, self.old_slot, tracks), None,
+        )
+        transaction = globals_["_AnimationTransaction"](arm, context.scene)
+        original.name = "Changed"
+        self.old_strip.select = False
+        original.strips.new("Added", 40, self.new_action)
+        tracks.active = tracks.new()
+        actions.append(self.new_action)
+
+        transaction.rollback()
+
+        self.assertEqual(len(tracks), 1)
+        self.assertIs(tracks[0], original)
+        self.assertIs(tracks.active, original)
+        self.assertEqual(original.name, "Keep")
+        self.assertEqual(len(original.strips), 1)
+        self.assertIs(original.strips[0], self.old_strip)
+        self.assertTrue(self.old_strip.select)
+        self.assertEqual(self.old_strip.repeat, 3.5)
+        self.assertIs(self.old_strip.action_slot, self.old_slot)
+        self.assertEqual(actions, [self.old_action])
 
     def test_apply_rollback_preserves_fractional_nla_strip_start(self):
         actions = ActionCollection([self.old_action, self.new_action])
@@ -244,6 +291,41 @@ class AnimationOperatorTransactionTests(unittest.TestCase):
 
         self.assertEqual(result, {"CANCELLED"})
         self.assertEqual(tracks[0].strips[0].frame_start, 1.25)
+
+    def test_incompatible_library_actions_do_not_touch_scene_or_nla(self):
+        from core.skeleton_compatibility import validate_library_action
+        from core.action_safety import remove_owned_action
+        for operator_name in ("ANIM_OT_PreviewAnim", "ANIM_OT_ApplyAnim"):
+            with self.subTest(operator=operator_name):
+                actions = ActionCollection([self.old_action])
+                globals_, bpy = self._globals(actions)
+                tracks = FakeTracks()
+                original_track = tracks.new()
+                original_track.strips.append(self.old_strip)
+                selected = SimpleNamespace(node_id="node", item_type="ANIM", action_name="New",
+                                           blend_path="library.blend")
+                manager = SimpleNamespace(tree_items=[selected], import_mode="APPEND", active_item_index=0)
+                context, arm = self._context(
+                    FailingAnimationData(self.old_action, self.old_slot, tracks), manager,
+                )
+                bpy.data.objects.get = lambda name: arm
+                globals_["validate_library_action"] = validate_library_action
+                globals_["remove_owned_action"] = remove_owned_action
+                globals_["_AnimationTransaction"] = lambda *args: self.fail(
+                    "compatibility must be checked before scene transaction"
+                )
+                globals_["_load_action_for_item"] = lambda *args: actions.append(self.new_action) or self.new_action
+                operator = globals_[operator_name]()
+                operator.target_node_id = "node"
+                operator.apply_method_override = "REPLACE"
+
+                self.assertEqual(operator.execute(context), {"CANCELLED"})
+                self.assertIs(arm.animation_data.action, self.old_action)
+                self.assertIs(tracks[0], original_track)
+                self.assertIs(tracks[0].strips[0], self.old_strip)
+                self.assertEqual(actions, [self.old_action])
+                self.assertEqual((context.scene.frame_start, context.scene.frame_end, context.scene.frame_current),
+                                 (1, 100, 7))
 
     def test_apply_rejects_missing_target_before_constructing_transaction(self):
         actions = ActionCollection([self.new_action])

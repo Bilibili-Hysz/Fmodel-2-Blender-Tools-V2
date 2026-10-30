@@ -27,7 +27,7 @@ from typing import Iterable
 
 DEFAULT_PACKAGE_NAME = "FModel_Tools"
 DEFAULT_BLENDER_VERSION = "5.2"
-RUNTIME_FILES = ("__init__.py", "auto_handlers.py", "ui.py")
+RUNTIME_FILES = ("__init__.py", "auto_handlers.py", "ui.py", "workflow_state.py")
 RUNTIME_DIRECTORIES = (
     "Assets",
     "Fmodel",

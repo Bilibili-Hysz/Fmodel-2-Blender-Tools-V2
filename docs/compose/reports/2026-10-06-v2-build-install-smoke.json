@@ -1,0 +1,33 @@
+{
+  "blenderVersion": "5.2.1 LTS",
+  "expected": "success",
+  "operator": "preferences.addon_install(enable_on_install=True)",
+  "archive": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_REBUILD_2026-10-06.zip",
+  "background": true,
+  "guiTest": false,
+  "assetImportTest": false,
+  "installedInSandbox": true,
+  "deferredWorkspaceRestore": "PASS",
+  "sceneCount": 1,
+  "loadPostRestore": "PASS",
+  "disableAndStaleTimerCancellation": "PASS",
+  "backupRowsBeforeDeferredRestore": {
+    "skeletons": 1,
+    "tree": 1
+  },
+  "backupRowsAfterDeferredRestore": {
+    "skeletons": 1,
+    "tree": 1
+  },
+  "savedManagerBackupRestore": "PASS",
+  "status": "PASS_INSTALL_ENABLE_RESTORE_DISABLE_REENABLE",
+  "reenable": "PASS",
+  "compressionModuleImported": true,
+  "compressionModuleOrigin": "G:\\Blender\\Software\\blender-5.2.1-windows-x64\\5.2\\python\\Lib\\site-packages\\zstandard\\__init__.py",
+  "assetDecodingPerformed": false,
+  "vendorTimerExecuted": false,
+  "processExitCode": 0,
+  "userDirectoriesIsolated": true,
+  "actualInstalledDirectoriesModified": false,
+  "evidenceScope": "Real background install/enable lifecycle, not GUI/asset or native Vendor qualification"
+}

@@ -44,7 +44,7 @@ class UEFormatCapabilities:
 
     @property
     def supports_strict_skeleton(self) -> bool:
-        """Whether both animation and pose strict contracts are available."""
+        """Legacy keyword availability; this does not imply identity enforcement."""
         return self.supports_strict_animation_skeleton and self.supports_strict_pose_skeleton
 
     @property
@@ -69,7 +69,6 @@ class UEFormatCapabilities:
         return (
             self._meets_min_version()
             and self.has_animation_api
-            and self.supports_strict_animation_skeleton
         )
 
     @property
@@ -77,7 +76,6 @@ class UEFormatCapabilities:
         return (
             self._meets_min_version()
             and self.has_pose_api
-            and self.supports_strict_pose_skeleton
         )
 
 
@@ -120,14 +118,10 @@ class UEFormatCapabilities:
         if normalized in {"animation", "anim", "ueanim"}:
             if not self.has_animation_api:
                 missing.append("UEAnimOptions")
-            if not self.supports_strict_animation_skeleton:
-                missing.append("strict_fmodel_skeleton")
             return tuple(missing)
         if normalized in {"pose", "uepose"}:
             if not self.has_pose_api:
                 missing.append("UEPoseOptions")
-            if not self.supports_strict_pose_skeleton:
-                missing.append("strict_fmodel_skeleton")
             return tuple(missing)
         raise ValueError(f"Unknown UEFormat capability: {capability}")
 
@@ -145,8 +139,6 @@ class UEFormatCapabilities:
             missing.append("FMODEL_MATERIALS_v2")
         if not self.supports_fmodel_textures:
             missing.append("FMODEL_TEXTURES_v1")
-        if not self.supports_strict_skeleton:
-            missing.append("strict_fmodel_skeleton")
         return tuple(missing)
 
 
@@ -334,7 +326,8 @@ def derive_fmodel_roots(model_path: str | Path) -> tuple[Path | None, Path | Non
     """Derive safe FModel export/bundle roots from a Game export-tree path.
 
     For ``<root>/<Project>/Content/.../*.uemodel`` both roots become
-    ``<root>/<Project>``. If no ``Content`` ancestor exists, return ``None``
+    ``<root>`` so project, Engine and plugin mounts share one bounded export
+    tree. If no ``Content`` ancestor exists, return ``None``
     rather than guessing a filesystem root; the importer can then use embedded
     resources or its own file-relative fallback.
     """
@@ -344,7 +337,9 @@ def derive_fmodel_roots(model_path: str | Path) -> tuple[Path | None, Path | Non
         return None, None
     for ancestor in (path.parent, *path.parents):
         if ancestor.name.casefold() == "content":
-            root = ancestor.parent
+            root = ancestor.parent.parent
+            if root == Path(root.anchor):
+                return None, None
             return root, root
     return None, None
 

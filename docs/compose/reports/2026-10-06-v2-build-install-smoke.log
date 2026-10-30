@@ -1,0 +1,14 @@
+STDOUT
+addon_utils.disable: FModel_Tools not loaded
+[FModel Auto] 自动触发器已注册
+Modules Installed (FModel_Tools) from 'D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_REBUILD_2026-10-06.zip' into 'D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\tmp\\v2-install-smoke-af0k7faq\\scripts\\addons'
+Info: Modules Installed (FModel_Tools) from 'D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_REBUILD_2026-10-06.zip' into 'D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\tmp\\v2-install-smoke-af0k7faq\\scripts\\addons'
+[FModel Auto] 自动触发器已注销
+[FModel Auto] 自动触发器已注册
+[FModel Auto] 自动触发器已注销
+FMODEL_ADDON_INSTALL_SMOKE=PASS_INSTALL_ENABLE_RESTORE_DISABLE_REENABLE
+Blender 5.2.1 LTS (hash 9e2066aef7ef built 2026-08-25 02:38:20)
+
+Blender quit
+
+STDERR

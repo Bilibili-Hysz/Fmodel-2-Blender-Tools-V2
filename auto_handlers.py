@@ -37,6 +37,14 @@ def _schedule_lifecycle_timer(callback, first_interval):
     return timer
 
 
+def defer_workspace_restore(callback):
+    """Restore scenes after addon enable exits Blender's RestrictBlend scope.
+
+    Use the shared lifecycle timer so disable/reload cancels stale restores.
+    """
+    return _schedule_lifecycle_timer(callback, 0.0)
+
+
 def _pipeline_is_active():
     """Read the shared pipeline activity flag without making Blender mandatory."""
     try:

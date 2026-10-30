@@ -12,6 +12,7 @@ import os
 import sys
 import types
 import unittest
+from unittest import mock
 
 
 # ---------------------------------------------------------------------------
@@ -122,9 +123,19 @@ def _import_flow_module():
         "addon.Fmodel.Pipeline.steps.single_model_flow", _MODULE_PATH
     )
     module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
+    packages = {
+        name: types.ModuleType(name) for name in (
+            "addon", "addon.core", "addon.Fmodel", "addon.Fmodel.Pipeline",
+            "addon.Fmodel.Pipeline.steps",
+        )
+    }
+    for package in packages.values():
+        package.__path__ = []
+    workflow = types.ModuleType("addon.core.workflow")
+    workflow.set_target = lambda scene, armature: None
     try:
-        spec.loader.exec_module(module)
+        with mock.patch.dict(sys.modules, {**packages, workflow.__name__: workflow, spec.name: module}):
+            spec.loader.exec_module(module)
     except Exception:
         return None
     return module
@@ -273,13 +284,13 @@ class HandoffExecutionTests(unittest.TestCase):
         self.assertEqual(result, {"FINISHED"})
         self.assertEqual(self.wizard.skeleton_filter, "Hero")
 
-    def test_handoff_falls_back_to_object_name(self):
+    def test_handoff_without_metadata_does_not_filter_by_object_name(self):
         armature = FakeArmature("DisplayRig", {})
         result = self.mod._handoff_armature(self.wizard, armature, "")
         self.assertEqual(result, {"FINISHED"})
-        self.assertEqual(self.wizard.skeleton_filter, "DisplayRig")
+        self.assertEqual(self.wizard.skeleton_filter, "")
 
-    def test_handoff_falls_back_to_object_name_for_empty_metadata_skeleton(self):
+    def test_handoff_leaves_filter_open_for_empty_metadata_skeleton(self):
         for skeleton_value in ("", None):
             with self.subTest(skeleton_value=skeleton_value):
                 armature = FakeArmature(
@@ -287,7 +298,7 @@ class HandoffExecutionTests(unittest.TestCase):
                 )
                 result = self.mod._handoff_armature(self.wizard, armature, "")
                 self.assertEqual(result, {"FINISHED"})
-                self.assertEqual(self.wizard.skeleton_filter, armature.name)
+                self.assertEqual(self.wizard.skeleton_filter, "")
                 self.assertEqual(self.wizard.import_target_skeleton, armature.name)
 
     def test_handoff_sets_import_target_skeleton_to_armature_name(self):

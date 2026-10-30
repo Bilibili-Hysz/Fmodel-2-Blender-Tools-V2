@@ -189,6 +189,148 @@ class TaskScopedImportTests(unittest.TestCase):
             self.assertTrue(self.stages.AssetImportStage()._import_ueanim_direct(context))
             self.assertEqual(imported, [hero])
 
+    def test_ueanim_rejects_pose_in_legacy_action_manifest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "Expressions.uepose")
+            open(path, "wb").close()
+            api = types.ModuleType("addon.Fmodel.importers.animation.operator_anim_ueformat")
+            api.get_ueformat_api = lambda: (object, None, object, None)
+            sys.modules[api.__name__] = api
+            context = FakeContext({"skeletons": {
+                "Hero": {"Moves": {"__animations__": {
+                    "Expressions": {"source_file": path},
+                }}},
+            }}, {"source_skeleton": "Hero"})
+
+            self.assertFalse(self.stages.AssetImportStage()._import_ueanim_direct(context))
+            self.assertTrue(any("重新扫描" in message for _, message in context.logs))
+            self.assertEqual(self.actions, [])
+
+    def test_incremental_content_update_replaces_old_bundle(self):
+        self._exercise_incremental_build(False)
+
+    def test_incremental_publication_failure_preserves_old_bundle(self):
+        self._exercise_incremental_build(True)
+
+    def _exercise_incremental_build(self, fail_publish):
+        from core import library_files
+        stage = self.stages.LibraryBuildingStage()
+        with tempfile.TemporaryDirectory() as directory:
+            source = os.path.join(directory, "Idle.ueanim")
+            output = os.path.join(directory, "library")
+            os.mkdir(output)
+            context = FakeContext({}, {
+                "source_dir": directory, "output_dir": output,
+                "library_name": "Lib", "source_skeleton": "Hero",
+                "target_armature": "HeroRig", "generate_thumbnails": False,
+            })
+            assets = types.ModuleType("addon.Assets")
+            utils = types.ModuleType("addon.Assets.Utils")
+            utils.utils_asset = types.SimpleNamespace()
+
+            def prepare(value):
+                with open(source, "wb") as handle:
+                    handle.write(value)
+                action = FakeAction("Idle")
+                action.update(Pipeline_Source=source, Pipeline_SourceRef="Hero/Base/Idle",
+                              Pipeline_Owned=True, value=value.decode())
+                action.asset_data = types.SimpleNamespace(catalog_id="")
+                self.actions.append(action)
+                version = self.stages.make_library_source_version(
+                    source, context.config, stage._task_identity(context),
+                )
+                context.imported_assets = {"imported_actions": [{
+                    "action_name": "Idle", "source_file": source,
+                    "source_manifest_ref": "Hero/Base/Idle", "source_version": version,
+                }]}
+
+            def write_bundle(filepath, datablocks, **kwargs):
+                with open(filepath, "w", encoding="utf-8") as handle:
+                    json.dump([dict(action) for action in datablocks], handle)
+
+            with mock.patch.dict(sys.modules, {"addon.Assets": assets, "addon.Assets.Utils": utils}), \
+                    mock.patch.object(self.bpy.data.libraries, "write", side_effect=write_bundle), \
+                    mock.patch.object(stage, "_reload_actions_from_blends", return_value={}), \
+                    mock.patch.object(stage, "_validate_published_bundle_actions"), \
+                    mock.patch.object(self.stages, "get_or_create_catalog_uuid", return_value="catalog"):
+                prepare(b"old")
+                self.assertTrue(stage.execute(context), context.logs)
+                index = library_files.library_index_path(output, "Lib")
+                with open(index, "rb") as handle:
+                    original_index = handle.read()
+                original_bundle = os.path.join(output, context.library_manifest["blend_files"][0])
+                with open(original_bundle, "rb") as handle:
+                    original_bytes = handle.read()
+                prepare(b"new")
+                publication_globals = self.stages.persist_transaction_replacement.__globals__
+                original_write = publication_globals['_write_json_temp']
+                injected_failures = []
+
+                def fail_sidecar(path, payload):
+                    if path.endswith("_manifest.json") and not path.endswith("__library_manifest.json"):
+                        injected_failures.append(path)
+                        raise OSError("injected sidecar failure")
+                    return original_write(path, payload)
+
+                with mock.patch.dict(publication_globals, {
+                    '_write_json_temp': fail_sidecar if fail_publish else original_write,
+                }):
+                    result = stage.execute(context)
+                self.assertEqual(result, not fail_publish, context.logs)
+                if fail_publish:
+                    self.assertTrue(injected_failures)
+                    with open(index, "rb") as handle:
+                        self.assertEqual(handle.read(), original_index)
+                    with open(original_bundle, "rb") as handle:
+                        self.assertEqual(handle.read(), original_bytes)
+                    self.assertEqual(context.library_manifest, json.loads(original_index))
+                    self.assertNotIn("成功构建资产库", context.logs[-1][1])
+                else:
+                    published = library_files.load_complete_v2_manifest(index, output)
+                    self.assertEqual(len(published.assets), 1)
+                    self.assertEqual(len(published.bundles), 1)
+                    with open(os.path.join(output, published.blend_files[0]), encoding="utf-8") as handle:
+                        self.assertEqual(json.load(handle)[0]["value"], "new")
+                    self.assertEqual(os.path.join(output, published.blend_files[0]), original_bundle)
+
+    def test_update_layout_preserves_source_bundle_when_order_and_chunk_size_change(self):
+        stage = self.stages.LibraryBuildingStage()
+        entries = [({}, FakeAction(name), f"Hero::{name}") for name in ("B", "C", "A")]
+        manifest = types.SimpleNamespace(
+            bundles=[types.SimpleNamespace(
+                blend_file=f"Lib_Hero{suffix}.blend", skeletons=["Hero"],
+                processed_sources=[f"Hero::{name}"],
+            ) for name, suffix in (("A", ""), ("B", "_Vol_2"))],
+            assets=[types.SimpleNamespace(
+                blend_file=f"Lib_Hero{suffix}.blend", source_key=f"Hero::{name}", action_name=name,
+            ) for name, suffix in (("A", ""), ("B", "_Vol_2"))],
+        )
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(stage, "_occupied_bundle_slots", return_value={1, 2, 3}):
+            chunks = stage._stable_update_chunks(manifest, "Hero", entries, directory, "Lib_Hero", 500)
+            self.assertEqual([(slot, [key for _, _, key in chunk]) for slot, chunk in chunks],
+                             [(1, ["Hero::A"]), (2, ["Hero::B"]), (4, ["Hero::C"])])
+            for defect in ("missing_mapping", "renamed_action", "changed_target"):
+                with self.subTest(defect=defect):
+                    broken = copy.deepcopy(manifest)
+                    if defect == "missing_mapping":
+                        broken.assets[0].source_key = ""
+                    elif defect == "renamed_action":
+                        broken.assets[0].action_name = "Different"
+                    else:
+                        broken.bundles[0].source_versions = {"Hero::A": {"target": "old-target"}}
+                        entries[2][0]["source_version"] = {"target": "new-target"}
+                    with self.assertRaises(ValueError):
+                        stage._stable_update_chunks(broken, "Hero", entries, directory, "Lib_Hero", 500)
+
+    def test_library_reload_skips_bundles_not_requested_by_current_task(self):
+        stage = self.stages.LibraryBuildingStage()
+        manifest = types.SimpleNamespace(bundles=[types.SimpleNamespace(blend_file="Old.blend")])
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(self.bpy.data.libraries, "load") as load:
+            self.assertEqual(stage._reload_actions_from_blends(directory, manifest, []), {})
+            load.assert_not_called()
+
     def test_ueanim_nonempty_missing_target_armature_fails_before_importer_construction(self):
         class Importer:
             def __init__(self, options):
@@ -238,97 +380,7 @@ class TaskScopedImportTests(unittest.TestCase):
             self.assertIn("2", context.imported_assets["failed_imports"][0]["error"])
             self.assertEqual(self.actions, [])
 
-    def test_ueanim_target_metadata_must_match_task_skeleton(self):
-        with tempfile.TemporaryDirectory() as directory:
-            source = os.path.join(directory, "Idle.ueanim")
-            open(source, "w").close()
-            constructed = []
 
-            class Options:
-                def __init__(self, **kwargs):
-                    constructed.append(kwargs)
-
-            class Importer:
-                def __init__(self, options):
-                    raise AssertionError("mismatched target must fail before importer construction")
-
-            api = types.ModuleType("addon.Fmodel.importers.animation.operator_anim_ueformat")
-            api.get_ueformat_api = lambda: (Importer, None, Options, None)
-            sys.modules[api.__name__] = api
-            target = types.SimpleNamespace(
-                name="HeroRig", type="ARMATURE",
-                get=lambda key, default=None: "Enemy" if key == "FModel_Skeleton" else default,
-            )
-            self.bpy.data.objects = types.SimpleNamespace(get=lambda name: target)
-            context = FakeContext({"skeletons": {"Hero": {"": {"__animations__": {
-                "Idle": {"source_file": source},
-            }}}}}, {
-                "source_skeleton": "Hero", "target_armature": "HeroRig",
-                "import_resume_enabled": False,
-            })
-
-            self.assertFalse(self.stages.AssetImportStage()._import_ueanim_direct(context))
-            self.assertEqual(constructed, [])
-            self.assertTrue(any("Hero" in message and "Enemy" in message
-                                for level, message in context.logs if level == "error"))
-
-    def test_ueanim_strict_identity_preflight_fails_once_before_importer_construction(self):
-        with tempfile.TemporaryDirectory() as directory:
-            sources = [os.path.join(directory, name) for name in ("Idle.ueanim", "Run.ueanim")]
-            for source in sources:
-                open(source, "w").close()
-            constructed = []
-
-            class Options:
-                def __init__(self, **kwargs):
-                    constructed.append(kwargs)
-
-            class Importer:
-                def __init__(self, options):
-                    raise AssertionError("strict identity preflight must run before importer construction")
-
-            api = types.ModuleType("addon.Fmodel.importers.animation.operator_anim_ueformat")
-            api.get_ueformat_api = lambda: (Importer, None, Options, None)
-            sys.modules[api.__name__] = api
-            target_identity = {
-                "version": 1,
-                "skeleton_path": "/Game/Characters/SK_Hero.SK_Hero",
-                "has_skeleton_guid": False,
-                "skeleton_guid": None,
-                "bone_layout_hash": "b" * 64,
-            }
-            target = types.SimpleNamespace(
-                name="HeroRig",
-                type="ARMATURE",
-                get=lambda key, default=None: {
-                    "FModel_Skeleton": "Hero",
-                    "fmodel_skeleton_identity": target_identity,
-                }.get(key, default),
-            )
-            self.bpy.data.objects = types.SimpleNamespace(get=lambda name: target if name == "HeroRig" else None)
-            source_identity = {
-                "version": 1,
-                "skeleton_path": "/Game/Characters/SK_Hero.SK_Hero",
-                "has_skeleton_guid": False,
-                "skeleton_guid": None,
-                "bone_layout_hash": "a" * 64,
-            }
-            context = FakeContext({"skeletons": {"Hero": {"Moves": {"__animations__": {
-                "Idle": {"source_file": sources[0], "metadata": {"fmodel_skeleton_identity": source_identity}},
-                "Run": {"source_file": sources[1], "metadata": {"fmodel_skeleton_identity": source_identity}},
-            }}}}}, {
-                "source_skeleton": "Hero", "source_subset": sources,
-                "target_armature": "HeroRig", "output_dir": directory,
-                "skeleton_compatibility_mode": "strict",
-            })
-
-            self.assertFalse(self.stages.AssetImportStage()._import_ueanim_direct(context))
-
-            self.assertEqual(constructed, [])
-            self.assertEqual(len(context.imported_assets["failed_imports"]), 1)
-            self.assertEqual(context.get_config("import_checkpoint"), {})
-            self.assertTrue(any("严格骨架身份预检失败" in message
-                                for level, message in context.logs if level == "error"))
 
     def test_ueanim_name_compatibility_skips_strict_identity_preflight(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -386,135 +438,11 @@ class TaskScopedImportTests(unittest.TestCase):
             self.assertTrue(self.stages.AssetImportStage()._import_ueanim_direct(context))
 
             self.assertEqual(len(constructed), 1)
-            self.assertFalse(constructed[0]["strict_fmodel_skeleton"])
+            self.assertNotIn("strict_fmodel_skeleton", constructed[0])
             self.assertEqual(context.imported_assets["failed_imports"], [])
-            self.assertEqual(self.actions[0]["Pipeline_SkeletonCompatibility"], "name_retarget")
+            self.assertEqual(self.actions[0]["Pipeline_SkeletonCompatibility"], "ueformat")
 
-    def test_ueanim_strict_preflight_uses_binary_identity_over_manifest_cache(self):
-        with tempfile.TemporaryDirectory() as directory:
-            source = os.path.join(directory, "Idle.ueanim")
-            open(source, "w").close()
-            constructed = []
 
-            class Options:
-                def __init__(self, **kwargs):
-                    constructed.append(kwargs)
-
-            class Importer:
-                def __init__(self, options):
-                    raise AssertionError("binary identity preflight must run before importer construction")
-
-            api = types.ModuleType("addon.Fmodel.importers.animation.operator_anim_ueformat")
-            api.get_ueformat_api = lambda: (Importer, None, Options, None)
-            sys.modules[api.__name__] = api
-
-            matching_identity = {
-                "version": 1,
-                "skeleton_path": "/Game/Characters/SK_Hero.SK_Hero",
-                "has_skeleton_guid": False,
-                "skeleton_guid": None,
-                "bone_layout_hash": "b" * 64,
-            }
-            binary_identity = {
-                **matching_identity,
-                "bone_layout_hash": "a" * 64,
-            }
-            target = types.SimpleNamespace(
-                name="HeroRig",
-                type="ARMATURE",
-                get=lambda key, default=None: {
-                    "FModel_Skeleton": "Hero",
-                    "fmodel_skeleton_identity": matching_identity,
-                }.get(key, default),
-            )
-            self.bpy.data.objects = types.SimpleNamespace(
-                get=lambda name: target if name == "HeroRig" else None
-            )
-            context = FakeContext({"skeletons": {"Hero": {"Moves": {"__animations__": {
-                "Idle": {
-                    "source_file": source,
-                    # Deliberately forged/stale cache value: it matches target.
-                    "metadata": {"fmodel_skeleton_identity": matching_identity},
-                },
-            }}}}}, {
-                "source_skeleton": "Hero",
-                "source_subset": [source],
-                "target_armature": "HeroRig",
-                "output_dir": directory,
-                "skeleton_compatibility_mode": "strict",
-            })
-
-            with mock.patch.object(
-                self.stages,
-                "read_ueformat_identity",
-                return_value=types.SimpleNamespace(kind="animation", identity=binary_identity),
-            ):
-                self.assertFalse(self.stages.AssetImportStage()._import_ueanim_direct(context))
-
-            self.assertEqual(constructed, [])
-            self.assertEqual(len(context.imported_assets["failed_imports"]), 1)
-            self.assertTrue(any("bone layout hash differs" in message
-                                for level, message in context.logs if level == "error"))
-
-    def test_ueanim_strict_preflight_rejects_missing_binary_identity(self):
-        with tempfile.TemporaryDirectory() as directory:
-            source = os.path.join(directory, "Idle.ueanim")
-            open(source, "w").close()
-            constructed = []
-
-            class Options:
-                def __init__(self, **kwargs):
-                    constructed.append(kwargs)
-
-            class Importer:
-                def __init__(self, options):
-                    raise AssertionError("missing binary identity must fail before importer construction")
-
-            api = types.ModuleType("addon.Fmodel.importers.animation.operator_anim_ueformat")
-            api.get_ueformat_api = lambda: (Importer, None, Options, None)
-            sys.modules[api.__name__] = api
-            identity = {
-                "version": 1,
-                "skeleton_path": "/Game/Characters/SK_Hero.SK_Hero",
-                "has_skeleton_guid": False,
-                "skeleton_guid": None,
-                "bone_layout_hash": "b" * 64,
-            }
-            target = types.SimpleNamespace(
-                name="HeroRig",
-                type="ARMATURE",
-                get=lambda key, default=None: {
-                    "FModel_Skeleton": "Hero",
-                    "fmodel_skeleton_identity": identity,
-                }.get(key, default),
-            )
-            self.bpy.data.objects = types.SimpleNamespace(
-                get=lambda name: target if name == "HeroRig" else None
-            )
-            context = FakeContext({"skeletons": {"Hero": {"Moves": {"__animations__": {
-                "Idle": {
-                    "source_file": source,
-                    "metadata": {"fmodel_skeleton_identity": identity},
-                },
-            }}}}}, {
-                "source_skeleton": "Hero",
-                "source_subset": [source],
-                "target_armature": "HeroRig",
-                "output_dir": directory,
-                "skeleton_compatibility_mode": "strict",
-            })
-
-            with mock.patch.object(
-                self.stages,
-                "read_ueformat_identity",
-                return_value=types.SimpleNamespace(kind="animation", identity=None),
-            ):
-                self.assertFalse(self.stages.AssetImportStage()._import_ueanim_direct(context))
-
-            self.assertEqual(constructed, [])
-            self.assertEqual(len(context.imported_assets["failed_imports"]), 1)
-            self.assertTrue(any("no FMODEL_TARGET_SKELETON identity" in message
-                                for level, message in context.logs if level == "error"))
 
     def test_ueanim_import_exception_removes_partial_action_and_refreshes_delta(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -543,7 +471,7 @@ class TaskScopedImportTests(unittest.TestCase):
                 "import_resume_enabled": False,
             })
 
-            self.assertFalse(self.stages.AssetImportStage()._import_ueanim_direct(context))
+            self.assertTrue(self.stages.AssetImportStage()._import_ueanim_direct(context))
             self.assertEqual([action.name for action in self.actions], ["Valid"])
             self.assertEqual(
                 [item["action_name"] for item in context.imported_assets["imported_actions"]],
@@ -679,7 +607,7 @@ class TaskScopedImportTests(unittest.TestCase):
                     self.assertFalse(self.stages.LibraryBuildingStage().execute(context))
                     self.assertTrue(any(level == "error" for level, _ in context.logs))
 
-    def test_force_rebuild_rejects_skeleton_output_collision_before_bundle_write(self):
+    def test_case_variant_labels_still_require_resolvable_actions(self):
         with tempfile.TemporaryDirectory() as directory:
             assets = types.ModuleType("addon.Assets"); assets.__path__ = []
             utils = types.ModuleType("addon.Assets.Utils"); utils.__path__ = []
@@ -709,7 +637,8 @@ class TaskScopedImportTests(unittest.TestCase):
                 self.bpy.data.libraries.write = original_write
 
             self.assertEqual(writes, [])
-            self.assertTrue(any("collision" in message for _, message in context.logs))
+            self.assertTrue(context.logs)
+            self.assertFalse(any("output collision" in message for _, message in context.logs))
 
     def test_force_rebuild_rejects_malformed_imported_action_before_bundle_write(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -802,7 +731,7 @@ class TaskScopedImportTests(unittest.TestCase):
                       "import_batch_size": 2}
             context = FakeContext(manifest, config)
 
-            self.assertFalse(self.stages.AssetImportStage()._import_ueanim_direct(context))
+            self.assertTrue(self.stages.AssetImportStage()._import_ueanim_direct(context))
             checkpoint = context.get_config("import_checkpoint")
             self.assertEqual(
                 [item["normalized_path"] for item in checkpoint["pending_sources"]],
@@ -2190,37 +2119,49 @@ class TaskScopedImportTests(unittest.TestCase):
                 ["Hero/Moves/Idle"],
             )
 
-    def test_legacy_skeleton_filter_validates_target_skeleton_metadata(self):
-        constructed = []
+    def test_skeleton_labels_and_identity_do_not_gate_pipeline_import(self):
+        for mode in ("ueformat", "strict", "name_retarget"):
+            for identity_state in ("different", "missing", "stale_cache"):
+                with self.subTest(mode=mode, identity=identity_state), tempfile.TemporaryDirectory() as directory:
+                    self.actions[:] = []
+                    source = os.path.join(directory, "Breathing.ueanim")
+                    open(source, "w").close()
+                    calls = []
+                    target = self.bpy.data.objects.get("EnemyRig")
 
-        class Options:
-            def __init__(self, **kwargs):
-                constructed.append(kwargs)
+                    class Options:
+                        # Standard upstream options deliberately have no strict keyword.
+                        def __init__(self, scale_factor, rotation_only, import_curves, override_skeleton):
+                            calls.append(override_skeleton)
 
-        class Importer:
-            def __init__(self, options):
-                raise AssertionError("mismatched target must fail before importer construction")
+                    class Importer:
+                        def __init__(self, options):
+                            pass
 
-        api = types.ModuleType("addon.Fmodel.importers.animation.operator_anim_ueformat")
-        api.get_ueformat_api = lambda: (Importer, None, Options, None)
-        sys.modules[api.__name__] = api
-        target = types.SimpleNamespace(
-            name="EnemyRig", type="ARMATURE",
-            get=lambda key, default=None: "Enemy" if key == "FModel_Skeleton" else default,
-        )
-        self.bpy.data.objects = types.SimpleNamespace(get=lambda name: target)
-        context = FakeContext({}, {
-            "skeleton_filter": "Hero",
-            "target_armature": "EnemyRig",
-            "import_resume_enabled": False,
-        })
+                        def import_file(self, path):
+                            TaskScopedImportTests.actions.append(FakeAction("Breathing"))
 
-        self.assertFalse(self.stages.AssetImportStage()._import_ueanim_direct(context))
-        self.assertEqual(constructed, [])
-        self.assertTrue(any("Hero" in message and "Enemy" in message
-                            for level, message in context.logs if level == "error"))
+                    api = types.ModuleType("addon.Fmodel.importers.animation.operator_anim_ueformat")
+                    api.get_ueformat_api = lambda: (Importer, None, Options, None)
+                    sys.modules[api.__name__] = api
+                    identity = {"version": 1, "skeleton_path": "/Game/Hero", "bone_layout_hash": "a" * 64,
+                                "has_skeleton_guid": False, "skeleton_guid": None}
+                    metadata = {} if identity_state == "missing" else {"fmodel_skeleton_identity": identity}
+                    context = FakeContext({"skeletons": {"Hero": {"Moves": {"__animations__": {
+                        "Breathing": {"source_file": source, "metadata": metadata},
+                    }}}}}, {
+                        "source_skeleton": "Hero", "skeleton_filter": "Hero", "target_armature": "EnemyRig",
+                        "source_subset": [source], "import_resume_enabled": False, "skeleton_compatibility_mode": mode,
+                    })
+                    with mock.patch.object(self.stages, "read_ueformat_identity",
+                                           side_effect=AssertionError("import must not use identity preflight")):
+                        self.assertTrue(self.stages.AssetImportStage()._import_ueanim_direct(context))
+                    self.assertEqual(calls, [target])
+                    self.assertEqual(context.imported_assets["failed_imports"], [])
+                    self.assertEqual(self.actions[0]["Pipeline_SkeletonCompatibility"], "ueformat")
 
-    def test_explicit_source_skeleton_wins_for_automatic_target_selection(self):
+
+    def test_source_label_does_not_select_target_over_active_armature(self):
         selected_targets = []
 
         class Options:
@@ -2247,6 +2188,9 @@ class TaskScopedImportTests(unittest.TestCase):
                 return next((obj for obj in self if obj.name == name), None)
 
         self.bpy.data.objects = Objects(armatures)
+        previous_context = getattr(self.bpy, "context", None)
+        self.bpy.context = types.SimpleNamespace(object=armatures[1], active_object=armatures[1])
+        self.addCleanup(setattr, self.bpy, "context", previous_context)
         with tempfile.TemporaryDirectory() as directory:
             source = os.path.join(directory, "Idle.ueanim")
             open(source, "w").close()
@@ -2259,7 +2203,7 @@ class TaskScopedImportTests(unittest.TestCase):
             })
 
             self.assertFalse(self.stages.AssetImportStage()._import_ueanim_direct(context))
-        self.assertEqual(selected_targets, [armatures[0]])
+        self.assertEqual(selected_targets, [armatures[1]])
 
     def test_fmodel_manifest_acquisition_ignores_legacy_json_sidecars(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -2326,7 +2270,7 @@ class TaskScopedImportTests(unittest.TestCase):
 
             self.stages.PipelineContext._validate_staged_checkpoint_paths(data)
 
-    def test_runtime_staging_validation_uses_action_manifest_skeleton_and_rejects_conflicts(self):
+    def test_runtime_staging_validation_uses_task_path_without_matching_display_labels(self):
         with tempfile.TemporaryDirectory() as output_dir:
             context = FakeContext({}, {"output_dir": output_dir})
             stage = self.stages.AssetImportStage()
@@ -2341,11 +2285,13 @@ class TaskScopedImportTests(unittest.TestCase):
                 ),
                 staged_blend,
             )
-            with self.assertRaisesRegex(ValueError, "filename contract"):
-                stage._validate_staged_blend(
+            self.assertEqual(stage._validate_staged_blend(
                     context, staged_blend,
                     {"source_manifest_ref": "Enemy/Moves/Idle"},
-                )
+                ), staged_blend)
+            with self.assertRaisesRegex(ValueError, "filename contract"):
+                stage._validate_staged_blend(context, os.path.join(output_dir, 'actions_chunk_0001.blend'),
+                                           {"source_manifest_ref": "Hero/Moves/Idle"})
 
     def test_staging_validation_rejects_actions_without_action_or_task_skeleton(self):
         with tempfile.TemporaryDirectory() as output_dir:
@@ -2491,6 +2437,27 @@ class TaskScopedImportTests(unittest.TestCase):
         self.assertEqual(imported["source_bundle"], os.path.normcase(destination))
         self.assertEqual(context.blender_saves, 1)
 
+    def test_partial_publication_updates_matching_resume_record_and_keeps_failures(self):
+        imported = {"action_name": "Idle", "source_manifest_ref": "Hero/Moves/Idle",
+                    "source_file": os.path.abspath("Idle.ueanim"), "staged_blend": "staged.blend"}
+        staged_record = dict(imported)
+        other_task = {**imported, "source_manifest_ref": "Enemy/Moves/Idle"}
+        failure = {"source_file": "Missing.ueanim", "error": "missing"}
+        checkpoint = {"state": "partial", "pending_sources": ["Missing.ueanim"],
+                      "imported_actions": [staged_record, other_task], "failed_imports": [failure]}
+        context = FakeContext({}, {"import_checkpoint": checkpoint})
+        context.imported_assets = {"imported_actions": [imported]}
+        destination = os.path.abspath("Hero.blend")
+
+        self.stages.LibraryBuildingStage()._persist_published_provenance(context, [(imported, destination)])
+
+        saved = context.saved_checkpoints[-1]
+        self.assertEqual(saved["imported_actions"][0]["source_bundle"], os.path.normcase(destination))
+        self.assertNotIn("source_bundle", saved["imported_actions"][1])
+        self.assertEqual(saved["state"], "partial")
+        self.assertEqual(saved["pending_sources"], ["Missing.ueanim"])
+        self.assertEqual(saved["failed_imports"], [failure])
+
     def test_published_provenance_uses_external_checkpoint_before_staging_cleanup(self):
         stages_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Fmodel", "Pipeline", "stages.py")
         with open(stages_path, encoding="utf-8") as handle:
@@ -2554,6 +2521,31 @@ class TaskScopedImportTests(unittest.TestCase):
             self.assertEqual(source_key, "Hero::Idle.ueanim")
             self.assertEqual(resolved, os.path.normcase(os.path.abspath(blend_path)))
 
+    def test_import_resume_loads_only_bundle_with_authoritative_source_coverage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = os.path.join(directory, "Hero.blend")
+            imported = {"action_name": "Idle", "source_file": os.path.join(directory, "Idle.ueanim"),
+                        "source_manifest_ref": "Hero/Moves/Idle", "source_bundle": destination}
+            bundle = types.SimpleNamespace(blend_file="Hero.blend", processed_sources=["Hero::Idle.ueanim"],
+                                           completion_state="completed")
+            manifest = types.SimpleNamespace(bundles=[bundle])
+            context = FakeContext({}, {"output_dir": directory, "source_dir": directory})
+            stage = self.stages.AssetImportStage()
+            with (
+                mock.patch.dict(stage._restore_published_actions.__globals__, {
+                    "load_complete_v2_manifest": mock.Mock(return_value=manifest),
+                    "recover_library_transaction": mock.Mock(),
+                }),
+                mock.patch.object(self.stages.LibraryBuildingStage, "_reload_actions_from_blends") as reload,
+            ):
+                stage._restore_published_actions(context, [imported])
+                reload.assert_called_once_with(directory, manifest, [imported])
+                reload.reset_mock()
+                imported["source_bundle"] = os.path.join(directory, "Other.blend")
+                with self.assertRaisesRegex(ValueError, "断点动作不属于"):
+                    stage._restore_published_actions(context, [imported])
+                reload.assert_not_called()
+
     def test_force_rebuild_passes_obsolete_cleanup_into_transaction_before_stage_success(self):
         stages_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Fmodel", "Pipeline", "stages.py")
         with open(stages_path, encoding="utf-8") as handle:
@@ -2592,9 +2584,12 @@ class TaskScopedImportTests(unittest.TestCase):
         action_removals = [node for node in remove_calls
                            if "bpy.data.actions" in ast.unparse(node)]
         self.assertTrue(action_removals)
-        source = ast.unparse(execute)
-        self.assertIn("if not force_rebuild", source)
-        self.assertLess(source.index("if not force_rebuild"), source.index("publish_rebuild_replacement_set"))
+        unload_loop = next(node for node in ast.walk(execute)
+                           if isinstance(node, ast.For) and ast.unparse(node.target) == "act")
+        guard = unload_loop.body[0]
+        self.assertEqual(ast.unparse(guard.test), "force_rebuild")
+        self.assertIsInstance(guard.body[0], ast.Continue)
+        self.assertLess(guard.lineno, replacement_publish.lineno)
 
     def test_force_rebuild_removes_owned_generated_actions_only_postcommit(self):
         stages_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Fmodel", "Pipeline", "stages.py")
@@ -2789,7 +2784,8 @@ class TaskScopedImportTests(unittest.TestCase):
 
                 def __exit__(self, *args):
                     requested = list(self.data_to.actions)
-                    self.data_to.actions = [FakeAction(f"{name}.001") for name in requested]
+                    # Real Blender mutates the caller's assigned list in place.
+                    self.data_to.actions[:] = [FakeAction(f"{name}.001") for name in requested]
                     self.target_actions.extend(self.data_to.actions)
 
             self.bpy.data.libraries.load = lambda path, link: SuffixedReloadLoad(
@@ -2810,6 +2806,7 @@ class TaskScopedImportTests(unittest.TestCase):
             self.assertIs(selected, mapping[os.path.normcase(os.path.abspath(blend_path))]["Idle"])
             self.assertEqual(selected.name, "Idle.001")
             self.assertEqual(selected["Pipeline_RequestedActionName"], "Idle")
+            self.assertEqual(selected["Pipeline_SourceBundleActionName"], "Idle")
 
     def test_bundle_reload_is_idempotent_and_cleans_replaced_staged_action(self):
         with tempfile.TemporaryDirectory() as directory:

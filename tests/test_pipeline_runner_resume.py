@@ -140,6 +140,62 @@ class PipelineRunnerResumeTests(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
+    def _load_step3(self):
+        step_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Fmodel", "Pipeline", "steps", "step3_scan.py"
+        )
+        spec = importlib.util.spec_from_file_location(
+            "addon.Fmodel.Pipeline.steps.step3_scan", step_path
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    def test_step3_reports_current_dictionary_failure_detail(self):
+        step3 = self._load_step3()
+        state = types.SimpleNamespace(
+            source_dir="C:/Anims", output_dir=self.output_dir,
+            scan_completed=True, import_completed=True, lib_completed=True,
+            current_step=2,
+        )
+        reports = []
+        operator = step3.PIPELINE_OT_WizardStep3()
+        operator.report = lambda level, message: reports.append((level, message))
+        stage = self.core.PipelineStage.DICTIONARY_ACQUISITION.value
+
+        def fail_stage(_context, _state, _stage):
+            pipeline_context = self.core.PipelineContext(config={"output_dir": self.output_dir})
+            pipeline_context.log_error(stage, "0 个匹配骨架筛选 'WrongRig'；mismatch=23")
+            pipeline_context.set_stage_status(stage, "failed")
+            pipeline_context.persist_checkpoint()
+            return False
+
+        with mock.patch.object(step3, "run_wizard_stage", side_effect=fail_stage):
+            result = operator.execute(types.SimpleNamespace(
+                scene=types.SimpleNamespace(pipeline_wizard=state), active_object=None,
+            ))
+
+        self.assertEqual(result, {"CANCELLED"})
+        self.assertFalse(state.scan_completed)
+        self.assertIn("WrongRig", reports[-1][1])
+        self.assertNotIn("字典阶段未通过", reports[-1][1])
+
+    def test_step3_failure_detail_does_not_reuse_older_scan_error(self):
+        step3 = self._load_step3()
+        stage = self.core.PipelineStage.DICTIONARY_ACQUISITION.value
+        pipeline_context = self.core.PipelineContext(config={"output_dir": self.output_dir})
+        pipeline_context.log_error(stage, "old mismatch")
+        pipeline_context.set_stage_status(stage, "failed")
+        pipeline_context.log_info(stage, f"开始执行阶段: {stage}")
+        pipeline_context.set_stage_status(stage, "failed")
+        pipeline_context.persist_checkpoint()
+
+        self.assertEqual(
+            step3._scan_stage_error(self.output_dir, stage, "字典阶段未通过"),
+            "字典阶段未通过",
+        )
+
     def tearDown(self):
         self.output_temp.cleanup()
         for name, module in self.saved_modules.items():
@@ -819,7 +875,7 @@ class PipelineRunnerResumeTests(unittest.TestCase):
         self.assertEqual(prepared, [])
         self.assertEqual(self.stage_calls, [])
 
-    def test_colliding_skeleton_outputs_are_rejected_before_any_task_processing(self):
+    def test_colliding_skeleton_outputs_use_distinct_storage_names(self):
         manifest = {"skeletons": {
             "Hero": {"Moves": {"__animations__": {"Idle": {"source_file": "Hero.ueanim"}}}},
             "hero": {"Moves": {"__animations__": {"Run": {"source_file": "hero.ueanim"}}}},
@@ -843,16 +899,15 @@ class PipelineRunnerResumeTests(unittest.TestCase):
         )
         prepared = []
 
-        with self.assertRaisesRegex(ValueError, "collision"):
-            self.runner.run_wizard_import_plan(
-                types.SimpleNamespace(active_object=None), state,
-                prepare_task=lambda task, count: prepared.append(task.source_skeleton) or True,
-            )
+        self.runner.run_wizard_import_plan(
+            types.SimpleNamespace(active_object=None), state,
+            prepare_task=lambda task, count: prepared.append(task.source_skeleton) or True,
+        )
 
-        self.assertEqual(prepared, [])
-        self.assertEqual(self.stage_calls, [])
+        self.assertEqual(set(prepared), set(['Hero', 'hero']))
+        self.assertEqual(len(self.stage_calls), 4)
 
-    def test_generated_volume_stem_collision_is_rejected_before_checkpoint_or_task_mutation(self):
+    def test_generated_volume_stem_collision_is_encoded_without_blocking_tasks(self):
         manifest = {"skeletons": {
             "Hero": {"Moves": {"__animations__": {"Idle": {"source_file": "Hero.ueanim"}}}},
             "Hero_Vol_2": {"Moves": {"__animations__": {"Run": {"source_file": "Hero2.ueanim"}}}},
@@ -878,18 +933,17 @@ class PipelineRunnerResumeTests(unittest.TestCase):
         prepared = []
         persisted = pipeline_context.multi_import_checkpoint
 
-        with self.assertRaisesRegex(ValueError, "collision"):
-            self.runner.run_wizard_import_plan(
-                types.SimpleNamespace(active_object=None), state,
-                prepare_task=lambda task, count: prepared.append(task.source_skeleton) or True,
-            )
+        self.runner.run_wizard_import_plan(
+            types.SimpleNamespace(active_object=None), state,
+            prepare_task=lambda task, count: prepared.append(task.source_skeleton) or True,
+        )
 
         restored = self.core.PipelineContext.load_from_blender_text(output_dir=self.output_dir)
-        self.assertEqual(restored.multi_import_checkpoint, persisted)
-        self.assertEqual(prepared, [])
-        self.assertEqual(self.stage_calls, [])
+        self.assertTrue(all(task["status"] == "completed" for task in restored.multi_import_checkpoint["plan"]["tasks"]))
+        self.assertEqual(set(prepared), set(['Hero', 'Hero_Vol_2']))
+        self.assertEqual(len(self.stage_calls), 4)
 
-    def test_generated_filename_length_is_rejected_before_checkpoint_or_task_mutation(self):
+    def test_generated_filename_length_is_encoded_without_blocking_tasks(self):
         skeleton = "S" * 220
         manifest = {"skeletons": {
             skeleton: {"Moves": {"__animations__": {"Idle": {"source_file": "Hero.ueanim"}}}},
@@ -911,16 +965,15 @@ class PipelineRunnerResumeTests(unittest.TestCase):
         )
         prepared = []
 
-        with self.assertRaisesRegex(ValueError, "filename"):
-            self.runner.run_wizard_import_plan(
-                types.SimpleNamespace(active_object=self.bpy.data.objects.get("HeroRig")), state,
-                prepare_task=lambda task, count: prepared.append(task.source_skeleton) or True,
-            )
+        self.runner.run_wizard_import_plan(
+            types.SimpleNamespace(active_object=self.bpy.data.objects.get("HeroRig")), state,
+            prepare_task=lambda task, count: prepared.append(task.source_skeleton) or True,
+        )
 
         restored = self.core.PipelineContext.load_from_blender_text(output_dir=self.output_dir)
-        self.assertIsNone(restored.multi_import_checkpoint)
-        self.assertEqual(prepared, [])
-        self.assertEqual(self.stage_calls, [])
+        self.assertEqual(restored.multi_import_checkpoint["plan"]["tasks"][0]["status"], "completed")
+        self.assertEqual(prepared, [skeleton])
+        self.assertEqual(len(self.stage_calls), 2)
 
     def test_model_save_validates_names_and_output_containment_before_calling_save_logic(self):
         step_path = os.path.join(
@@ -945,49 +998,12 @@ class PipelineRunnerResumeTests(unittest.TestCase):
             for node in ast.walk(prepare)
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
             and node.func.id in {
-                "validate_filename_component", "safe_child_path", "save_model_logic",
+                "model_storage_stem", "safe_child_path", "save_model_logic",
             }
         }
 
-        self.assertLess(calls["validate_filename_component"], calls["save_model_logic"])
+        self.assertLess(calls["model_storage_stem"], calls["safe_child_path"])
         self.assertLess(calls["safe_child_path"], calls["save_model_logic"])
-        validated_labels = {
-            node.args[1].value
-            for node in ast.walk(prepare)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "validate_filename_component"
-            and len(node.args) >= 2
-            and isinstance(node.args[1], ast.Constant)
-        }
-        self.assertTrue({"library name", "model filename"} <= validated_labels)
-        model_filename_assignment = next(
-            node for node in prepare.body
-            if isinstance(node, ast.Assign)
-            and any(isinstance(target, ast.Name) and target.id == "model_filename"
-                    for target in node.targets)
-        )
-        full_filename_validation = next(
-            node for node in ast.walk(prepare)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "validate_filename_component"
-            and node.args
-            and isinstance(node.args[0], ast.Name)
-            and node.args[0].id == "model_filename"
-        )
-        containment_check = next(
-            node for node in ast.walk(prepare)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "safe_child_path"
-            and len(node.args) >= 2
-            and isinstance(node.args[1], ast.Name)
-            and node.args[1].id == "model_filename"
-        )
-        self.assertLess(model_filename_assignment.lineno, full_filename_validation.lineno)
-        self.assertLess(full_filename_validation.lineno, containment_check.lineno)
-        self.assertLess(containment_check.lineno, calls["save_model_logic"])
 
     def test_step4_operator_reports_and_cancels_operational_error(self):
         step4 = self._load_step4()

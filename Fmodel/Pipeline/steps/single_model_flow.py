@@ -4,6 +4,7 @@
 import bpy
 import logging
 import os
+from ....core.workflow import set_target
 
 
 logger = logging.getLogger(__name__)
@@ -72,7 +73,9 @@ def _handoff_armature(wizard, armature, project_root="", advance_to_step=True):
                 mappings.clear()
 
         def handoff_armature(state, selected, root_path, automatic=False):
-            skeleton = str(selected.get("FModel_Skeleton", selected.name) or selected.name)
+            metadata = selected.get("FModel_Skeleton", "")
+            skeleton = metadata.strip() if isinstance(metadata, str) else ""
+            library_name = skeleton or selected.name
             desired = {"skeleton_filter": skeleton, "import_target_skeleton": selected.name}
             if automatic:
                 desired["flow_type"] = "FMODEL"
@@ -80,8 +83,8 @@ def _handoff_armature(wizard, armature, project_root="", advance_to_step=True):
                     desired.update({
                         "source_mode": "MANUAL", "manual_source_dir": root_path.strip(),
                         "source_dir": root_path.strip(),
-                        "output_dir": os.path.join(root_path.strip(), ".fmodel", "animation-libraries", skeleton),
-                        "library_name": skeleton,
+                        "output_dir": os.path.join(root_path.strip(), ".fmodel", "animation-libraries", library_name),
+                        "library_name": library_name,
                     })
             changed = any(getattr(state, name, None) != value for name, value in desired.items())
             for name, value in desired.items():
@@ -111,9 +114,12 @@ def prepare_imported_armature_for_animation(context, armature):
             logger.warning("Skipping animation handoff: Pipeline Wizard is unavailable")
             return {'CANCELLED'}
 
-        return _handoff_armature(
+        result = _handoff_armature(
             wizard, armature, "", advance_to_step=False
         )
+        if result == {'FINISHED'}:
+            set_target(scene, armature)
+        return result
     except Exception:
         logger.exception("Skipping non-fatal imported-model animation handoff")
         return {'CANCELLED'}
@@ -122,9 +128,9 @@ def prepare_imported_armature_for_animation(context, armature):
 class FMODEL_OT_UseActiveArmatureForAnimation(bpy.types.Operator):
     """Set up the animation pipeline with the active armature's identity.
 
-    Derives the source skeleton from FModel_Skeleton custom property when
-    present, otherwise from the armature object name. Writes only editable
-    wizard configuration — never invokes scan or import operators.
+    Derives the source skeleton from the canonical identity or legacy metadata.
+    Without either, leaves the source filter open for explicit mapping after
+    scan. Writes configuration only; never invokes scan or import operators.
     """
     bl_idname = "fmodel.use_active_armature_for_animation"
     bl_label = "使用当前骨架进行动画管线"
@@ -142,7 +148,9 @@ class FMODEL_OT_UseActiveArmatureForAnimation(bpy.types.Operator):
             return {'CANCELLED'}
 
         state = context.scene.pipeline_wizard
-        return _handoff_armature(state, armature, "")
+        result = _handoff_armature(state, armature, "")
+        set_target(context.scene, armature)
+        return result
 
 
 def register():

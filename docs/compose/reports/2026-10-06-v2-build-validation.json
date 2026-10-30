@@ -1,0 +1,250 @@
+{
+  "date": "2026-10-06",
+  "timezone": "Asia/Shanghai",
+  "status": "PASS_CLEAN_REBUILD",
+  "sourceRoot": "G:\\Blender\\Blender Scripts Github\\FModel-2-Blender-Tools-V2",
+  "sourceHead": "5f29a086d472ea881ea7c42ffe8b9b644fc3451f",
+  "sourceWorktreeDirty": true,
+  "hostVersion": "8.1.0",
+  "vendorVersion": "0.10.0",
+  "vendorSourceCommit": "960f87db6137249d7d2b2ffe063536b98ca1213c",
+  "releaseRoot": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release",
+  "archive": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_REBUILD_2026-10-06.zip",
+  "sourceManifest": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_REBUILD_2026-10-06_SOURCE.json",
+  "archiveSha256": "6eb98a3e85221696d916e699f016738ff7beda6301b688dafea5825db998ee2d",
+  "archiveBytes": 2077192,
+  "runtimeFiles": 154,
+  "compiledPythonFiles": 145,
+  "sourceChangesSinceInstallfix4": [],
+  "byteIdenticalToInstallfix4": true,
+  "automatedTests": {
+    "passed": 558,
+    "subtestsPassed": 51,
+    "command": "python -B -m pytest tests -q -p no:cacheprovider"
+  },
+  "vendorTreeVerification": "PASS_STRICT_SOURCE_AND_ZIP",
+  "legacyAddonClassification": {
+    "path": "G:\\Blender\\Software\\blender-5.2.1-windows-x64\\5.2\\scripts\\addons_core\\bl_pkg\\cli\\blender_ext.py",
+    "sha256": "246cb49882f6129340767023bdc28e98c8ea6e743f64ebbff8aec774f842e5e1",
+    "legacyAddon": true,
+    "detectedExtensionRoot": null
+  },
+  "isolatedInstall": {
+    "blenderVersion": "5.2.1 LTS",
+    "expected": "success",
+    "operator": "preferences.addon_install(enable_on_install=True)",
+    "archive": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_REBUILD_2026-10-06.zip",
+    "background": true,
+    "guiTest": false,
+    "assetImportTest": false,
+    "installedInSandbox": true,
+    "deferredWorkspaceRestore": "PASS",
+    "sceneCount": 1,
+    "loadPostRestore": "PASS",
+    "disableAndStaleTimerCancellation": "PASS",
+    "backupRowsBeforeDeferredRestore": {
+      "skeletons": 1,
+      "tree": 1
+    },
+    "backupRowsAfterDeferredRestore": {
+      "skeletons": 1,
+      "tree": 1
+    },
+    "savedManagerBackupRestore": "PASS",
+    "status": "PASS_INSTALL_ENABLE_RESTORE_DISABLE_REENABLE",
+    "reenable": "PASS",
+    "compressionModuleImported": true,
+    "compressionModuleOrigin": "G:\\Blender\\Software\\blender-5.2.1-windows-x64\\5.2\\python\\Lib\\site-packages\\zstandard\\__init__.py",
+    "assetDecodingPerformed": false,
+    "vendorTimerExecuted": false,
+    "processExitCode": 0,
+    "userDirectoriesIsolated": true,
+    "actualInstalledDirectoriesModified": false,
+    "evidenceScope": "Real background install/enable lifecycle, not GUI/asset or native Vendor qualification"
+  },
+  "model": {
+    "status": "pass",
+    "fixture": "G:\\Blender\\Blender Scripts Github\\FModel-2-Blender-Tools-V2\\tests\\fixtures\\fmodel_v10\\fmodel_v10_full.uemodel",
+    "mode": "mesh_armature",
+    "blender_version": [
+      5,
+      2,
+      1
+    ],
+    "vendor_version": [
+      0,
+      10,
+      0
+    ],
+    "registered": true,
+    "import_returned": "SK_FModelV10Full_LOD0_Skeleton",
+    "new_objects": [
+      "SK_FModelV10Full_LOD0",
+      "SK_FModelV10Full_LOD0_Skeleton"
+    ],
+    "new_materials": [
+      "M_FModelV10Full"
+    ],
+    "mesh_summary": [
+      {
+        "name": "SK_FModelV10Full_LOD0",
+        "vertices": 4,
+        "material_slots": 1,
+        "materials": [
+          "M_FModelV10Full"
+        ]
+      }
+    ],
+    "armature_identity": {
+      "bone_layout_hash": "b89e441d860d848bdd32eb8897e45c15889bb12c56952f69234e5036a58b7cc5",
+      "has_skeleton_guid": false,
+      "skeleton_guid": null,
+      "skeleton_path": "/Game/Characters/FModelV10Full_SKEL.FModelV10Full_SKEL",
+      "version": 1
+    },
+    "armature_identity_source": "fmodel_extension",
+    "reader_record": {
+      "kind": "model",
+      "file_version": 10,
+      "object_name": "SK_FModelV10Full",
+      "skeleton_path": "/Game/Characters/FModelV10Full_SKEL.FModelV10Full_SKEL",
+      "bone_layout_hash": "b89e441d860d848bdd32eb8897e45c15889bb12c56952f69234e5036a58b7cc5",
+      "has_strict_identity": true
+    },
+    "errors": []
+  },
+  "workflow": {
+    "status": "pass",
+    "blender": "5.2.1 LTS",
+    "checks": [
+      "fixed_target_survives_selection_and_rename",
+      "cleared_or_deleted_target_never_falls_back",
+      "legacy_target_migration_and_pose_property_bridge",
+      "fresh_relative_path_scan_back_navigation_and_build",
+      "library_apply_uses_fixed_target",
+      "library_switch_clears_stale_folder_selection_and_page",
+      "current_library_scope_respects_path_boundaries",
+      "all_panel_modes_and_steps_resolve_registered_rna",
+      "workspace_survives_scene_reload",
+      "registration_and_handler_cleanup"
+    ]
+  },
+  "pose": {
+    "status": "pass",
+    "result": {
+      "library": "C:\\Users\\86177\\AppData\\Local\\Temp\\fmodel-pose-acceptance-_90v0xg7\\Poses.blend",
+      "sources": 3,
+      "baked_meshes": 2
+    },
+    "scope": "Synthetic UEPOSE source/library/apply/bake/reload assertions in isolated background Blender"
+  },
+  "cleanup": {
+    "operationDate": "2026-10-06",
+    "timezone": "Asia/Shanghai",
+    "releaseRoot": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release",
+    "archiveRoot": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup",
+    "status": "ARCHIVED_OUTSIDE_RELEASE_AND_VERIFIED",
+    "fileCount": 12,
+    "files": [
+      {
+        "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R64_2026-10-01.zip",
+        "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R64_2026-10-01.zip",
+        "bytes": 2079001,
+        "sha256": "1b4013d97f65e3262513fdc2dcbe0c23af883002851f159dbd5cb4fab6880ade"
+      },
+      {
+        "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R64_SOURCE.json",
+        "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R64_SOURCE.json",
+        "bytes": 30359,
+        "sha256": "04c178a8dea580ab38703bf772e55a1d93734e686d77bda7ce13394206db1375"
+      },
+      {
+        "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_2026-10-01.zip",
+        "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_2026-10-01.zip",
+        "bytes": 2079001,
+        "sha256": "1b4013d97f65e3262513fdc2dcbe0c23af883002851f159dbd5cb4fab6880ade"
+      },
+      {
+        "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_INSTALLFIX1_2026-10-01.zip",
+        "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_INSTALLFIX1_2026-10-01.zip",
+        "bytes": 2076886,
+        "sha256": "620116dcc909fcf3ab3212a0cd0a5386de4e712260a1ebada63426023aa5eb07"
+      },
+      {
+        "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_INSTALLFIX1_SOURCE.json",
+        "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_INSTALLFIX1_SOURCE.json",
+        "bytes": 31871,
+        "sha256": "69579def5b51f358606584ad7c793bade0133da27e766bf003ae562367ca8a60"
+      },
+      {
+        "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_INSTALLFIX2_2026-10-01.zip",
+        "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_INSTALLFIX2_2026-10-01.zip",
+        "bytes": 2076993,
+        "sha256": "d834ecc68b18ca29bf7da32c4b667cee6228ab0e5a1e879d32fc8205dce8989c"
+      },
+      {
+        "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_INSTALLFIX2_SOURCE.json",
+        "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_INSTALLFIX2_SOURCE.json",
+        "bytes": 31509,
+        "sha256": "054d2019a9bbf29d51bdbf7e5a3300632f9600342649d1032c331141a3fc5480"
+      },
+      {
+        "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_INSTALLFIX3_2026-10-01.zip",
+        "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_INSTALLFIX3_2026-10-01.zip",
+        "bytes": 2077139,
+        "sha256": "24b7f1398ccbe8f834fd5957d6fe1e6c6cbb08f798fc2564de17fe6854c4eb67"
+      },
+      {
+        "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_INSTALLFIX3_SOURCE.json",
+        "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_INSTALLFIX3_SOURCE.json",
+        "bytes": 31509,
+        "sha256": "f026953ed632a1e7fc0dd0ad8d47824832ecc7b1b19a369d897fd44e0bcdbfa6"
+      },
+      {
+        "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_INSTALLFIX4_2026-10-01.zip",
+        "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_INSTALLFIX4_2026-10-01.zip",
+        "bytes": 2077192,
+        "sha256": "6eb98a3e85221696d916e699f016738ff7beda6301b688dafea5825db998ee2d"
+      },
+      {
+        "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_INSTALLFIX4_SOURCE.json",
+        "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_INSTALLFIX4_SOURCE.json",
+        "bytes": 31509,
+        "sha256": "e8c7ff1bf152a3ed9b8803a9b5d92437224ac5623f755cfc000ca453f80c7064"
+      },
+      {
+        "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_SOURCE.json",
+        "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_SOURCE.json",
+        "bytes": 30536,
+        "sha256": "0e8a0f5d15437ae4797690a78eba828527ce0c6cbc763ce08729c5b9264c00c1"
+      }
+    ]
+  },
+  "cleanupMethod": "Archive outside Release; permanent deletion was blocked by automatic approval policy",
+  "remainingV2Artifacts": [
+    "FModel_Tools_V2_R65_REBUILD_2026-10-06.zip",
+    "FModel_Tools_V2_R65_REBUILD_2026-10-06_SOURCE.json"
+  ],
+  "metadataUpdated": [
+    "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\LATEST_CANDIDATE.json",
+    "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\INDEX.md",
+    "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\workspace-manifest.json",
+    "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\docs\\current\\INDEX.md",
+    "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\docs\\current\\HANDOFF.md",
+    "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\docs\\current\\PROJECT_STATUS.md"
+  ],
+  "actualInstalledDirectoriesModified": false,
+  "blenderGuiRealGameE2E": "NOT_PERFORMED",
+  "finalAudit": {
+    "runtimeSourceParity": "PASS_154_FILES",
+    "releasePointers": "PASS",
+    "remainingV2Artifacts": 2,
+    "archivedOldFilesHashVerification": "PASS_12_FILES",
+    "diffWhitespaceCheck": {
+      "status": "EXISTING_SOURCE_FORMATTING_FINDING",
+      "path": "Assets/Anims/anim_manager.py",
+      "line": 1541,
+      "message": "Whitespace-only line; runtime bytes match prior INSTALLFIX4. Source preserved."
+    }
+  }
+}

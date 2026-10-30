@@ -8,6 +8,7 @@ class ModelAssetsProperties(bpy.types.PropertyGroup):
     """模型资产属性"""
     model_dir: bpy.props.StringProperty(name="模型目录", subtype='DIR_PATH')
     show_details: bpy.props.BoolProperty(name="高级", default=False)
+    search: bpy.props.StringProperty(name="搜索模型")
     selected_model: bpy.props.StringProperty(name="选中模型")
 
 

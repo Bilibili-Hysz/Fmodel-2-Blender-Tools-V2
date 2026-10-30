@@ -1,0 +1,41 @@
+00:03.407  reports          | WARNING Path 'G:\Blender\Software\blender-5.2.1-windows-x64\5.2\datafiles\assets\brushes\essentials_brushes-gp_draw.blend' cannot be made relative for Material 'Dots Stroke'
+Blender 5.2.1 LTS (hash 9e2066aef7ef built 2026-08-25 02:38:20)
+00:03.407  reports          | WARNING Path 'G:\Blender\Software\blender-5.2.1-windows-x64\5.2\datafiles\assets\brushes\essentials_brushes-gp_draw.blend' cannot be made relative for Material 'Material'
+C:\Users\86177\AppData\Local\Temp\fmodel-rebuild-20261006-e_aaro2r\blender_workflow_smoke.py:114: RuntimeWarning: WizardState.manual_source_dir: does not support blend relative "//" prefix
+  state.manual_source_dir = '//source'
+C:\Users\86177\AppData\Local\Temp\fmodel-rebuild-20261006-e_aaro2r\FModel_Tools\Fmodel\Pipeline\steps\state.py:42: RuntimeWarning: WizardState.source_dir: does not support blend relative "//" prefix
+  self.source_dir = source_dir
+C:\Users\86177\AppData\Local\Temp\fmodel-rebuild-20261006-e_aaro2r\blender_workflow_smoke.py:115: RuntimeWarning: WizardState.output_dir: does not support blend relative "//" prefix
+  state.output_dir = '//library'
+00:03.875  blend            | Read blend: "C:\Users\86177\AppData\Local\Temp\fmodel-workflow-acceptance-yk0gi94u\Workflow.blend"
+[FModel Auto] 自动触发器已注册
+[FModel] io_scene_ueformat 以 headless 模式注册（不创建 canonical 面板）
+[FModel] io_scene_ueformat 内置副本已注册 (version 0.10.0, cache=C:\Users\86177\AppData\Local\Temp\fmodel-rebuild-20261006-e_aaro2r\workflow-user\config\FModel Tools\vendor-cache\io_scene_ueformat\0.10.0\cp313-win_amd64\1f830a0dac88719af0ae43b8b2d6aef487d437036468ef3c2ea59c51f9d55fd5)
+WORKFLOW_CHECK fixed_target_survives_selection_and_rename
+WORKFLOW_CHECK cleared_or_deleted_target_never_falls_back
+WORKFLOW_CHECK legacy_target_migration_and_pose_property_bridge
+Info: Saved as "Workflow.blend"
+Info: 扫描完成: 1 个动画, 1 个骨架
+[36m[UEFORMAT] [0mImporting Walk
+[36m[UEFORMAT] [0mImport C:\Users\86177\AppData\Local\Temp\fmodel-workflow-acceptance-yk0gi94u\source\Walk.ueanim took 0.022403717041015625 seconds
+[FModel DEBUG] LibraryBuilding: output_dir=C:\Users\86177\AppData\Local\Temp\fmodel-workflow-acceptance-yk0gi94u\library, actions=1
+Info: 导入并打包完成
+WORKFLOW_CHECK fresh_relative_path_scan_back_navigation_and_build
+Info: [APPEND] 已替换播放: Walk
+WORKFLOW_CHECK library_apply_uses_fixed_target
+WORKFLOW_CHECK library_switch_clears_stale_folder_selection_and_page
+WORKFLOW_CHECK current_library_scope_respects_path_boundaries
+[36m[UEFORMAT] [0mImporting Pose
+[36m[UEFORMAT] [0mImporting Pose
+[36m[UEFORMAT] [0mImporting Pose
+WORKFLOW_CHECK all_panel_modes_and_steps_resolve_registered_rna
+Info: Saved as "Workflow.blend"
+WORKFLOW_CHECK workspace_survives_scene_reload
+[FModel] io_scene_ueformat 内置副本已注销
+[FModel Auto] 自动触发器已注销
+[FModel Auto] 自动触发器已注册
+[FModel Auto] 自动触发器已注销
+WORKFLOW_CHECK registration_and_handler_cleanup
+WORKFLOW_ACCEPTANCE_PASSED C:\Users\86177\AppData\Local\Temp\fmodel-workflow-acceptance-yk0gi94u\result.json
+
+Blender quit

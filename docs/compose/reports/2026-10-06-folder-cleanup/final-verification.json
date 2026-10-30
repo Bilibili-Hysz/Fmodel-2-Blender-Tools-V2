@@ -1,0 +1,78 @@
+{
+  "status": "PASS",
+  "removedTargetsConfirmedAbsent": 113,
+  "retainedPublishDirectoriesPresent": true,
+  "archivedLogsSha256": "PASS",
+  "afterReadableLogicalBytes": 3262246935,
+  "afterReadableLogicalGiB": 3.038,
+  "afterReadableFileCount": 24016,
+  "topLevelBytes": {
+    "dist": 1342575099,
+    "backups": 383924603,
+    "Fmodel_Edited_ueformat": 370610289,
+    "io_scene_ueformat-fmodel": 359216555,
+    "UEFormat": 316985933,
+    "tmp": 248854759,
+    "v3": 99933402,
+    "Release": 96241206,
+    "docs": 41407205,
+    "io_scene_ueformat.zip": 1612706,
+    "scripts": 388071,
+    "v11": 237707,
+    "tests": 175929,
+    "workspace-manifest.json": 43263,
+    ".pytest_cache": 25774,
+    ".zcode": 7579,
+    "README.md": 2538,
+    "FModel-2-Blender-Tools-V2 - 快捷方式.lnk": 1262,
+    "SESSION_HANDOFF.md": 950,
+    "UPSTREAM_MODULARIZATION_PLAN.md": 396,
+    "PROJECT_RELATIONSHIP_GRAPH.md": 392,
+    ".worktrees": 373,
+    "PROJECT_OVERVIEW.md": 372,
+    "PROJECT_MAP.md": 362,
+    "pytest.ini": 210
+  },
+  "unreadablePaths": [
+    {
+      "path": "Release\\FModel_Edited_UEformat_Release_2026-10-06_NEWPIPELINE-CANDIDATE-R68_Windows-x64",
+      "error": "[WinError 5] 拒绝访问。: 'D:\\\\~Vibe-Coding\\\\Projects\\\\Fmodel_Edited_UEformat\\\\Release\\\\FModel_Edited_UEformat_Release_2026-10-06_NEWPIPELINE-CANDIDATE-R68_Windows-x64'"
+    }
+  ],
+  "untraversedReparsePoints": [
+    "Fmodel_Edited_ueformat/.worktrees/ueformat-v10-migration/CUE4Parse"
+  ],
+  "executionResult": {
+    "schemaVersion": 1,
+    "date": "2026-10-06",
+    "status": "PASS",
+    "authorization": "User-requested cleanup with explicit execution escalation approval",
+    "removedTargets": 113,
+    "failedTargets": 0,
+    "removedFiles": 6309,
+    "removedLogicalBytes": 3268039398,
+    "removedLogicalGiB": 3.044,
+    "startupLogsArchived": 4,
+    "protectedFilesValidation": "PASS",
+    "protectedFilesError": null,
+    "repositoryAndWorktreeValidation": "PASS",
+    "validationGates": [
+      {
+        "script": "sync_release_sources.py",
+        "exitCode": 0,
+        "result": "PASS"
+      },
+      {
+        "script": "verify_ueformat_contract.py",
+        "exitCode": 0,
+        "result": "PASS"
+      }
+    ],
+    "driveAvailableBefore": 15970729984,
+    "driveAvailableAfter": 19247718400,
+    "observedAvailableSpaceIncrease": 3276988416,
+    "aclChanged": false,
+    "processesStopped": false,
+    "blockedEarlierAttemptPreserved": "blocked-execution-result.json"
+  }
+}

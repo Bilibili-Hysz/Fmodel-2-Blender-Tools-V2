@@ -266,12 +266,12 @@ class Blender5ActionSafetyTests(unittest.TestCase):
         data.nla_tracks = tracks
         armature = types.SimpleNamespace(name="Hero", type="ARMATURE", animation_data=data)
 
-        with self.assertRaisesRegex(RuntimeError, "cannot safely replace"):
+        with self.assertRaisesRegex(RuntimeError, "incompatible slot"):
             MODULE.replace_action(armature, Action("Walk", []))
 
         self.assertEqual(len(tracks), 2)
 
-    def test_replace_rejects_before_mutating_existing_nla_tracks(self):
+    def test_replace_preserves_existing_nla_tracks_and_strips(self):
         class Strips(list):
             def new(self, name, frame_start, action):
                 strip = types.SimpleNamespace(
@@ -306,10 +306,9 @@ class Blender5ActionSafetyTests(unittest.TestCase):
         data = types.SimpleNamespace(action=old_action, action_slot=None, nla_tracks=tracks)
         armature = types.SimpleNamespace(name="Hero", type="ARMATURE", animation_data=data)
 
-        with self.assertRaisesRegex(RuntimeError, "cannot safely replace"):
-            MODULE.replace_action(armature, Action("New", []))
-
-        self.assertIs(data.action, old_action)
+        new_action = Action("New", [])
+        MODULE.replace_action(armature, new_action)
+        self.assertIs(data.action, new_action)
         self.assertEqual([track.name for track in tracks], ["First", "Second"])
         self.assertEqual([track.mute for track in tracks], [True, False])
         self.assertEqual([strip.name for track in tracks for strip in track.strips], ["A", "B"])

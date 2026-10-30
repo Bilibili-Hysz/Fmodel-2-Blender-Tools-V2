@@ -2,6 +2,7 @@
 
 import os
 import ast
+from core.workflow import resolve_target
 import importlib.util
 import json
 import tempfile
@@ -44,7 +45,7 @@ class AnimationLoaderContractTests(unittest.TestCase):
         self.assertIn("inspect_action_metadata", self.ui_source)
 
     def test_detail_draw_uses_non_mutating_metadata_inspection(self):
-        detail = self.ui_source.index("class FMODEL_PT_AnimDetail")
+        detail = self.ui_source.index("def _draw_animation_detail")
         helpers = self.ui_source.index("# 动画辅助函数", detail)
         detail_source = self.ui_source[detail:helpers]
         self.assertIn("inspect_action_metadata(item)", detail_source)
@@ -79,6 +80,7 @@ class AnimationLoaderContractTests(unittest.TestCase):
             "_action_prop": lambda action, key, default="": getattr(action, "_values", {}).get(key, default),
             "_tag_action_provenance": lambda action, source_key, blend_path, skeleton: action,
         }
+        namespace.setdefault("resolve_target", resolve_target)
         exec(compile(ast.Module(body=[function], type_ignores=[]), ANIM_MANAGER, "exec"), namespace)
         loader = namespace["_load_action_for_item"]
 
@@ -121,6 +123,7 @@ class AnimationLoaderContractTests(unittest.TestCase):
             "_action_prop": lambda action, key, default="": action._values.get(key, default),
             "_tag_action_provenance": lambda action, *args: action,
         }
+        namespace.setdefault("resolve_target", resolve_target)
         exec(compile(ast.Module(body=[function], type_ignores=[]), ANIM_MANAGER, "exec"), namespace)
         source_key = _SOURCE_MODULE.build_source_key(
             "Heroes", blend_path, "Hero", "Locomotion", "Walk"
@@ -180,6 +183,7 @@ class AnimationLoaderContractTests(unittest.TestCase):
             "_action_prop": lambda action, key, default="": action._values.get(key, default),
             "_tag_action_provenance": lambda action, *args: action,
         }
+        namespace.setdefault("resolve_target", resolve_target)
         exec(compile(ast.Module(body=[function], type_ignores=[]), ANIM_MANAGER, "exec"), namespace)
         source_key = _SOURCE_MODULE.build_source_key(
             "Heroes", blend_path, "Hero", "Locomotion", "Walk"
@@ -240,6 +244,7 @@ class AnimationLoaderContractTests(unittest.TestCase):
             "_action_prop": lambda action, key, default="": action._values.get(key, default),
             "_tag_action_provenance": lambda action, *args: action,
         }
+        namespace.setdefault("resolve_target", resolve_target)
         exec(compile(ast.Module(body=[function], type_ignores=[]), ANIM_MANAGER, "exec"), namespace)
         source_key = _SOURCE_MODULE.build_source_key(
             "Heroes", blend_path, "Hero", "Locomotion", "Walk"
@@ -291,6 +296,8 @@ class AnimationLoaderContractTests(unittest.TestCase):
             "os": os,
             "repair_library_metadata": None,
         }
+        namespace.setdefault("validate_library_action", lambda *args: "")
+        namespace.setdefault("resolve_target", resolve_target)
         exec(compile(ast.Module(body=[execute], type_ignores=[]), ANIM_MANAGER, "exec"), namespace)
 
         with tempfile.TemporaryDirectory(prefix="renamed-output-") as directory:
@@ -360,6 +367,7 @@ class AnimationLoaderContractTests(unittest.TestCase):
                 object.__setattr__(self, key, value)
 
         namespace = {"os": os}
+        namespace.setdefault("resolve_target", resolve_target)
         exec(compile(ast.Module(body=[function], type_ignores=[]), ANIM_MANAGER, "exec"), namespace)
         action = LinkedAction()
         self.assertIs(namespace["_tag_action_provenance"](
@@ -415,6 +423,8 @@ class AnimationLoaderContractTests(unittest.TestCase):
             "remove_owned_action": lambda *args: False,
             "t": lambda message: message,
         }
+        namespace.setdefault("validate_library_action", lambda *args: "")
+        namespace.setdefault("resolve_target", resolve_target)
         exec(compile(ast.Module(body=[execute], type_ignores=[]), ANIM_MANAGER, "exec"), namespace)
         operator = types.SimpleNamespace(
             target_node_id="shared/Walk", target_skeleton="Hero", source_key="",
@@ -459,6 +469,8 @@ class AnimationLoaderContractTests(unittest.TestCase):
             "bpy": types.SimpleNamespace(data=types.SimpleNamespace(actions=[action])),
             "t": lambda message: message,
         }
+        namespace.setdefault("validate_library_action", lambda *args: "")
+        namespace.setdefault("resolve_target", resolve_target)
         exec(compile(ast.Module(body=[execute], type_ignores=[]), ANIM_MANAGER, "exec"), namespace)
         operator = types.SimpleNamespace(
             target_node_id="", source_key="", apply_method_override="AUTO",
@@ -489,6 +501,8 @@ class AnimationLoaderContractTests(unittest.TestCase):
             "remove_owned_action": lambda *args: cleaned.append(args),
             "t": lambda message: message,
         }
+        namespace.setdefault("validate_library_action", lambda *args: "")
+        namespace.setdefault("resolve_target", resolve_target)
         exec(compile(ast.Module(body=[execute], type_ignores=[]), ANIM_MANAGER, "exec"), namespace)
         operator = types.SimpleNamespace(
             target_node_id="", source_key="", apply_method_override="AUTO",
@@ -536,6 +550,8 @@ class AnimationLoaderContractTests(unittest.TestCase):
             "remove_owned_action": self._remove_owned_action,
             "t": lambda message: message,
         }
+        namespace.setdefault("validate_library_action", lambda *args: "")
+        namespace.setdefault("resolve_target", resolve_target)
         exec(compile(ast.Module(body=[execute], type_ignores=[]), ANIM_MANAGER, "exec"), namespace)
         operator = types.SimpleNamespace(
             target_node_id="node", target_skeleton="", source_key="source",
@@ -569,6 +585,8 @@ class AnimationLoaderContractTests(unittest.TestCase):
             "remove_owned_action": self._remove_owned_action,
             "t": lambda message: message,
         }
+        namespace.setdefault("validate_library_action", lambda *args: "")
+        namespace.setdefault("resolve_target", resolve_target)
         exec(compile(ast.Module(body=[execute], type_ignores=[]), ANIM_MANAGER, "exec"), namespace)
         operator = types.SimpleNamespace(
             target_node_id="", source_key="", apply_method_override="AUTO",
@@ -620,6 +638,8 @@ class AnimationLoaderContractTests(unittest.TestCase):
             "remove_owned_action": self._remove_owned_action,
             "t": lambda message: message,
         }
+        namespace.setdefault("validate_library_action", lambda *args: "")
+        namespace.setdefault("resolve_target", resolve_target)
         exec(compile(ast.Module(body=[execute], type_ignores=[]), ANIM_MANAGER, "exec"), namespace)
         operator = types.SimpleNamespace(
             target_node_id="", source_key="", apply_method_override="AUTO",
@@ -648,6 +668,8 @@ class AnimationLoaderContractTests(unittest.TestCase):
             "_load_action_for_item": lambda *args: load_calls.append(args),
             "t": lambda message: message,
         }
+        namespace.setdefault("validate_library_action", lambda *args: "")
+        namespace.setdefault("resolve_target", resolve_target)
         exec(compile(ast.Module(body=[execute], type_ignores=[]), ANIM_MANAGER, "exec"), namespace)
         operator = types.SimpleNamespace(
             target_node_id="", source_key="", apply_method_override="AUTO",
@@ -666,6 +688,7 @@ class AnimationLoaderContractTests(unittest.TestCase):
         )
         context = types.SimpleNamespace(scene=types.SimpleNamespace(fmodel_assets=props))
         namespace = {"os": os}
+        namespace.setdefault("resolve_target", resolve_target)
         exec(compile(ast.Module(body=[poll, execute], type_ignores=[]), ANIM_MANAGER, "exec"), namespace)
         reports = []
         operator = types.SimpleNamespace(report=lambda levels, message: reports.append((levels, message)))
@@ -729,12 +752,14 @@ class AnimationLoaderContractTests(unittest.TestCase):
             "t": lambda message: message,
             "reset_active_skeleton_sync": lambda: None,
             "build_source_key": lambda *parts: ":".join(parts),
+            "_sync_manager_library_index": lambda context: None,
             "_scan_library_directory": lambda path, *_args: ([
                 ("Moves", [os.path.join(path, "moves.blend")], 1, {
                     "Hero": {"Locomotion": {"__actions__": [("Walk", "moves.blend", "")]}}
                 }, []),
             ], []),
         }
+        namespace.setdefault("resolve_target", resolve_target)
         exec(compile(ast.Module(body=functions + [execute], type_ignores=[]), ANIM_MANAGER, "exec"), namespace)
         operator = types.SimpleNamespace(report=lambda *_args: None)
 
@@ -750,12 +775,14 @@ class AnimationLoaderContractTests(unittest.TestCase):
             (item.item_type, item.blend_path, item.node_id, item.skeleton): item.is_expanded
             for item in manager.tree_items
         }
-        self.assertFalse(expanded[("LIBRARY", library_paths[0], "lib_Library", "")])
-        self.assertTrue(expanded[("LIBRARY", library_paths[1], "lib_Library", "")])
-        self.assertFalse(expanded[("ANIM_LIB", library_paths[0], "anim_Library_Moves", "")])
-        self.assertTrue(expanded[("ANIM_LIB", library_paths[1], "anim_Library_Moves", "")])
-        self.assertFalse(expanded[("FOLDER", library_paths[0], "anim_Library_Moves/Locomotion", "Hero")])
-        self.assertTrue(expanded[("FOLDER", library_paths[1], "anim_Library_Moves/Locomotion", "Hero")])
+        roots = [f"lib_{os.path.normcase(os.path.abspath(path))}" for path in library_paths]
+        self.assertNotEqual(roots[0], roots[1])
+        self.assertFalse(expanded[("LIBRARY", library_paths[0], roots[0], "")])
+        self.assertTrue(expanded[("LIBRARY", library_paths[1], roots[1], "")])
+        self.assertFalse(expanded[("ANIM_LIB", library_paths[0], f"{roots[0]}/Moves", "")])
+        self.assertTrue(expanded[("ANIM_LIB", library_paths[1], f"{roots[1]}/Moves", "")])
+        self.assertFalse(expanded[("FOLDER", library_paths[0], f"{roots[0]}/Moves/Locomotion", "Hero")])
+        self.assertTrue(expanded[("FOLDER", library_paths[1], f"{roots[1]}/Moves/Locomotion", "Hero")])
 
     def test_library_access_paths_reject_negative_active_index(self):
         sources = {
@@ -796,7 +823,11 @@ class AnimationLoaderContractTests(unittest.TestCase):
 
         props = types.SimpleNamespace(project_libs=Libraries([object()]), active_lib_index=0)
         context = types.SimpleNamespace(scene=types.SimpleNamespace(fmodel_assets=props))
-        namespace = {"_sync_manager_library_index": lambda _context: None}
+        namespace = {
+            "_sync_manager_library_index": lambda _context: None,
+            "invalidate_library_scan": lambda _context: None,
+        }
+        namespace.setdefault("resolve_target", resolve_target)
         exec(compile(ast.Module(body=[execute], type_ignores=[]), UI, "exec"), namespace)
 
         self.assertEqual(namespace["execute"](types.SimpleNamespace(), context), {"FINISHED"})

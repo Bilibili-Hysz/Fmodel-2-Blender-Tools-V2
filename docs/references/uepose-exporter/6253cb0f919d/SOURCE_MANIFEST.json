@@ -1,0 +1,33 @@
+{
+  "repository": "https://github.com/FabianFG/CUE4Parse",
+  "commit": "6253cb0f919d24bb80e17108ccf3d2a94a1b98c3",
+  "retrieved_on": "2026-09-15",
+  "scope": "Supporting exporter semantic evidence only. Does not establish the revision used by the users FModel edition.",
+  "archive_sha256": "ecec747b7ce291220606f3f29c9a88725f2424e7fd1a9528c38e658573b88264",
+  "files": [
+    {
+      "path": "CUE4Parse-Conversion/Writers/UEFormat/UEPose.cs",
+      "git_blob_sha1": "f98fb1f16f2f320f14d342442b19da8fd0a80c56",
+      "sha256": "b9c85ed9967242990140d4fad40f9ee8c4f149f79f647dca3982bd284fce6e63",
+      "url": "https://github.com/FabianFG/CUE4Parse/blob/6253cb0f919d24bb80e17108ccf3d2a94a1b98c3/CUE4Parse-Conversion/Writers/UEFormat/UEPose.cs"
+    },
+    {
+      "path": "CUE4Parse-Conversion/Legacy/PoseAssetConverter.cs",
+      "git_blob_sha1": "0763199d312f87518d0c835009bee83f0a84aa5e",
+      "sha256": "cd598157be73b19e44a92ca4acc6f7a02426f5f7aa7757bc4577bfe739073556",
+      "url": "https://github.com/FabianFG/CUE4Parse/blob/6253cb0f919d24bb80e17108ccf3d2a94a1b98c3/CUE4Parse-Conversion/Legacy/PoseAssetConverter.cs"
+    },
+    {
+      "path": "CUE4Parse-Conversion/Formats/PoseAsset/UEFormatPoseFormat.cs",
+      "git_blob_sha1": "830597d6ecae1a3c3deeab505f9933682801a3e5",
+      "sha256": "e63268924230801dac27280d13c1619705bef79e271424d834e5cdaf28a703a7",
+      "url": "https://github.com/FabianFG/CUE4Parse/blob/6253cb0f919d24bb80e17108ccf3d2a94a1b98c3/CUE4Parse-Conversion/Formats/PoseAsset/UEFormatPoseFormat.cs"
+    },
+    {
+      "path": "CUE4Parse-Conversion/Writers/ActorX/Structs/Animations/CPoseKey.cs",
+      "git_blob_sha1": "014b84d43e3765c379e0c7dc69277163a771f181",
+      "sha256": "da8143e654795c3b4ff43516356c3dc0e68e7a130c1837a19a05b4e9c052b059",
+      "url": "https://github.com/FabianFG/CUE4Parse/blob/6253cb0f919d24bb80e17108ccf3d2a94a1b98c3/CUE4Parse-Conversion/Writers/ActorX/Structs/Animations/CPoseKey.cs"
+    }
+  ]
+}

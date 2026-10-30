@@ -24,10 +24,9 @@ def _source(path: Path) -> str:
 
 def test_primary_ui_uses_chinese_first_labels():
     ui = _source(ROOT / "ui.py")
-    assert 'bl_label = "动画管线"' in ui
+    assert 'bl_label = "批量建立动画库"' in ui
     assert 'text=t("UEFormat 原生管线")' in ui
     assert 'text=t("最近操作")' in ui
-    assert 'text=t("兼容策略")' in ui
 
 
 def test_active_ui_has_no_retired_english_captions():
@@ -50,12 +49,12 @@ def test_active_ui_has_no_retired_english_captions():
             assert caption not in text, f"retired English UI caption remains in {path}: {caption}"
 
 
-def test_compatibility_labels_are_localized():
-    compatibility = _source(ROOT / "core" / "skeleton_compatibility.py")
-    state = _source(ROOT / "Fmodel" / "Pipeline" / "steps" / "state.py")
-    assert 'name="骨架兼容策略"' in state
-    assert '"严格身份"' in compatibility
-    assert '"按名称兼容"' in compatibility
+def test_binding_label_is_localized():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("binding_labels", ROOT / "core" / "skeleton_compatibility.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.SKELETON_COMPATIBILITY_ITEMS == (("ueformat", "UEFormat 原版绑定", "绑定同名骨骼，跳过目标中不存在的轨道"),)
 
 
 def test_i18n_contains_fallbacks_for_new_visible_terms():
@@ -80,15 +79,13 @@ def test_i18n_contains_fallbacks_for_new_visible_terms():
         assert term in keys, f"missing en_US fallback for {term}"
 
 
-def test_compatibility_storage_values_remain_stable():
-    for relative in (
-        "core/skeleton_compatibility.py",
-        "Fmodel/Pipeline/steps/state.py",
-        "Fmodel/importers/animation/operator_anim_ueformat.py",
-    ):
-        text = _source(ROOT / relative)
-        assert '"strict"' in text
-        assert '"name_retarget"' in text
+def test_saved_compatibility_values_migrate_to_upstream():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("binding_migration", ROOT / "core" / "skeleton_compatibility.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    for value in (None, "", "strict", "name_retarget", "ueformat"):
+        assert module.normalize_skeleton_compatibility_mode(value) == "ueformat"
 
 
 if __name__ == "__main__":

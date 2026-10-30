@@ -1,4 +1,4 @@
-"""Strict UEFormat animation/pose options must not silently downgrade."""
+"""Manual animation/pose import accepts standard UEFormat options."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def _install_modules():
         "bpy", "bpy_extras", "bpy_extras.io_utils",
         "addon", "addon.Fmodel", "addon.Fmodel.importers",
         "addon.Fmodel.importers.animation", "addon.core", "addon.core.utils",
-        MODULE_NAME,
+        "addon.core.workflow", MODULE_NAME,
     )
     saved = {name: sys.modules.get(name) for name in names}
 
@@ -69,6 +69,9 @@ def _install_modules():
     core_utils = types.ModuleType("addon.core.utils")
     core_utils.get_ueformat_bridge = None
     core_utils.get_ueformat_api = lambda: (None, None, None, None)
+    workflow = types.ModuleType("addon.core.workflow")
+    workflow.resolve_target = lambda context: context.active_object
+    sys.modules[workflow.__name__] = workflow
     sys.modules["addon.core"] = core
     sys.modules["addon.core.utils"] = core_utils
     return saved
@@ -105,30 +108,36 @@ class StrictAnimationContractTests(unittest.TestCase):
         operator.report = lambda level, message: operator.reported.append((level, message))
         return operator
 
-    def test_animation_does_not_bypass_strict_option_failure(self):
-        self.module.get_ueformat_api = lambda: (
-            object(), object(), StrictOptionFailure, object()
-        )
+    def test_animation_accepts_options_without_strict_parameter(self):
+        calls = []
+        class Options:
+            def __init__(self, scale_factor, rotation_only, import_curves, override_skeleton):
+                calls.append(override_skeleton)
+        class Importer:
+            def __init__(self, options):
+                pass
+            def import_file(self, path):
+                calls.append(path)
+        self.module.get_ueformat_api = lambda: (Importer, object(), Options, object())
         operator = self._operator(self.module.ANIM_OT_ImportUEAnim)
+        armature = FakeArmature()
+        self.assertEqual(operator.execute(types.SimpleNamespace(active_object=armature)), {"FINISHED"})
+        self.assertEqual(calls, [armature, __import__("os").path.normpath(operator.filepath)])
 
-        result = operator.execute(types.SimpleNamespace(active_object=FakeArmature()))
-
-        self.assertEqual(result, {"CANCELLED"})
-        self.assertTrue(any(level == {"ERROR"} for level, _ in operator.reported))
-        self.assertTrue(any("strict_fmodel_skeleton" in message for _level, message in operator.reported))
-
-    def test_pose_does_not_bypass_strict_option_failure(self):
-        self.module.get_ueformat_api = lambda: (
-            object(), object(), object(), StrictOptionFailure
-        )
+    def test_pose_storage_accepts_options_without_strict_parameter(self):
+        calls = []
+        class Options:
+            def __init__(self, scale_factor, override_skeleton):
+                calls.append(override_skeleton)
+        self.module.get_ueformat_api = lambda: (object(), object(), object(), Options)
         operator = self._operator(self.module.ANIM_OT_ImportUEPose)
+        operator.pose_convention = "CUE4PARSE_ADDITIVE"
         operator.filepath = "C:/Game/Content/Hero/Rest.uepose"
-
-        result = operator.execute(types.SimpleNamespace(active_object=FakeArmature()))
-
-        self.assertEqual(result, {"CANCELLED"})
-        self.assertTrue(any(level == {"ERROR"} for level, _ in operator.reported))
-        self.assertTrue(any("strict_fmodel_skeleton" in message for _level, message in operator.reported))
+        operator._import_source = lambda path, scale, convention: (calls.append(path), 1, 0)
+        operator._refresh_library = lambda scene: None
+        armature = FakeArmature()
+        self.assertEqual(operator.execute(types.SimpleNamespace(active_object=armature, scene=object())), {"FINISHED"})
+        self.assertEqual(calls, [armature, __import__("os").path.normpath(operator.filepath)])
 
 
 if __name__ == "__main__":

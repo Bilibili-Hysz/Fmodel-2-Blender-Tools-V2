@@ -1,0 +1,9 @@
+{
+  "status": "pass",
+  "result": {
+    "library": "C:\\Users\\86177\\AppData\\Local\\Temp\\fmodel-pose-acceptance-_90v0xg7\\Poses.blend",
+    "sources": 3,
+    "baked_meshes": 2
+  },
+  "scope": "Synthetic UEPOSE source/library/apply/bake/reload assertions in isolated background Blender"
+}

@@ -10,7 +10,7 @@ from datetime import datetime
 from .enums import (
     UEFORMAT_SOURCE_TYPE,
     UEFORMAT_IMPORT_MODE,
-    SKELETON_COMPATIBILITY_STRICT,
+    SKELETON_COMPATIBILITY_UEFORMAT,
     normalize_skeleton_compatibility_mode,
 )
 
@@ -114,6 +114,7 @@ class DictionaryManifest:
     source_path: str = ""
     created_at: str = ""
     skeletons: Dict[str, SkeletonNode] = field(default_factory=dict)
+    pose_resources: List[Dict[str, Any]] = field(default_factory=list)
     
     def __post_init__(self):
         if not self.created_at:
@@ -134,6 +135,7 @@ class DictionaryManifest:
             "source_type": self.source_type,
             "source_path": self.source_path,
             "created_at": self.created_at,
+            **({"pose_resources": self.pose_resources} if self.pose_resources else {}),
             "skeletons": {
                 name: self._skeleton_to_dict(skel) 
                 for name, skel in self.skeletons.items()
@@ -164,7 +166,8 @@ class DictionaryManifest:
             version=data.get("version", "1.0"),
             source_type=data.get("source_type", UEFORMAT_SOURCE_TYPE),
             source_path=data.get("source_path", ""),
-            created_at=data.get("created_at", "")
+            created_at=data.get("created_at", ""),
+            pose_resources=list(data.get("pose_resources", [])),
         )
         for skel_name, skel_data in data.get("skeletons", {}).items():
             skel = SkeletonNode(name=skel_name)
@@ -209,6 +212,7 @@ class ImportedAction:
     frame_range: Tuple[int, int] = (0, 0)
     error_message: str = ""
     task_id: str = ""
+    source_version: Dict[str, str] = field(default_factory=dict)
     # Snapshot of the target FModel skeleton provenance, if available.
     # Empty means this record came from a legacy checkpoint or a caller that
     # does not yet provide the strict identity contract.
@@ -249,6 +253,8 @@ class ImportedAssetCollection:
         action_payloads = []
         for action in self.imported_actions:
             payload = asdict(action)
+            if not payload.get("source_version"):
+                payload.pop("source_version", None)
             if not payload.get("skeleton_provenance") and self.skeleton_provenance:
                 payload["skeleton_provenance"] = dict(self.skeleton_provenance)
             # Keep the old wire shape for legacy actions instead of emitting
@@ -289,6 +295,7 @@ class ImportedAssetCollection:
                     frame_range=tuple(item.get("frame_range", (0, 0))),
                     error_message=item.get("error_message", ""),
                     task_id=item.get("task_id", ""),
+                    source_version=dict(item.get("source_version", {})),
                     skeleton_provenance=dict(item.get("skeleton_provenance", {})),
                 ))
         col.imported_actions = imported
@@ -330,9 +337,13 @@ class LibraryAsset:
     skeleton: str = ""
     blend_file: str = ""
     thumbnail_path: str = ""
+    source_key: str = ""
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        payload = asdict(self)
+        if not self.source_key:
+            payload.pop("source_key", None)
+        return payload
 
     @classmethod
     def from_dict(cls, data: dict) -> 'LibraryAsset':
@@ -347,9 +358,13 @@ class BundleRecord:
     skeletons: List[str] = field(default_factory=list)
     processed_sources: List[str] = field(default_factory=list)
     completion_state: str = "pending"
+    source_versions: Dict[str, Dict[str, str]] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        payload = asdict(self)
+        if not self.source_versions:
+            payload.pop("source_versions", None)
+        return payload
 
     @classmethod
     def from_dict(cls, data: dict) -> 'BundleRecord':
@@ -360,6 +375,7 @@ class BundleRecord:
             skeletons=list(data.get("skeletons", [])),
             processed_sources=list(data.get("processed_sources", [])),
             completion_state=data.get("completion_state", "pending"),
+            source_versions=dict(data.get("source_versions", {})),
         )
 
 
@@ -408,6 +424,7 @@ class AssetLibraryManifest:
                     **({"skeleton": asset.skeleton} if is_v2 else {}),
                     "blend_file": asset.blend_file,
                     "thumbnail_path": asset.thumbnail_path,
+                    **({"source_key": asset.source_key} if is_v2 and asset.source_key else {}),
                 }
                 for asset in self.assets
             ],
@@ -459,7 +476,7 @@ class MultiImportTask:
     """一个独立的源骨架导入任务。"""
     source_skeleton: str = ""
     target_armature: str = ""
-    compatibility_mode: str = SKELETON_COMPATIBILITY_STRICT
+    compatibility_mode: str = SKELETON_COMPATIBILITY_UEFORMAT
     source_subset: List[str] = field(default_factory=list)
     source_identities: List[Dict[str, str]] = field(default_factory=list)
     target_identity: Dict[str, str] = field(default_factory=dict)
@@ -486,11 +503,11 @@ class MultiImportTask:
                 raise ValueError("multi-import task source_skeleton must be a string")
             if not isinstance(data.get("target_armature", ""), str):
                 raise ValueError("multi-import task target_armature must be a string")
-            if not isinstance(data.get("compatibility_mode", SKELETON_COMPATIBILITY_STRICT), str):
+            if not isinstance(data.get("compatibility_mode", SKELETON_COMPATIBILITY_UEFORMAT), str):
                 raise ValueError("multi-import task compatibility_mode must be a string")
             try:
                 normalize_skeleton_compatibility_mode(
-                    data.get("compatibility_mode", SKELETON_COMPATIBILITY_STRICT)
+                    data.get("compatibility_mode", SKELETON_COMPATIBILITY_UEFORMAT)
                 )
             except ValueError as error:
                 raise ValueError("multi-import task compatibility_mode is invalid") from error
@@ -601,7 +618,7 @@ class PipelineConfig:
     import_curves: bool = False
     target_armature: str = ""
     skeleton_filter: str = ""
-    skeleton_compatibility_mode: str = SKELETON_COMPATIBILITY_STRICT
+    skeleton_compatibility_mode: str = SKELETON_COMPATIBILITY_UEFORMAT
     import_batch_size: int = 300
     max_import_cycles: int = 200
     large_import_threshold: int = 2000

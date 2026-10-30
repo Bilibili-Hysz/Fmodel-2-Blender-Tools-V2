@@ -74,8 +74,8 @@ def test_game_export_tree_roots_are_derived_from_content_ancestor():
     export_root, bundle_root = derive_fmodel_roots(
         r"D:\Output\Game\Content\Characters\Girl\girl.uemodel"
     )
-    assert export_root == Path(r"D:\Output\Game")
-    assert bundle_root == Path(r"D:\Output\Game")
+    assert export_root == Path(r"D:\Output")
+    assert bundle_root == Path(r"D:\Output")
 
 
 def test_non_game_tree_path_fails_closed_instead_of_guessing_root():
@@ -111,7 +111,7 @@ def test_animation_and_pose_strict_capabilities_are_checked_independently():
     assert bridge is not None
     assert not bridge.capabilities.supports_strict_animation_skeleton
     assert bridge.capabilities.supports_strict_pose_skeleton
-    assert not bridge.capabilities.supports_current_animation
+    assert bridge.capabilities.supports_current_animation
     assert bridge.capabilities.supports_current_pose
 
 
@@ -152,9 +152,13 @@ def test_model_option_builder_passes_current_fmodel_roots_and_material_flags():
         import_virtual_bones=False,
         model_path=r"D:\Output\Game\Content\Characters\Girl\girl.uemodel",
     )
-    assert options["fmodel_ue_export_root"] == r"D:\Output\Game"
-    assert options["fmodel_bundle_root"] == r"D:\Output\Game"
+    assert options["fmodel_ue_export_root"] == r"D:\Output"
+    assert options["fmodel_bundle_root"] == r"D:\Output"
     assert options["import_fmodel_materials"] is True
     assert options["build_fmodel_material_nodes"] is True
     assert options["load_fmodel_external_textures"] is True
 
+
+
+def test_content_at_drive_boundary_does_not_authorize_drive_root():
+    assert derive_fmodel_roots(r"D:\Game\Content\girl.uemodel") == (None, None)

@@ -1,6 +1,7 @@
 """Regression tests for batch result and Blender selection cleanup."""
 
 import ast
+from core.workflow import resolve_target
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -14,6 +15,7 @@ MODEL_OPERATORS = ROOT / "Assets" / "Models" / "operators.py"
 def load_class(path, name, globals_):
     tree = ast.parse(path.read_text(encoding="utf-8"))
     node = next(item for item in tree.body if isinstance(item, ast.ClassDef) and item.name == name)
+    globals_.setdefault("resolve_target", resolve_target)
     exec(compile(ast.Module(body=[node], type_ignores=[]), str(path), "exec"), globals_)
     return globals_[name]
 
@@ -21,6 +23,7 @@ def load_class(path, name, globals_):
 def load_function(path, name, globals_):
     tree = ast.parse(path.read_text(encoding="utf-8"))
     node = next(item for item in tree.body if isinstance(item, ast.FunctionDef) and item.name == name)
+    globals_.setdefault("resolve_target", resolve_target)
     exec(compile(ast.Module(body=[node], type_ignores=[]), str(path), "exec"), globals_)
     return globals_[name]
 
@@ -68,20 +71,27 @@ class BatchResultTests(unittest.TestCase):
         operator.scale_factor = 1.0
         operator.rotation_only = False
         operator.import_curves = False
+        if name == "ANIM_OT_ImportUEPose":
+            def import_source(path, _scale, _convention):
+                if path in failures:
+                    raise RuntimeError("bad pose source")
+                return object(), 2, 1
+            operator._import_source = import_source
+            operator._refresh_library = lambda _scene: []
         return operator
 
     def test_ueanim_and_uepose_cancel_when_every_file_fails(self):
         for name in ("ANIM_OT_ImportUEAnim", "ANIM_OT_ImportUEPose"):
             with self.subTest(operator=name):
                 operator = self._ueformat_operator(name, {"bad", "good"})
-                context = SimpleNamespace(active_object=FakeObject("Rig", "ARMATURE"))
+                context = SimpleNamespace(active_object=FakeObject("Rig", "ARMATURE"), scene=object())
                 self.assertEqual(operator.execute(context), {"CANCELLED"})
 
     def test_ueanim_and_uepose_finish_with_partial_success(self):
         for name in ("ANIM_OT_ImportUEAnim", "ANIM_OT_ImportUEPose"):
             with self.subTest(operator=name):
                 operator = self._ueformat_operator(name, {"bad"})
-                context = SimpleNamespace(active_object=FakeObject("Rig", "ARMATURE"))
+                context = SimpleNamespace(active_object=FakeObject("Rig", "ARMATURE"), scene=object())
                 self.assertEqual(operator.execute(context), {"FINISHED"})
 
 class ModelSaveCleanupTests(unittest.TestCase):
@@ -134,6 +144,8 @@ class ModelSaveCleanupTests(unittest.TestCase):
         )
 
         def deselect_all(action):
+            if fail_cleanup:
+                raise RuntimeError("cleanup failed")
             self.assertEqual(action, "DESELECT")
             armature.selected = False
             other.selected = False
@@ -162,9 +174,16 @@ class ModelSaveCleanupTests(unittest.TestCase):
             data=SimpleNamespace(collections=collections, libraries=SimpleNamespace(write=write)),
             ops=SimpleNamespace(object=SimpleNamespace(select_all=deselect_all, duplicate=duplicate, delete=delete)),
         )
+        def snapshot(_armature, _destination, _model_name):
+            write()
+            return {"mesh_count": 0, "texture_storage": "packed_snapshot", "library_verified": True}
+
         save_model_logic = load_function(MODEL_OPERATORS, "save_model_logic", {
             "bpy": bpy, "os": __import__("os"), "json": __import__("json"),
+            "safe_child_path": __import__('core.library_files', fromlist=['safe_child_path']).safe_child_path,
+            "storage_component": __import__('core.library_files', fromlist=['storage_component']).storage_component,
             "export_bone_mapping": lambda _armature: {},
+            "write_model_snapshot": snapshot,
         })
         return save_model_logic, armature, other, context, collections
 

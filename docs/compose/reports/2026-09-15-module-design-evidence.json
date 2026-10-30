@@ -1,0 +1,541 @@
+{
+  "reviewed_at": "2026-09-15",
+  "git_head": "5f29a086d472ea881ea7c42ffe8b9b644fc3451f",
+  "working_tree_modified_files_at_start": 28,
+  "pytest": {
+    "passed": 529,
+    "subtests_passed": 52,
+    "seconds": 14.08
+  },
+  "syntax": {
+    "parsed_python_files": 195,
+    "status": "passed_before_review_artifacts"
+  },
+  "vendor": {
+    "verified_files": 73,
+    "tree_sha256": "8027d2864a74650ad452d88c3a494876c8c0f4534f6c85772fbfd5d3987279d2"
+  },
+  "blender_observations": {
+    "blender": "5.2.1 LTS",
+    "checks": {
+      "register": {
+        "state": "ready",
+        "module_id": "io_scene_ueformat",
+        "source": "bundled",
+        "source_path": "G:\\Blender\\Blender Scripts Github\\FModel-2-Blender-Tools-V2\\vendor\\io_scene_ueformat\\__init__.py",
+        "version": "0.10.0",
+        "capabilities": [
+          "uemodel",
+          "ueanim",
+          "uepose",
+          "fmodel_materials",
+          "fmodel_textures",
+          "strict_animation_skeleton",
+          "strict_pose_skeleton"
+        ],
+        "tree_sha256": "8027d2864a74650ad452d88c3a494876c8c0f4534f6c85772fbfd5d3987279d2",
+        "tree_file_count": 73,
+        "message": "Bundled UEFormat runtime ready"
+      },
+      "model_save_inventory": {
+        "success": true,
+        "source_meshes": [
+          "ReviewRig_Mesh"
+        ],
+        "saved": {
+          "objects": [
+            "ReviewModel__ReviewRig"
+          ],
+          "meshes": [],
+          "armatures": [
+            "ReviewModel__ReviewRig_Data"
+          ]
+        }
+      },
+      "bone_sort_branch_coverage": {
+        "operator": [
+          "FINISHED"
+        ],
+        "weighted_bones": [
+          "left",
+          "right"
+        ],
+        "hidden": [
+          "right"
+        ]
+      },
+      "fresh_wizard_scan": {
+        "operator_result": "Error: 扫描失败：未生成字典清单\n",
+        "scan_completed": false,
+        "disk_checkpoint_present": true,
+        "disk_scan_skeletons": [
+          "SK_Review"
+        ],
+        "text_exists": false
+      },
+      "pipeline_staging_and_curves": {
+        "scan": true,
+        "import": true,
+        "imported_actions": [
+          {
+            "action_name": "ReviewMove",
+            "source_manifest_ref": "SK_Review/Base/ReviewMove",
+            "source_file": "C:\\Users\\86177\\AppData\\Local\\Temp\\fmodel-design-review-90c6f51296ce4bb6997cf0cf37da09e0\\run3\\source\\ReviewMove.ueanim",
+            "source_bundle": "c:\\users\\86177\\appdata\\local\\temp\\fmodel-design-review-90c6f51296ce4bb6997cf0cf37da09e0\\run3\\pipeline_output\\review_sk_review.blend",
+            "staged_blend": "C:\\Users\\86177\\AppData\\Local\\Temp\\fmodel-design-review-90c6f51296ce4bb6997cf0cf37da09e0\\run3\\pipeline_output\\_pipeline_tmp\\1f9b7c60ec5ed7eb\\SK_Review_chunk_0001.blend",
+            "import_status": "staged",
+            "frame_range": [
+              0.0,
+              24.0
+            ],
+            "error_message": "",
+            "task_id": "e044d9e1b7fff15c8d5c20e9e2e17b764c9b0009d2c676b2030bcccab6c93daf",
+            "skeleton_provenance": {
+              "state": "strict",
+              "identity": {
+                "version": 1,
+                "skeleton_path": "/Game/Review/SK_Review",
+                "has_skeleton_guid": false,
+                "skeleton_guid": null,
+                "bone_layout_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+              },
+              "fingerprint": "e3bf2b9053b7d88c2b026dc44ca4b07497e68c71b0d9f0fe168cc90b1bf6a43d",
+              "reason": ""
+            }
+          }
+        ],
+        "actions_in_memory": [
+          "ReviewMove",
+          "ReviewRig_MeshDataAction"
+        ],
+        "shape_action_before": "ReviewRig_MeshDataAction",
+        "shape_action_after": null,
+        "logs": [
+          {
+            "timestamp": "2026-09-15T20:20:34.756746",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "开始执行阶段: asset_import"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.762423",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "开始导入 1 个动画，批次大小=300，目标骨架=SK_Review"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.762438",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "导入动画: 0/1 (0%)"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.762492",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "导入动画: 0/1 (0%)"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.773953",
+            "stage": "asset_import",
+            "level": "warning",
+            "message": "跳过不支持Blender 5 slots的旧式动作清理: ReviewMove"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.773963",
+            "stage": "asset_import",
+            "level": "warning",
+            "message": "跳过不支持Blender 5 slots的旧式动作清理: ReviewMove_Curves"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.784007",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "动作分块落盘: SK_Review_chunk_0001.blend (2 actions)"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.803148",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "批次 1: 范围[0-0] 成功 1 失败 0 耗时 0.04s batch=300"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.803166",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "导入动画: 1/1 (100%)"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.811536",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "导入动画: 1/1 (100%)"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.811597",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "成功导入 1 个动画，累计失败 0"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.811645",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "阶段 asset_import 完成"
+          }
+        ]
+      },
+      "published_library": {
+        "success": true,
+        "inventories": {
+          "Review_SK_Review.blend": [
+            "ReviewMove"
+          ]
+        },
+        "manifest": {
+          "version": "2.0",
+          "library_name": "Review",
+          "library_id": "fe6764cd-cebb-5336-866b-6ed8a0333e10",
+          "library_path": "C:\\Users\\86177\\AppData\\Local\\Temp\\fmodel-design-review-90c6f51296ce4bb6997cf0cf37da09e0\\run3\\pipeline_output",
+          "blend_files": [
+            "Review_SK_Review.blend"
+          ],
+          "catalog_entries": [
+            {
+              "uuid": "56418bb2-f754-510e-830f-f9475ea68db4",
+              "path": "SK_Review/Base",
+              "skeleton": "SK_Review",
+              "action_count": 1
+            }
+          ],
+          "assets": [
+            {
+              "action_name": "ReviewMove",
+              "catalog_id": "56418bb2-f754-510e-830f-f9475ea68db4",
+              "skeleton": "SK_Review",
+              "blend_file": "Review_SK_Review.blend",
+              "thumbnail_path": "",
+              "source_key": "SK_Review::ReviewMove.ueanim"
+            }
+          ],
+          "skeletons": [
+            "SK_Review"
+          ],
+          "bundles": [
+            {
+              "blend_file": "Review_SK_Review.blend",
+              "sidecar_file": "Review_SK_Review_manifest.json",
+              "skeletons": [
+                "SK_Review"
+              ],
+              "processed_sources": [
+                "SK_Review::ReviewMove.ueanim"
+              ],
+              "completion_state": "completed",
+              "source_versions": {
+                "SK_Review::ReviewMove.ueanim": {}
+              }
+            }
+          ]
+        },
+        "logs": [
+          {
+            "timestamp": "2026-09-15T20:20:34.803166",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "导入动画: 1/1 (100%)"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.811536",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "导入动画: 1/1 (100%)"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.811597",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "成功导入 1 个动画，累计失败 0"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.811645",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "阶段 asset_import 完成"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.812858",
+            "stage": "library_building",
+            "level": "info",
+            "message": "开始执行阶段: library_building"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.820655",
+            "stage": "library_building",
+            "level": "info",
+            "message": "SK_Review: 新增 1，复用 0，更新 0，待校验 0"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.908367",
+            "stage": "library_building",
+            "level": "info",
+            "message": "成功构建资产库，本次发布 1 个动作，复用 0 个动作"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.908392",
+            "stage": "library_building",
+            "level": "info",
+            "message": "阶段 library_building 完成"
+          }
+        ]
+      },
+      "append_then_link_semantics": {
+        "append_loaded": true,
+        "link_loaded": true,
+        "same_datablock": true,
+        "link_has_library": false
+      },
+      "display_alias_staging_contract": {
+        "import": false,
+        "checkpoint_loadable": false,
+        "logs": [
+          {
+            "timestamp": "2026-09-15T20:20:34.938111",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "开始导入 1 个动画，批次大小=300，目标骨架=Review"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.938122",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "导入动画: 0/1 (0%)"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.938139",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "导入动画: 0/1 (0%)"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.950999",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "动作分块落盘: Review_chunk_0001.blend (1 actions)"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.971626",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "批次 1: 范围[0-0] 成功 1 失败 0 耗时 0.03s batch=300"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.971656",
+            "stage": "asset_import",
+            "level": "info",
+            "message": "导入动画: 1/1 (100%)"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.974933",
+            "stage": "asset_import",
+            "level": "error",
+            "message": "暂存动作包路径无效: staged blend violates the current task path or filename contract"
+          },
+          {
+            "timestamp": "2026-09-15T20:20:34.975016",
+            "stage": "asset_import",
+            "level": "error",
+            "message": "阶段 asset_import 失败"
+          }
+        ]
+      },
+      "nla_overwrite": {
+        "overwrite_result": "cannot safely replace existing NLA strips",
+        "remaining_strips": [
+          "Old"
+        ]
+      },
+      "rebake_bundle_path_stability": {
+        "operator": [
+          "FINISHED"
+        ],
+        "bundles_before": [
+          "Review_SK_Review.blend"
+        ],
+        "bundles_after": [
+          "Review_SK_Review_Vol_2.blend"
+        ],
+        "thumbnails": []
+      },
+      "blender_relative_checkpoint_path": {
+        "error": "Traceback (most recent call last):\n  File \"C:\\Users\\86177\\AppData\\Local\\Temp\\fmodel-design-review-90c6f51296ce4bb6997cf0cf37da09e0\\review_probe.py\", line 17, in check\n    RESULT['checks'][name] = fn()\n                             ~~^^\n  File \"C:\\Users\\86177\\AppData\\Local\\Temp\\fmodel-design-review-90c6f51296ce4bb6997cf0cf37da09e0\\review_probe.py\", line 196, in relative_checkpoint_path\n    return {'input': raw, 'blender_absolute': bpy.path.abspath(raw), 'checkpoint_path': PipelineContext._checkpoint_path_for_output(raw)}\n                                                                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^\n  File \"G:\\Blender\\Blender Scripts Github\\FModel-2-Blender-Tools-V2\\core\\context.py\", line 339, in _checkpoint_path_for_output\n    raise ValueError(\"pipeline checkpoint path escapes output directory\")\nValueError: pipeline checkpoint path escapes output directory\n"
+      },
+      "fps_resume_contract": {
+        "original_fps": 24,
+        "changed_fps": 60,
+        "fingerprint_unchanged": true,
+        "source_duration_seconds": 1,
+        "stored_action_frame_range": [
+          0.0,
+          24.0
+        ]
+      },
+      "unregister": "completed"
+    }
+  },
+  "v10_model_smoke": {
+    "status": "pass",
+    "fixture": "G:\\Blender\\Blender Scripts Github\\FModel-2-Blender-Tools-V2\\tests\\fixtures\\fmodel_v10\\fmodel_v10_full.uemodel",
+    "mode": "mesh_armature",
+    "blender_version": [
+      5,
+      2,
+      1
+    ],
+    "vendor_version": [
+      0,
+      10,
+      0
+    ],
+    "registered": true,
+    "import_returned": "SK_FModelV10Full_LOD0_Skeleton",
+    "new_objects": [
+      "SK_FModelV10Full_LOD0",
+      "SK_FModelV10Full_LOD0_Skeleton"
+    ],
+    "new_materials": [
+      "M_FModelV10Full"
+    ],
+    "mesh_summary": [
+      {
+        "name": "SK_FModelV10Full_LOD0",
+        "vertices": 4,
+        "material_slots": 1,
+        "materials": [
+          "M_FModelV10Full"
+        ]
+      }
+    ],
+    "armature_identity": {
+      "bone_layout_hash": "b89e441d860d848bdd32eb8897e45c15889bb12c56952f69234e5036a58b7cc5",
+      "has_skeleton_guid": false,
+      "skeleton_guid": null,
+      "skeleton_path": "/Game/Characters/FModelV10Full_SKEL.FModelV10Full_SKEL",
+      "version": 1
+    },
+    "armature_identity_source": "fmodel_extension",
+    "reader_record": {
+      "kind": "model",
+      "file_version": 10,
+      "object_name": "SK_FModelV10Full",
+      "skeleton_path": "/Game/Characters/FModelV10Full_SKEL.FModelV10Full_SKEL",
+      "bone_layout_hash": "b89e441d860d848bdd32eb8897e45c15889bb12c56952f69234e5036a58b7cc5",
+      "has_strict_identity": true
+    },
+    "errors": []
+  },
+  "blender_supplement_observations": {
+    "blender": "5.2.1 LTS",
+    "checks": {
+      "register": {
+        "state": "ready",
+        "module_id": "io_scene_ueformat",
+        "source": "bundled",
+        "source_path": "G:\\Blender\\Blender Scripts Github\\FModel-2-Blender-Tools-V2\\vendor\\io_scene_ueformat\\__init__.py",
+        "version": "0.10.0",
+        "capabilities": [
+          "uemodel",
+          "ueanim",
+          "uepose",
+          "fmodel_materials",
+          "fmodel_textures",
+          "strict_animation_skeleton",
+          "strict_pose_skeleton"
+        ],
+        "tree_sha256": "8027d2864a74650ad452d88c3a494876c8c0f4534f6c85772fbfd5d3987279d2",
+        "tree_file_count": 73,
+        "message": "Bundled UEFormat runtime ready"
+      },
+      "completed_plan_outputs": {
+        "initial_result": [
+          true,
+          []
+        ],
+        "initial_bundles": [
+          "ResumeReview_SK_Review.blend"
+        ],
+        "enable_save_model_result": [
+          true,
+          []
+        ],
+        "prepare_task_calls": [],
+        "after_moving_bundle_result": [
+          true,
+          []
+        ],
+        "finalization_after_moving_bundle": true,
+        "resume_disabled_result": [
+          true,
+          []
+        ],
+        "remaining_bundles": [],
+        "restored_task_statuses": [
+          "completed"
+        ]
+      },
+      "rest_pose_revision": {
+        "before": {
+          "stable_id": "498b4c7d-22e9-49fc-ab20-337e95ffeccc",
+          "structure_revision": "009d5f0c92e9b82292be831fab013f6ef6166e5df08fe9814bd0606c0269df09"
+        },
+        "after": {
+          "stable_id": "498b4c7d-22e9-49fc-ab20-337e95ffeccc",
+          "structure_revision": "009d5f0c92e9b82292be831fab013f6ef6166e5df08fe9814bd0606c0269df09"
+        },
+        "unchanged": true,
+        "head_before": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "head_after": [
+          3.0,
+          0.0,
+          0.0
+        ]
+      },
+      "pose_success_restoration": {
+        "bone_location_before": [
+          0.0,
+          0.25,
+          0.5
+        ],
+        "bone_location_after": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "first_shape_keys": [
+          "Basis",
+          "ReviewPose"
+        ],
+        "after_reimport_shape_keys": [
+          "Basis",
+          "ReviewPose",
+          "ReviewPose.001"
+        ]
+      },
+      "unregister": "completed"
+    }
+  },
+  "upstream_format_reference": {
+    "repository": "https://github.com/h4lfheart/UEFormat",
+    "commit": "d858fe38b2b5b8c63ac4b7481b4386ebfabbf935",
+    "retrieved_on": "2026-09-15",
+    "source_manifest": "docs\\references\\ueformat-upstream\\d858fe38b2b5\\SOURCE_MANIFEST.json",
+    "local_comparison": "docs\\references\\ueformat-upstream\\d858fe38b2b5\\LOCAL_COMPARISON.json",
+    "verified_files": 90,
+    "attribute_branches": 21,
+    "scope": "Static format/source comparison; not complete semantic conformance testing"
+  }
+}

@@ -1,16 +1,16 @@
-"""Explicit cross-skeleton animation compatibility policy.
+"""Skeleton labels for library discovery and legacy import-setting migration.
 
-The native UEFormat importer remains strict by default.  ``name_retarget`` is
-an opt-in, user-authored compatibility route: the canonical importer is asked
-to bind tracks by case-insensitive bone name and to skip source-only bones.
-It is intentionally not presented as full Unreal Retarget Manager parity.
+Animation import and application use upstream UEFormat bone-name binding.
+Skeleton labels select library content; they never authorize its application.
 """
 
 from __future__ import annotations
 
+SKELETON_COMPATIBILITY_UEFORMAT = "ueformat"
 SKELETON_COMPATIBILITY_STRICT = "strict"
 SKELETON_COMPATIBILITY_NAME_RETARGET = "name_retarget"
 SKELETON_COMPATIBILITY_MODES = frozenset({
+    SKELETON_COMPATIBILITY_UEFORMAT,
     SKELETON_COMPATIBILITY_STRICT,
     SKELETON_COMPATIBILITY_NAME_RETARGET,
 })
@@ -19,14 +19,9 @@ SKELETON_COMPATIBILITY_MODES = frozenset({
 # human-readable because they are persisted in PipelineContext/checkpoints.
 SKELETON_COMPATIBILITY_ITEMS = (
     (
-        SKELETON_COMPATIBILITY_STRICT,
-        "严格身份",
-        "要求 UEANIM 目标骨架身份与选中骨架完全一致",
-    ),
-    (
-        SKELETON_COMPATIBILITY_NAME_RETARGET,
-        "按名称兼容",
-        "显式绑定同名骨骼；跳过源骨架独有骨骼",
+        SKELETON_COMPATIBILITY_UEFORMAT,
+        "UEFormat 原版绑定",
+        "绑定同名骨骼，跳过目标中不存在的轨道",
     ),
 )
 
@@ -89,24 +84,36 @@ def skeleton_names_match(source_name: object | None, filter_name: object | None)
 
 
 def normalize_skeleton_compatibility_mode(value: object | None) -> str:
-    """Return a supported mode or fail closed for malformed persisted data."""
+    """Migrate old presets to the single upstream UEFormat import behavior."""
 
-    mode = SKELETON_COMPATIBILITY_STRICT if value in (None, "") else value
+    mode = SKELETON_COMPATIBILITY_UEFORMAT if value in (None, "") else value
     if not isinstance(mode, str) or mode not in SKELETON_COMPATIBILITY_MODES:
         raise ValueError(
             "unsupported skeleton compatibility mode: "
             f"{mode!r}; expected one of {sorted(SKELETON_COMPATIBILITY_MODES)}"
         )
-    return mode
+    return SKELETON_COMPATIBILITY_UEFORMAT
 
 
 def is_name_based_compatibility(mode: object | None) -> bool:
-    """Whether the mode intentionally permits source/target identity mismatch."""
+    """Compatibility helper for callers persisting older import settings."""
 
-    return normalize_skeleton_compatibility_mode(mode) == SKELETON_COMPATIBILITY_NAME_RETARGET
+    return normalize_skeleton_compatibility_mode(mode) == SKELETON_COMPATIBILITY_UEFORMAT
+
+
+def validate_library_action(action, target, policy=None):
+    """Validate the target object without comparing skeletons or channels.
+
+    ``policy`` is accepted for saved scenes using the retired strict setting.
+    Blender keeps unmatched action channels inert, as with an upstream import.
+    """
+    if target is None or getattr(target, "type", "") != "ARMATURE":
+        raise ValueError("请选择目标骨架")
+    return ""
 
 
 __all__ = [
+    "SKELETON_COMPATIBILITY_UEFORMAT",
     "SKELETON_COMPATIBILITY_STRICT",
     "SKELETON_COMPATIBILITY_NAME_RETARGET",
     "SKELETON_COMPATIBILITY_MODES",
@@ -114,4 +121,5 @@ __all__ = [
     "skeleton_names_match",
     "normalize_skeleton_compatibility_mode",
     "is_name_based_compatibility",
+    "validate_library_action",
 ]

@@ -4,28 +4,37 @@ A full-stack asset pipeline addon for **UE/FModel** workflows in Blender 5.0.
 
 ---
 
+## Panel workflow
+
+A persistent target armature and current library sit above import/build, asset browsing, save/library management, utilities, and diagnostics. Browse models, animations and poses in one workspace. Selecting another scene object never redirects the fixed target. See [workflow architecture](docs/WORKFLOW_ARCHITECTURE_2026-09-16.md).
+
 ## Modules
 
 ### 1. Asset Pipeline
 
-A 4-step guided wizard to import animations, build asset libraries, and generate thumbnails in one click.
+A 3-step guided wizard to import animations, build asset libraries, and generate thumbnails in one click.
 
 | Step | Function |
 |------|----------|
-| Flow | Select FModel flow |
-| Project | Set source/output directories, skeleton filter (eyedropper pick) |
-| Scan | Scan `.ueanim` dictionary — auto-discover skeletons & animations |
-| Import/Package | Set import params → import animations → build library → generate thumbnails |
+| Source | Set source/output directories, skeleton filter (eyedropper pick) |
+| Scan and match | Scan `.ueanim` dictionary — auto-discover skeletons & animations |
+| Build library | Set import params → import animations → build library → generate thumbnails |
 
 Thumbnails:
 - OpenGL viewport snapshot (fast) and Render engine (high quality) modes
 - Isolate skeleton children (hide other scene objects)
 - Deterministic hash naming — rebaking overwrites old thumbnails
-- "Rebake Thumbnails" button for updating without re-importing
+- Library maintenance rebuilds and republishes the library files; it is not an image-only refresh.
 
-Animation Pipeline is now Folder-only: Step 2 selects an animation folder, output directory, and library name; Step 3 directly scans .ueanim / .uepose files from that folder. Indexed Project, Project Root, the SQLite animation index, and background index-maintenance controls are removed from the active UI and execution path. Legacy state fields remain only so older .blend files can be opened safely.
+Animation Pipeline is now Folder-only: choose an animation folder, output directory and library name, then scan `.ueanim` animations and lists `.uepose` resources separately. UEPOSE contains bone transforms and curve influences. Pose import now preserves the complete source in the Pose Assets library, which supports bone-pose application, optional combined shape-key baking, and standalone source-library save/load. Poses remain separate from timed Action packaging. Indexed Project, Project Root, the SQLite animation index, and background index-maintenance controls are removed from the active UI and execution path. Legacy state fields remain only so older .blend files can be opened safely.
 
 ---
+
+Scan counts distinguish new, source-unchanged, source-changed, and version-unverified animations. Automatic updates require complete prior source coverage and a reliable source-to-Action mapping. Existing bundle paths and Action names remain stable; new sources use new volumes. Missing legacy mappings, shared bundles, incomplete selections, renamed Actions, or changed target-skeleton versions are rejected without replacing the old library. Use a new library when changing the target skeleton. Back up before explicit Force Rebuild: it can change bundle paths and require existing links to be repointed.
+
+After publishing, reload the linked library or reopen the scene to read updates. Appended local copies are not updated automatically.
+
+Library preview and application validate skeleton identity before changing the scene. Legacy assets require explicit Existing Bone Names compatibility, with all animated bones present; this does not retarget animation.
 
 ### 2. Material Tools
 
@@ -138,11 +147,15 @@ report also includes the active runtime path and verified Vendor tree digest.
 Choose one Blender installation mode: use the V2 bundled runtime, or install the
 standalone `io_scene_ueformat` addon. Do not enable both in one session.
 
+## Animation binding
+
+Animation import follows upstream UEFormat: match bone names case-insensitively and skip missing tracks. Skeleton labels only group and filter library content. Partial animations and standard files without FModel identity are supported; library preview/application do not enforce identity or channel coverage. Old strict/name presets migrate to this behavior.
+
 ## Bundled UEFormat Vendor
 
 The release includes the FModel-aware `io_scene_ueformat` **0.10.0** vendor. It
 imports `.uemodel`, `.ueanim`, and `.uepose` and carries the FModel
-material/texture and strict skeleton surfaces used by V2.
+material/texture provenance and upstream bone-name binding used by V2.
 
 V2 registers this dependency in **headless mode**. The operators, file handlers,
 settings, and import implementation are active, but the canonical UEFormat

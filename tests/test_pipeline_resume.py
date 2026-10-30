@@ -98,6 +98,17 @@ class ResumeIdentityTests(unittest.TestCase):
 
             self.assertNotEqual(first["revision"], changed["revision"])
 
+    def test_source_revision_detects_same_size_edits_with_preserved_timestamp(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "Idle.ueanim")
+            path.write_bytes(b"old")
+            timestamp = path.stat().st_mtime_ns
+            first = make_manifest_source(0, "Hero", "Base", "Idle", str(path))
+            path.write_bytes(b"new")
+            os.utime(path, ns=(timestamp, timestamp))
+            second = make_manifest_source(0, "Hero", "Base", "Idle", str(path))
+            self.assertNotEqual(first["revision"], second["revision"])
+
     def test_armature_identity_survives_rename_but_structure_revision_does_not(self):
         armature = FakeArmature("Rig", [("root", None), ("hand", "root")])
         first = armature_identity(armature)
@@ -148,6 +159,19 @@ class ResumeReconciliationTests(unittest.TestCase):
         self.assertEqual(state["stage_status"][PipelineStage.ASSET_IMPORT.value], StageStatus.COMPLETED.value)
         self.assertEqual(state["stage_status"][PipelineStage.LIBRARY_BUILDING.value], StageStatus.PENDING.value)
         self.assertIsNone(state["library_manifest"])
+
+    def test_build_setting_change_reopens_completed_tasks(self):
+        state = self._state()
+        state["multi_import_plan"] = {"tasks": [{"status": "completed", "progress": 1.0}]}
+        state["multi_import_checkpoint"] = {
+            "current_task_index": 1,
+            "plan": {"tasks": [{"status": "completed", "progress": 1.0}]},
+        }
+        reconcile_resume_state(state, "old-import", "new-build", True)
+        self.assertEqual(state["multi_import_plan"]["tasks"][0]["status"], "pending")
+        self.assertEqual(state["multi_import_checkpoint"]["current_task_index"], 0)
+        self.assertEqual(state["multi_import_checkpoint"]["plan"]["tasks"][0]["status"], "pending")
+        self.assertIsNotNone(state["imported_assets"])
 
     def test_disabling_resume_clears_checkpoint_even_without_other_changes(self):
         state = self._state()

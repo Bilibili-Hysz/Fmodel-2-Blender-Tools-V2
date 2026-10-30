@@ -2,9 +2,10 @@
 # 步骤4: 导入动画 + 建立资产库 (合并原步骤4/5)
 
 import bpy
+from ....core.workflow import resolve_target, synchronize_target
 
 from ....core import (
-    PipelineContext, PipelineStage, safe_child_path, validate_filename_component,
+    PipelineContext, PipelineStage, safe_child_path, model_storage_stem,
 )
 from ..manager import PipelineManager
 from .runner import run_wizard_import_plan, run_wizard_stage
@@ -21,15 +22,19 @@ class PIPELINE_OT_WizardStep4(bpy.types.Operator):
         if not hasattr(context.scene, "pipeline_wizard"):
             return False
         state = context.scene.pipeline_wizard
-        obj = context.active_object
+        if getattr(state, "scan_anim_count", 0) == 0:
+            return False
+        obj = resolve_target(context)
         if state.scan_skeleton_count <= 1:
+            if hasattr(context.scene, "fmodel_workflow"):
+                return state.scan_completed and obj is not None
             handoff_target = getattr(state, "import_target_skeleton", "")
             handoff_armature = bpy.data.objects.get(handoff_target) if handoff_target else None
             return state.scan_completed and (
                 (handoff_armature and handoff_armature.type == 'ARMATURE')
                 or (obj and obj.type == 'ARMATURE')
             )
-        return state.scan_completed and any(
+        return state.scan_completed and bool(state.skeleton_mappings) and all(
             mapping.target_armature for mapping in state.skeleton_mappings
         )
 
@@ -43,8 +48,10 @@ class PIPELINE_OT_WizardStep4(bpy.types.Operator):
     def _execute(self, context):
         state = context.scene.pipeline_wizard
 
-        obj = context.active_object
-        if state.scan_skeleton_count <= 1 and obj and obj.type == 'ARMATURE':
+        obj = resolve_target(context)
+        if hasattr(context.scene, "fmodel_workflow"):
+            synchronize_target(context.scene, obj)
+        elif state.scan_skeleton_count <= 1 and obj and obj.type == 'ARMATURE':
             try:
                 from .state import handoff_armature
                 changed = handoff_armature(state, obj)
@@ -63,20 +70,17 @@ class PIPELINE_OT_WizardStep4(bpy.types.Operator):
         def prepare_task(task, task_count):
             if not state.lib_save_model:
                 return True
-            validate_filename_component(state.library_name, "library name")
-            validate_filename_component(task.source_skeleton, "source skeleton")
             armature = bpy.data.objects.get(task.target_armature)
             if not armature or armature.type != 'ARMATURE':
                 self.report({'ERROR'}, f"无法保存模型，目标骨架无效: {task.target_armature}")
                 return False
             model_name = state.library_name if task_count == 1 else f"{state.library_name}_{task.source_skeleton}"
-            validate_filename_component(model_name, "model filename")
-            model_filename = f"{model_name}_mesh.blend"
-            validate_filename_component(model_filename, "model filename")
+            storage_name = model_storage_stem(state.library_name, task.source_skeleton if task_count > 1 else None)
+            model_filename = f"{storage_name}_mesh.blend"
             safe_child_path(out_dir, model_filename, "model filename")
             try:
                 from ....Assets.Models.operators import save_model_logic
-                if not save_model_logic(armature, out_dir, model_name, state.lib_model_preview):
+                if not save_model_logic(armature, out_dir, model_name, state.lib_model_preview, storage_name=storage_name):
                     self.report({'ERROR'}, f"保存模型失败: {task.target_armature}")
                     return False
             except Exception as exc:
@@ -117,9 +121,10 @@ class PIPELINE_OT_WizardStep4(bpy.types.Operator):
 
 
 class PIPELINE_OT_RebakeThumbnails(bpy.types.Operator):
-    """仅重新生成缩略图，不重新导入动画"""
+    """重新发布当前管线的动画库及缩略图"""
     bl_idname = "pipeline.rebake_thumbnails"
-    bl_label = "重新生成缩略图"
+    bl_label = "重建库与缩略图"
+    bl_description = "重新发布当前建库任务的动画库文件；可能改变分卷文件路径"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod

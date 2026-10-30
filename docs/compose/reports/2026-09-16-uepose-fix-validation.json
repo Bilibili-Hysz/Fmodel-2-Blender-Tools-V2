@@ -1,0 +1,48 @@
+{
+  "date": "2026-09-16",
+  "scope": "UEPOSE source preservation, pose application, optional baking and panel",
+  "pytest": {
+    "passed": 538,
+    "subtests_passed": 52,
+    "seconds": 25.86
+  },
+  "blender": {
+    "version": "5.2.1 LTS",
+    "script": "scripts/blender_pose_asset_smoke.py",
+    "status": "POSE_ACCEPTANCE_PASSED",
+    "exit_code": 0,
+    "scenarios": [
+      "import_without_active_armature",
+      "helper_pose_without_mesh",
+      "combined_pose_on_two_modifier_bound_meshes",
+      "repeat_bake_update",
+      "pose_mode_restore",
+      "parent_child_matrix_consistency",
+      "strict_missing_identity_rejected",
+      "evaluation_failure_cleanup",
+      "unmatched_curve_preserved_zero_bake_rejected",
+      "search_selection",
+      "source_interpretation_settings",
+      "source_library_reload_without_original_file",
+      "repeat_load_deduplicated",
+      "invalid_library_rollback",
+      "full_scene_save_and_reopen"
+    ]
+  },
+  "vendor_manifest": {
+    "status": "verified",
+    "file_count": 73,
+    "tree_sha256": "8027d2864a74650ad452d88c3a494876c8c0f4534f6c85772fbfd5d3987279d2"
+  },
+  "limits": [
+    "No real-game visual conformance or GUI layout inspection",
+    "Runtime not installed into user Blender"
+  ],
+  "files": {
+    "core/pose_asset_record.py": "d7aca375be833a377c7e5f9d2f0ea7c87586675bb67d4e67246fc35b08b12671",
+    "Fmodel/importers/animation/pose_assets.py": "93f53a5ec46c0cae507cd4441f0740d28c1b82e990170a025bcb23bf91cf0397",
+    "Fmodel/importers/animation/pose_library_ui.py": "fc1f2e459e17b0c9c4c22c13d11e7568d1e664249fd912dc44b4453d6d7c3254",
+    "Fmodel/importers/animation/operator_anim_ueformat.py": "342f9098a82e8705523d72fac9eb8100ca7ca366c63125069d521dc6cd18e0e6",
+    "scripts/blender_pose_asset_smoke.py": "08c9d7d4dd6af93bfb218d6a00da7ce5ef30c82fb1dfb887861ff2f3b82f8fb4"
+  }
+}

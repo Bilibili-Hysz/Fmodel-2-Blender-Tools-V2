@@ -1,0 +1,95 @@
+{
+  "upstream_commit": "d858fe38b2b5b8c63ac4b7481b4386ebfabbf935",
+  "ast_comparisons": [
+    {
+      "path": "importer/version.py",
+      "ast_equal": true,
+      "local_sha256": "e3b1cbb642520d5d2e967287024b9e04550ceaea17625d2845c316030a61a7e7"
+    },
+    {
+      "path": "importer/dto/anim.py",
+      "ast_equal": true,
+      "local_sha256": "143fc97c57a5df247d57715e4e833494aea021e3f0842bae32e8c84cd112c826"
+    },
+    {
+      "path": "importer/dto/model.py",
+      "ast_equal": true,
+      "local_sha256": "223c1c1ffd77b17f2d3d5e131a3048c973ddf9def8d9ece76b6b64587605890d"
+    },
+    {
+      "path": "importer/dto/pose.py",
+      "ast_equal": true,
+      "local_sha256": "64f3e3a13354d0043e30794ba895c15c5cb6c43b4b6f0cc2e22c48d9e8ecb1a6"
+    },
+    {
+      "path": "importer/dto/skeleton.py",
+      "ast_equal": true,
+      "local_sha256": "9e008079a076ba45ac718aa930b45ba2816cef9db5a0c9f11a3f4c056ac32816"
+    },
+    {
+      "path": "importer/create/space.py",
+      "ast_equal": true,
+      "local_sha256": "63ef352579f9c879859e901956f06916f90d667dca9684f289ed3d5e4a228b6e"
+    }
+  ],
+  "attribute_branches": [
+    {
+      "path": "importer/deserialize/anim.py",
+      "upstream_attributes": [
+        "CURVES",
+        "METADATA",
+        "TRACKS"
+      ],
+      "missing_local_attributes": [],
+      "local_sha256": "66a024e0529c9af7d1b7b164ffa8a090f7332d0af0bcfd85a5a5598dc0832a81"
+    },
+    {
+      "path": "importer/deserialize/lod.py",
+      "upstream_attributes": [
+        "INDICES",
+        "MATERIALS",
+        "MORPHTARGETS",
+        "NORMALS",
+        "TANGENTS",
+        "TEXCOORDS",
+        "VERTEXCOLORS",
+        "VERTICES",
+        "WEIGHTS"
+      ],
+      "missing_local_attributes": [],
+      "local_sha256": "2004aecd37ad47386d089140cce3a3a89cce46cd11ea927cff1da0ec52ce1c2e"
+    },
+    {
+      "path": "importer/deserialize/model.py",
+      "upstream_attributes": [
+        "COLLISION",
+        "LODS",
+        "SKELETON"
+      ],
+      "missing_local_attributes": [],
+      "local_sha256": "62ba7cc85125197d3e9476313f86977d7e5df2a2594af2dc8fa927c43cb38e8b"
+    },
+    {
+      "path": "importer/deserialize/pose.py",
+      "upstream_attributes": [
+        "CURVES",
+        "POSES"
+      ],
+      "missing_local_attributes": [],
+      "local_sha256": "e7f9b2bc1c8026789efa4ff08e669085d9b8ef28e082fa9a71c93aa8de1cdb9c"
+    },
+    {
+      "path": "importer/deserialize/skeleton.py",
+      "upstream_attributes": [
+        "BONES",
+        "METADATA",
+        "SOCKETS",
+        "VIRTUALBONES"
+      ],
+      "missing_local_attributes": [],
+      "local_sha256": "8184ec13a9c45ca2a546392c0026aa5f1a438a15d3d08568e36b54dfabcec449"
+    }
+  ],
+  "verified_source_files": 90,
+  "attribute_branch_count": 21
+}

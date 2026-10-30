@@ -1,0 +1,16 @@
+{
+  "status": "pass",
+  "blender": "5.2.1 LTS",
+  "checks": [
+    "fixed_target_survives_selection_and_rename",
+    "cleared_or_deleted_target_never_falls_back",
+    "legacy_target_migration_and_pose_property_bridge",
+    "fresh_relative_path_scan_back_navigation_and_build",
+    "library_apply_uses_fixed_target",
+    "library_switch_clears_stale_folder_selection_and_page",
+    "current_library_scope_respects_path_boundaries",
+    "all_panel_modes_and_steps_resolve_registered_rna",
+    "workspace_survives_scene_reload",
+    "registration_and_handler_cleanup"
+  ]
+}

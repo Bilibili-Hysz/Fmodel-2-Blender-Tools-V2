@@ -33,6 +33,18 @@ def load_reader():
     return module
 
 
+def test_optional_identity_can_be_ignored_without_ignoring_outer_corruption():
+    reader = load_reader()
+    for version in (9, 10):
+        data = ueformat_file(reader, kind='animation', file_version=version, identity_payload=b'\x02')
+        record = reader.read_ueformat_identity_bytes(data, tolerate_identity_errors=True)
+        assert record.kind == 'animation' and record.identity is None and record.identity_warnings
+        with unittest.TestCase().assertRaises(reader.UEFormatIdentityError):
+            reader.read_ueformat_identity_bytes(data)
+        with unittest.TestCase().assertRaises(reader.UEFormatIdentityError):
+            reader.read_ueformat_identity_bytes(data[:-1], tolerate_identity_errors=True)
+
+
 def fstring(value: str) -> bytes:
     raw = value.encode("utf-8")
     return struct.pack("<i", len(raw)) + raw

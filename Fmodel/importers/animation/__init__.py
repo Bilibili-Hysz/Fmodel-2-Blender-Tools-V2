@@ -3,7 +3,7 @@
 
 import bpy
 import importlib
-from . import operator_anim_ueformat
+from . import operator_anim_ueformat, pose_library_ui
 
 if "bpy" in locals():
     importlib.reload(operator_anim_ueformat)
@@ -11,7 +11,9 @@ if "bpy" in locals():
 
 def register():
     operator_anim_ueformat.register()
+    pose_library_ui.register()
 
 
 def unregister():
+    pose_library_ui.unregister()
     operator_anim_ueformat.unregister()

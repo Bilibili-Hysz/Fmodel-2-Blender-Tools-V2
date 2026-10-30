@@ -16,10 +16,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import gzip
+import io
 import os
 from pathlib import Path
 import struct
 from typing import Any
+
+try:
+    from .resource_limits import enforce_limit, ResourceLimitError
+except ImportError:  # Direct, pure-Python metadata probes.
+    from resource_limits import enforce_limit, ResourceLimitError
 
 
 MAGIC = b"UEFORMAT"
@@ -35,12 +41,9 @@ V10_HEADER_OBJECT_PATH_VERSION = 10
 V10_ATTRIBUTE_ENVELOPE_VERSION = 1
 IDENTITY_SECTIONS = frozenset({"FMODEL_SKELETON_IDENTITY", "FMODEL_TARGET_SKELETON"})
 
-MAX_FILE_BYTES = 512 * 1024 * 1024
 MAX_STRING_BYTES = 64 * 1024
 MAX_IDENTITY_PATH_BYTES = 16 * 1024
-MAX_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
 MAX_IDENTITY_CHUNK_BYTES = 128 * 1024
-MAX_ATTRIBUTE_COUNT = 4096
 
 
 class UEFormatIdentityError(ValueError):
@@ -58,13 +61,14 @@ class UEFormatIdentityRecord:
     compressed: bool
     identity: dict[str, Any] | None
     identity_extension: str | None
+    identity_warnings: tuple[str, ...] = ()
 
     @property
     def has_strict_identity(self) -> bool:
         return self.identity is not None
 
 
-def read_ueformat_identity(path: str | os.PathLike[str]) -> UEFormatIdentityRecord:
+def read_ueformat_identity(path: str | os.PathLike[str], *, tolerate_identity_errors=False) -> UEFormatIdentityRecord:
     """Read one `.uemodel`, `.ueanim`, or `.uepose` identity record.
 
     A valid file without the relevant identity extension returns a record with
@@ -85,11 +89,12 @@ def read_ueformat_identity(path: str | os.PathLike[str]) -> UEFormatIdentityReco
         size = os.stat(filesystem_source).st_size
     except OSError as error:
         raise UEFormatIdentityError(f"UEFormat file is unavailable: {source}") from error
-    if size < len(MAGIC) or size > MAX_FILE_BYTES:
+    if size < len(MAGIC):
         raise UEFormatIdentityError(f"UEFormat file size is outside the supported range: {size}")
+    enforce_limit(size, "MAX_BYTES", "UEFormat file")
     try:
         with open(filesystem_source, "rb") as stream:
-            return _read_ueformat_identity_reader(_FileReader(stream, size))
+            return _read_ueformat_identity_reader(_FileReader(stream, size), tolerate_identity_errors=tolerate_identity_errors)
     except OSError as error:
         raise UEFormatIdentityError(f"UEFormat file cannot be read: {source}") from error
 
@@ -103,19 +108,20 @@ def _filesystem_path(path: Path) -> str:
     return "\\\\?\\UNC\\" + value[2:] if value.startswith("\\\\") else "\\\\?\\" + value
 
 
-def read_ueformat_identity_bytes(data: bytes) -> UEFormatIdentityRecord:
+def read_ueformat_identity_bytes(data: bytes, *, tolerate_identity_errors=False) -> UEFormatIdentityRecord:
     """Decode a synthetic or on-disk UEFormat byte sequence held in memory."""
 
     if not isinstance(data, (bytes, bytearray, memoryview)):
         raise TypeError("UEFormat data must be bytes-like")
     raw = bytes(data)
-    if len(raw) < len(MAGIC) or len(raw) > MAX_FILE_BYTES:
+    if len(raw) < len(MAGIC):
         raise UEFormatIdentityError("UEFormat data size is outside the supported range")
+    enforce_limit(len(raw), "MAX_BYTES", "UEFormat file")
 
-    return _read_ueformat_identity_reader(_Reader(raw))
+    return _read_ueformat_identity_reader(_Reader(raw), tolerate_identity_errors=tolerate_identity_errors)
 
 
-def _read_ueformat_identity_reader(reader) -> UEFormatIdentityRecord:
+def _read_ueformat_identity_reader(reader, *, tolerate_identity_errors=False) -> UEFormatIdentityRecord:
     if reader.read(len(MAGIC)) != MAGIC:
         raise UEFormatIdentityError("Invalid UEFormat magic")
     identifier = reader.read_fstring("identifier", MAX_STRING_BYTES)
@@ -146,13 +152,15 @@ def _read_ueformat_identity_reader(reader) -> UEFormatIdentityRecord:
     )
     identity = None
     seen_identity = False
+    identity_warnings = []
     seen_sections: set[str] = set()
     # V10 serializes the root as an attribute set with an explicit count; V9
     # wrote a bare chunk sequence that ends at EOF.
     if v10_attributes:
         attribute_count = archive.read_i32("attribute count")
-        if attribute_count < 0 or attribute_count > MAX_ATTRIBUTE_COUNT:
+        if attribute_count < 0 or attribute_count > archive.remaining() // 8:
             raise UEFormatIdentityError(f"Invalid attribute count: {attribute_count}")
+        enforce_limit(attribute_count, "MAX_ATTRIBUTES", "V10 attributes")
     else:
         attribute_count = None
     processed_attributes = 0
@@ -163,7 +171,10 @@ def _read_ueformat_identity_reader(reader) -> UEFormatIdentityRecord:
             processed_attributes += 1
         section_name = archive.read_fstring("top-level section", MAX_STRING_BYTES)
         if section_name in seen_sections and section_name in IDENTITY_SECTIONS:
-            raise UEFormatIdentityError(f"Duplicate identity section: {section_name}")
+            message = f"Duplicate identity section: {section_name}"
+            if not tolerate_identity_errors:
+                raise UEFormatIdentityError(message)
+            identity_warnings.append(message)
         seen_sections.add(section_name)
 
         if section_name != identity_section:
@@ -193,38 +204,42 @@ def _read_ueformat_identity_reader(reader) -> UEFormatIdentityRecord:
 
         if v10_attributes:
             total_size = archive.read_i32("identity attribute size")
-            if total_size < 5 or total_size > archive.remaining():
+            if total_size < 0 or total_size > archive.remaining():
                 raise UEFormatIdentityError(
                     f"Invalid identity attribute size: {total_size}"
                 )
-            envelope_version = archive.read_u8("identity envelope version")
-            if envelope_version != V10_ATTRIBUTE_ENVELOPE_VERSION:
-                raise UEFormatIdentityError(
-                    f"Unsupported identity attribute envelope version: {envelope_version}"
-                )
-            array_size = archive.read_i32("identity array_size")
-            byte_size = total_size - 5
+            byte_size = total_size
+            array_size = None
         else:
             array_size = archive.read_i32("top-level array_size")
             byte_size = archive.read_i32("top-level byte_size")
-            if array_size < 0:
-                raise UEFormatIdentityError(
-                    f"Invalid negative array_size for section {section_name}: {array_size}"
-                )
             if byte_size < 0 or byte_size > archive.remaining():
                 raise UEFormatIdentityError(
                     f"Invalid byte_size for section {section_name}: {byte_size}"
                 )
 
-        if seen_identity:
-            raise UEFormatIdentityError(f"Duplicate expected identity section: {section_name}")
-        if array_size != 1:
-            raise UEFormatIdentityError(
-                f"Invalid identity section array_size: {array_size}"
-            )
-        if byte_size > MAX_IDENTITY_CHUNK_BYTES:
-            raise UEFormatIdentityError("Identity chunk exceeds the supported safety limit")
-        identity = _read_identity_chunk(archive.read(byte_size), kind)
+        if byte_size > MAX_IDENTITY_CHUNK_BYTES and tolerate_identity_errors:
+            archive.skip(byte_size, "optional identity payload")
+            identity_warnings.append("Identity chunk exceeds the supported metadata range")
+        else:
+            raw_identity = archive.read(byte_size)
+            try:
+                if byte_size > MAX_IDENTITY_CHUNK_BYTES:
+                    raise UEFormatIdentityError("Identity chunk exceeds the supported safety limit")
+                payload = _Reader(raw_identity)
+                if v10_attributes:
+                    envelope_version = payload.read_u8("identity envelope version")
+                    if envelope_version != V10_ATTRIBUTE_ENVELOPE_VERSION:
+                        raise UEFormatIdentityError(f"Unsupported identity attribute envelope version: {envelope_version}")
+                    array_size = payload.read_i32("identity array_size")
+                    raw_identity = payload.read(payload.remaining())
+                if array_size != 1:
+                    raise UEFormatIdentityError(f"Invalid identity section array_size: {array_size}")
+                identity = _read_identity_chunk(raw_identity, kind)
+            except UEFormatIdentityError as error:
+                if not tolerate_identity_errors:
+                    raise
+                identity_warnings.append(str(error))
         seen_identity = True
 
     if not archive.eof():
@@ -240,8 +255,9 @@ def _read_ueformat_identity_reader(reader) -> UEFormatIdentityRecord:
         object_name=object_name,
         file_version=file_version,
         compressed=compressed,
-        identity=identity,
+        identity=None if identity_warnings else identity,
         identity_extension=identity_section if seen_identity else None,
+        identity_warnings=tuple(identity_warnings),
     )
 
 
@@ -303,10 +319,11 @@ def _decompress_archive(reader: "_Reader") -> "_Reader":
     compression_type = reader.read_fstring("compression type", MAX_STRING_BYTES)
     uncompressed_size = reader.read_i32("uncompressed size")
     compressed_size = reader.read_i32("compressed size")
-    if uncompressed_size < 0 or uncompressed_size > MAX_UNCOMPRESSED_BYTES:
+    if uncompressed_size < 0:
         raise UEFormatIdentityError(
             f"Invalid uncompressed size: {uncompressed_size}"
         )
+    enforce_limit(uncompressed_size, "MAX_BYTES", "Uncompressed UEFormat body")
     if compressed_size < 0 or compressed_size != reader.remaining():
         raise UEFormatIdentityError(
             f"Compressed payload size does not match header: {compressed_size}"
@@ -314,7 +331,18 @@ def _decompress_archive(reader: "_Reader") -> "_Reader":
     compressed = reader.read(compressed_size, "compressed payload")
     try:
         if compression_type == "GZIP":
-            decompressed = gzip.decompress(compressed)
+            # Bound expansion by the declared length even when the user has
+            # not selected a memory budget. Read one extra byte to detect lies.
+            output = bytearray()
+            with gzip.GzipFile(fileobj=io.BytesIO(compressed)) as stream:
+                while True:
+                    chunk = stream.read(min(1024 * 1024, uncompressed_size - len(output) + 1))
+                    output.extend(chunk)
+                    if len(output) > uncompressed_size:
+                        raise UEFormatIdentityError("GZIP body exceeds declared uncompressed size")
+                    if not chunk:
+                        break
+            decompressed = bytes(output)
         elif compression_type == "ZSTD":
             decompressed = _zstd_decompress(compressed, uncompressed_size)
         else:
@@ -342,11 +370,17 @@ def _zstd_decompress(data: bytes, expected_size: int) -> bytes:
             raise UEFormatIdentityError(
                 "ZSTD UEFormat identity requires Python compression.zstd or zstandard"
             ) from error
-        return zstd.ZstdDecompressor().decompress(data, max_output_size=expected_size)
-    # Python 3.14's stdlib API does not expose max_output_size; the outer
-    # file and declared uncompressed-size ceilings still bound this probe,
-    # and the exact size is verified by the caller.
-    return zstd.decompress(data)
+        return zstd.ZstdDecompressor().decompress(data, max_output_size=expected_size + 1)
+    output = bytearray()
+    with zstd.ZstdFile(io.BytesIO(data)) as stream:
+        while True:
+            chunk = stream.read(min(1024 * 1024, expected_size - len(output) + 1))
+            output.extend(chunk)
+            if len(output) > expected_size:
+                raise UEFormatIdentityError("ZSTD body exceeds declared uncompressed size")
+            if not chunk:
+                break
+    return bytes(output)
 
 
 def _provenance_module():

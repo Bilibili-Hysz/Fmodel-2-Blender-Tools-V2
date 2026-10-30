@@ -1,6 +1,7 @@
 """Fake-Blender UI contracts for pipeline Step 4 target readiness."""
 
 import ast
+from core.workflow import resolve_target
 from pathlib import Path
 import types
 import unittest
@@ -53,8 +54,9 @@ class PipelineStep4UiTests(unittest.TestCase):
                 data=types.SimpleNamespace(objects=objects),
             ),
             "t": lambda text: text,
+            "resolve_target": resolve_target,
         }
-        exec(compile(ast.Module(body=[panel_node], type_ignores=[]), "ui.py", "exec"), namespace)
+        exec(compile(ast.Module(body=[next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_draw_pipeline_mapping"), panel_node], type_ignores=[]), "ui.py", "exec"), namespace)
         return namespace["FMODEL_PT_Pipeline"]
 
     def _draw_step4(self, objects, stored_target_name, active_object=None, lib_completed=False):
@@ -87,7 +89,7 @@ class PipelineStep4UiTests(unittest.TestCase):
         )
         context = types.SimpleNamespace(
             active_object=active_object,
-            scene=types.SimpleNamespace(pipeline_wizard=state),
+            scene=types.SimpleNamespace(pipeline_wizard=state, objects=objects),
         )
 
         panel.draw(context)
@@ -142,7 +144,7 @@ class PipelineStep4UiTests(unittest.TestCase):
             [identifier for identifier, _enabled, _kwargs in layout.operators],
         )
         self.assertIn(
-            "pipeline.rebake_thumbnails",
+            "fmodel.open_workflow",
             [identifier for identifier, _enabled, _kwargs in layout.operators],
         )
         self.assertIn(

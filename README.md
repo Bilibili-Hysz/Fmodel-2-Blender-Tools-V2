@@ -1,14 +1,22 @@
 # FModel Tools Next
 
+Current sidebar workflow: fixed target and library → import/build → model/animation/pose browser → save and manage → utilities → diagnostics. The builder has three visible stages. See [工作流架构与面板说明](docs/WORKFLOW_ARCHITECTURE_2026-09-16.md).
+
 FModel Tools Next is a Blender add-on for project-first UE/FModel asset workflows.
 
 ## Animation Workflow
 
 1. Open **Animation Pipeline**; the active source mode is **Folder**.
 2. In Step 2, select the animation folder, output directory, library name, and optional skeleton filter.
-3. Step 3 directly scans .ueanim / .uepose files in the selected folder.
+3. Step 3 scans `.ueanim` Actions and lists `.uepose` resources separately. Pose import preserves the complete source file in the Pose Assets library. Apply bone poses or optionally bake combined bone/curve deformation to shape keys there; poses remain separate from timed Action packaging.
 4. Importing a model can prepare Animation Pipeline for its returned Armature, including skeleton, target Armature, output path, and library defaults.
 5. Step 4 imports animations, builds the library, and generates thumbnails.
+
+Scan counts distinguish new, source-unchanged, source-changed, and version-unverified animations. Published bundles retain source-content, import-settings, and target-skeleton versions. Automatic updates require the skeleton's complete prior source set and a reliable source-to-Action mapping. They preserve each existing bundle path and Action name so saved Link references remain valid; new sources use new volumes. Incomplete selections, shared bundles, missing legacy mappings, renamed Actions, and changed target-skeleton versions fail without replacing the old library. Use a new library when changing the target skeleton. Back up before choosing explicit Force Rebuild: it retains scoped replacement semantics and can change bundle paths, requiring existing links to be repointed.
+
+After publishing an update, reload the linked library or reopen the scene to read the new data; appended local copies are not updated automatically.
+
+Animation import follows upstream UEFormat: bind the first case-insensitive bone-name match and skip absent tracks. Library preview and application do not compare skeleton labels, identity, or track coverage. Skeleton labels only group and filter library content; standard animations without FModel identity are supported.
 
 Indexed Project, Project Root, the SQLite animation index, and background index-maintenance controls are retired from the active UI and execution path. Legacy fields and source modules remain only as migration/reference data for older .blend files; they are not registered or invoked by normal startup.
 
@@ -22,7 +30,7 @@ classified as strict; malformed present properties are reported as **invalid**.
 The identity fingerprint participates in import task reuse and multi-skeleton
 checkpoint matching.
 
-The active Folder scanner uses the binary identity first and consults JSON only as an optional legacy fallback. It does not create or read a SQLite Project Index.
+The active Folder scanner uses optional binary skeleton provenance for grouping. Standard resources without identity use a supplied search label or Unspecified; directory names are not guessed as skeleton identity. It does not create or read a SQLite Project Index.
 
 Legacy dictionary imports remain available for existing exports, but new work should begin with direct Folder selection.
 
@@ -65,7 +73,7 @@ standalone `io_scene_ueformat` addon. Do not enable both in one session.
 
 V2 bundles the FModel-aware `io_scene_ueformat` **0.10.0** implementation. It
 supports `.uemodel`, `.ueanim`, and `.uepose`, including FModel
-material/texture provenance and strict skeleton identity.
+material/texture provenance, optional skeleton provenance, and upstream animation binding.
 
 When V2 starts, the bundled dependency is registered through
 `io_scene_ueformat.register_headless()`: operators, file handlers, settings, and

@@ -1,0 +1,643 @@
+{
+  "repository": "https://github.com/h4lfheart/UEFormat",
+  "branch": "main",
+  "commit": "d858fe38b2b5b8c63ac4b7481b4386ebfabbf935",
+  "commit_date": "2026-08-14T19:44:59Z",
+  "retrieved_on": "2026-09-15",
+  "scope": "All format specification documents and first-party Blender/Unreal plugin text sources at the pinned commit, including legacy readers. Excludes binary builds, wheels, images, third-party compression implementations and CI files. Original bytes, no runtime installation.",
+  "archive": "format-sources.zip",
+  "archive_sha256": "8767d6fe7fce07d6bbd7fb6de82b54d8ff970c262037f2a2e60d0f6c560109d6",
+  "file_count": 90,
+  "files": [
+    {
+      "path": "README.md",
+      "git_blob_sha1": "91cfba673669655417598354dc4ff61646c6eeb2",
+      "sha256": "dbb2f8f8e98e6ec588296cbd14b8630815e270d585e5a2d2e764070d793d7dcc",
+      "bytes": 1222,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/README.md"
+    },
+    {
+      "path": "docs/generic.md",
+      "git_blob_sha1": "8ffd27b01433a379a0236128ddc4f29026512c36",
+      "sha256": "4947400577c3654d2f5579547806819953eaa963687a2f10a3d7e281ef7430ef",
+      "bytes": 1431,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/docs/generic.md"
+    },
+    {
+      "path": "docs/ueanim.md",
+      "git_blob_sha1": "15fe25e38626764436903c8584b9b8344c75ef1a",
+      "sha256": "e8bd38a648072e4e6800ac74281ae8d82e6794c780b0f9ed4fa3a2325774eafa",
+      "bytes": 1060,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/docs/ueanim.md"
+    },
+    {
+      "path": "docs/uemodel.md",
+      "git_blob_sha1": "69b9d20f19eaa4543ffbefaf204d6bc628507333",
+      "sha256": "1d9dfa4077bc88486321024b9f8d9ab8e16d9fc8f92476c8905860b0469bc409",
+      "bytes": 1921,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/docs/uemodel.md"
+    },
+    {
+      "path": "docs/uepose.md",
+      "git_blob_sha1": "836b5a4f42483c6caabbe3031860bad9ddc10907",
+      "sha256": "95d531dba7beaa88a12a828fbbbeba3e34b2391071f07d0ecfcd3522252b8136",
+      "bytes": 470,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/docs/uepose.md"
+    },
+    {
+      "path": "plugins/blender/README.md",
+      "git_blob_sha1": "d427f08118ee93395f0a79e2d2c20dcc83cd64f9",
+      "sha256": "d32d0399c5e8604aeefd14e6fd37b40aba34135f37403a6b962cd4f7d248a523",
+      "bytes": 638,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/README.md"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/__init__.py",
+      "git_blob_sha1": "ba178c32b7195cb77a24b48065778db36718d6e8",
+      "sha256": "6c975bf028688b1b54c989845694c99ce50cd393f7c283621f47756aeaf81f02",
+      "bytes": 636,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/__init__.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/blender_manifest.toml",
+      "git_blob_sha1": "d0e68e36b201b0af894e2bfe5cc4a7257b129118",
+      "sha256": "46cea26599eb5c8f5b0e80b07a4bea9b1ec13e4ee8e0c96316a07556ab585627",
+      "bytes": 311,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/blender_manifest.toml"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/__init__.py",
+      "git_blob_sha1": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/__init__.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/archive/__init__.py",
+      "git_blob_sha1": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/archive/__init__.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/archive/reader.py",
+      "git_blob_sha1": "3a3d35bb5751e542e2576c9b07a1636290767f6f",
+      "sha256": "8e50eedf97707b21624f355022c34d5603bed846cdf12e1c506ec843ab04ddf5",
+      "bytes": 3710,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/archive/reader.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/constants.py",
+      "git_blob_sha1": "62f2ad5793b22c06c613fb3f6a33b386786aec61",
+      "sha256": "02e024d4d441747139b1eda5649547a13fb5a35a965907455b2cb77ccee06bec",
+      "bytes": 102,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/constants.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/create/__init__.py",
+      "git_blob_sha1": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/create/__init__.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/create/anim.py",
+      "git_blob_sha1": "14221f95ff39934be16a909b98736bb197766474",
+      "sha256": "12958766f07fecf66fa14e3052119d83381ef61e706e2a300b4fe84bcf81ec6e",
+      "bytes": 4934,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/create/anim.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/create/model.py",
+      "git_blob_sha1": "26389fe9e30768e2c0438ca495c94bc89c094899",
+      "sha256": "8e29ce2325994dad6a89a8e83e1ed2a43df210f914e52cc07fad8319ca4bf8ff",
+      "bytes": 4480,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/create/model.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/create/pose.py",
+      "git_blob_sha1": "4b7ada47819db7fee01f7a30500d12c8b4e8f004",
+      "sha256": "2b6430da9879be2dd6fc81ebe423c786308238e014320993185cca84ad1e7e7e",
+      "bytes": 5272,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/create/pose.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/create/skeleton.py",
+      "git_blob_sha1": "c01626add45b33fff1de865656985c97028047ac",
+      "sha256": "f9bd8f7b9a50a1942855e21499678bc576a6a2e822334776c7eadc93a3286c80",
+      "bytes": 7479,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/create/skeleton.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/create/space.py",
+      "git_blob_sha1": "854cb1a9df040777b10e0ed76f053cd2954cd438",
+      "sha256": "689c59f29840290856001e25d274026af86142147a1649769ed930a0b7d5cc63",
+      "bytes": 2889,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/create/space.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/deserialize/__init__.py",
+      "git_blob_sha1": "974978bda09a37cb5dd93e08cf09608f258312a7",
+      "sha256": "54b90a26a55421b312a1e092a45ea6a24e9ad829b6130dbc48c736bceae16d0d",
+      "bytes": 86,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/deserialize/__init__.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/deserialize/anim.py",
+      "git_blob_sha1": "1f585bd0dbd91945cf4ea9699088c1bcbda35512",
+      "sha256": "367f201b3dc5c5ade0c22ca13ff6dd13e87ca311cedb10fc3b205d38cd56477e",
+      "bytes": 2152,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/deserialize/anim.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/deserialize/attributes.py",
+      "git_blob_sha1": "3eebdd1968785a108bb820a13766d58af24bf35f",
+      "sha256": "03482fd6a2e9f27ebe0f0e6cc3aa5a1859ab8e47af1d9c623945f4668b13b119",
+      "bytes": 361,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/deserialize/attributes.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/deserialize/lod.py",
+      "git_blob_sha1": "f67e97f568e1f97b7863e73b945d527c481653c2",
+      "sha256": "b86770f107fab17a7346159a1dc10833d34d43ccee43f0396d8f13d18298afbf",
+      "bytes": 3012,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/deserialize/lod.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/deserialize/model.py",
+      "git_blob_sha1": "53b74e29cd21b8868d8a848b222fe53678e0f17d",
+      "sha256": "79bfa907bc3dba439fd44b2d854f58bb3014cdc604dfc589c87ffac53253e6e1",
+      "bytes": 1217,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/deserialize/model.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/deserialize/pose.py",
+      "git_blob_sha1": "ef962f6951e6195637a0368eddd7955a3af0ed32",
+      "sha256": "7deefad8ba19a08abfe74b9a07fd726721ff807aa93b8b93d1c4538becfa1d4f",
+      "bytes": 1353,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/deserialize/pose.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/deserialize/skeleton.py",
+      "git_blob_sha1": "15dd8e3a44929548cd121e7d2f4f0a276a12cf1a",
+      "sha256": "df8ba2e6068853bc4e72198704b22602650ca0e67f0e5f1cbcec3a58729de9c2",
+      "bytes": 1619,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/deserialize/skeleton.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/dto/__init__.py",
+      "git_blob_sha1": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/dto/__init__.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/dto/anim.py",
+      "git_blob_sha1": "4ddfe3f1275db540f7c2e92b6cfe7a3451143994",
+      "sha256": "eac254f9a660b1f06845b5c21566d5049f9d72536576422c6be62fbbe33fbf5e",
+      "bytes": 1478,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/dto/anim.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/dto/model.py",
+      "git_blob_sha1": "d0b94543e2298077357372a85114dae180820d9a",
+      "sha256": "a9496c34106938d408954488b53e4f660570cd0c2a601321605a9834781e4542",
+      "bytes": 1698,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/dto/model.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/dto/pose.py",
+      "git_blob_sha1": "823a879173c69ab4f981f30aa8f918d9a53b4b50",
+      "sha256": "e44a163e8c62720da4cb3594972835b5ce1f37fc41a29b1606ac80188b5a3726",
+      "bytes": 739,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/dto/pose.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/dto/skeleton.py",
+      "git_blob_sha1": "acb06f964836532d23ef20b411d5c2d4e6114fa6",
+      "sha256": "815b4982b9e831753174ca1279bcbb9c7c94ae45608835ab6895705049501ffa",
+      "bytes": 946,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/dto/skeleton.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/import_context.py",
+      "git_blob_sha1": "95473e0412f0a448f9416f0c819e581a0223335f",
+      "sha256": "602d5a4f7e238af47f4a4f93c38c0253c5771d2903f649407358668133bfeb15",
+      "bytes": 5015,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/import_context.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/legacy/__init__.py",
+      "git_blob_sha1": "375cb065ee7cc79681658c0b18752199819573f7",
+      "sha256": "71a3f624f3dc65cfafba7ea9aaab90f7a03b730ede4227277d0715f3c093835e",
+      "bytes": 696,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/legacy/__init__.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/legacy/anim.py",
+      "git_blob_sha1": "d1349c8e7ab64af1bdd608ac0a13c18dc08bf941",
+      "sha256": "5ddf683c30cdb0e369b6d3ff20104c431f512f35dc47712ff7a6a5b2b27756a0",
+      "bytes": 2453,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/legacy/anim.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/legacy/chunks.py",
+      "git_blob_sha1": "acd6b42dd3f2155b5dd727c008d765e425984523",
+      "sha256": "611d37cdf32e7e99ac0befc64392394dd6c7ef5bf550aa4782fa3fdcdf59b0db",
+      "bytes": 670,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/legacy/chunks.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/legacy/lod.py",
+      "git_blob_sha1": "33455eb1400ec89f304e7964bc6b2a65603479bf",
+      "sha256": "ea39436e4977331950f6e898b4161331f3403a5fd88528a51bbd58b91f2a9838",
+      "bytes": 3060,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/legacy/lod.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/legacy/model.py",
+      "git_blob_sha1": "b2aececc127877655cd8e401e3509506cea60ba1",
+      "sha256": "5c1082447bed771acf41842ca63519c031dded55f3dda24b78ea0d95a73c4e33",
+      "bytes": 1324,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/legacy/model.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/legacy/model_pre_lod.py",
+      "git_blob_sha1": "eb683fe9384b2cf19b7b586b2cfab1ff07013b8b",
+      "sha256": "bc9bdfe229a89481b3d126e6009caa5134e24a70aa5a54ec130cb2952b82504f",
+      "bytes": 3101,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/legacy/model_pre_lod.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/legacy/pose.py",
+      "git_blob_sha1": "fd0de0093a5cf9675cc4c988992618473ab84bd7",
+      "sha256": "cb225db0d3609768480d12a38eec03b66e002faa91d77d373c113c60f076d2f3",
+      "bytes": 1447,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/legacy/pose.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/legacy/skeleton.py",
+      "git_blob_sha1": "1595d0feb583a81e293641ec049d5d4ed436a0dc",
+      "sha256": "411b50a4bd16c10951f378e7433eca2d4e2ee14fa76910c442774eacbc73d962",
+      "bytes": 1721,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/legacy/skeleton.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/reorient_utils.py",
+      "git_blob_sha1": "3f197dfd76f742e954b955b6330dd16118f7f4ac",
+      "sha256": "b211f7742c557b836bb9608d5f1c7a123e9ff0165c556baa2bee6d3826179abc",
+      "bytes": 3624,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/reorient_utils.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/utils.py",
+      "git_blob_sha1": "851dba74aa3a9ca9bc08cb2937633a78e2fbedbc",
+      "sha256": "4dbeeeb58bee419cd92c71ab707281ccd5d0587b80d2e94c579c3011e2b99421",
+      "bytes": 5670,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/utils.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/importer/version.py",
+      "git_blob_sha1": "908acd54001edf1da9970109886fad1aca7442a9",
+      "sha256": "96bb477d55868c06f13975b8c93981e1377f16b2bad21136674ee5bf67517cd1",
+      "bytes": 486,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/importer/version.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/logging.py",
+      "git_blob_sha1": "6e387b323b96c29c06556c11a0292528ac7ab692",
+      "sha256": "8847d02cfa34b8cc9988a8dcda0269c298fd11b46f00e99e5769fdf35cbd706f",
+      "bytes": 1164,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/logging.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/op/__init__.py",
+      "git_blob_sha1": "0c4e0ef458b20ba9cf92eff635a9fee48b71cdc6",
+      "sha256": "d75d06d6abc0250130507aa511bdb4f89ad1adfec0e008d7a6826b97e1e47f88",
+      "bytes": 1267,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/op/__init__.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/op/import_helpers.py",
+      "git_blob_sha1": "6e4256f2cec6d928ded62867f7954be965aad6e6",
+      "sha256": "12bbfc81d4e29c0050d43bd80bc820b9d04dbfb46ed6f3a713a46a83b5e272ac",
+      "bytes": 3672,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/op/import_helpers.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/op/panels.py",
+      "git_blob_sha1": "87e2337a242dc799a8f249883419df1eeecf9219",
+      "sha256": "e6176f0656d3acbb7bae8a4d31045c914847d61f4a3c0d0d65d0fb2948904fd9",
+      "bytes": 2487,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/op/panels.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/op/settings.py",
+      "git_blob_sha1": "6156f673c4d6ebc01d31059f8ebec0cb2a5646c6",
+      "sha256": "d9946626080bfb1abce2e48d6269148aced8fa63ae0078b377c368537fedf1c1",
+      "bytes": 1094,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/op/settings.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/options.py",
+      "git_blob_sha1": "7eba0532760389cae111b0b9dfc7b5af4f1422f0",
+      "sha256": "7547470e884937b47e658f3c1f422086ada802b9123598f65964547fbb710655",
+      "bytes": 1204,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/options.py"
+    },
+    {
+      "path": "plugins/blender/io_scene_ueformat/typing.py",
+      "git_blob_sha1": "b386708a47081bbcecd46010d109b71714aef3d3",
+      "sha256": "fb7560cf6b457a7fefd5cd5a24420c96d9f961a2e7918761a5aae4284360b69d",
+      "bytes": 188,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/blender/io_scene_ueformat/typing.py"
+    },
+    {
+      "path": "plugins/unreal/README.md",
+      "git_blob_sha1": "c2951b9ce9932572c931fedb203b6a0e81d359f0",
+      "sha256": "0f77292413aef5331a9e96ea785141aab91357523dc25e2f454a4057a0ed0db4",
+      "bytes": 491,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/README.md"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Archive/UEFormatReader.cpp",
+      "git_blob_sha1": "8bada5d323e5ae56de8fc159ae3e43223d0c4827",
+      "sha256": "9e06374230f024a7dc46dac1b4e1849869ad48a587f2c1a4c2458f53f7b93b7b",
+      "bytes": 5674,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Archive/UEFormatReader.cpp"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/Attributes.h",
+      "git_blob_sha1": "00657e0f53020b17b76f328a939bc85279cccaea",
+      "sha256": "dbbca4b7db73e678072fad53119cf09f614ae504cf7d63c22f2e44c545680f0a",
+      "bytes": 462,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/Attributes.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/DeserializeAnim.cpp",
+      "git_blob_sha1": "46a03ecf7c8208e9b5e5f38db857e2e5a1306e30",
+      "sha256": "a48d1fc98f08cbcdaf00dbe00a478e3bf4c8a2a5a09809efe18f8aba7b3e60bd",
+      "bytes": 2365,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/DeserializeAnim.cpp"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/DeserializeAnim.h",
+      "git_blob_sha1": "0e5cd7e894735d941a0e7628f47c04a38cfc5e06",
+      "sha256": "02a8f68b97fd11a89236308d81e7f1fc3c9eb1b52a31c03d0b564d1ec16c90f4",
+      "bytes": 173,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/DeserializeAnim.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/DeserializeLOD.cpp",
+      "git_blob_sha1": "32cd51e5bce25d39efbe9c97f0810c48a30cd686",
+      "sha256": "3b38c05a8f39254dd74c7a3d2b196ae2717cfd6ab0155dbce65b79485be70034",
+      "bytes": 3354,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/DeserializeLOD.cpp"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/DeserializeLOD.h",
+      "git_blob_sha1": "56c998efec578e83ce8d670cc6bf8cf5c5ac7c61",
+      "sha256": "1703d921bbe3f0710d2202dc36bd7393e97880f4196974f6be86569aa3f1aaf5",
+      "bytes": 171,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/DeserializeLOD.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/DeserializeModel.cpp",
+      "git_blob_sha1": "15616172b134400117dfe71f90c8f420922d6a42",
+      "sha256": "8afcf81bddec960d086f5417bef8b4e1616e5bfec1e00a53a54d1417960cc20f",
+      "bytes": 848,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/DeserializeModel.cpp"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/DeserializeModel.h",
+      "git_blob_sha1": "5f8c04cb400222ac71c0ef91f2b61b78f95abdf9",
+      "sha256": "0b63296c27a0c83e09a7a190b606f1f80cc52e20ea708c6d6f877690bc634cbe",
+      "bytes": 210,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/DeserializeModel.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/DeserializeSkeleton.cpp",
+      "git_blob_sha1": "bdca759131c62dea7b5f478668fa094a2569f8ae",
+      "sha256": "836ddd2ab0d55e3a15c65e913512feadf1a60c381532105c15220c13c71747ee",
+      "bytes": 1930,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/DeserializeSkeleton.cpp"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/DeserializeSkeleton.h",
+      "git_blob_sha1": "33e3e339a74adb3b0183fc696d1e4b560442e851",
+      "sha256": "392afdf8f496d02357547798dce51d2c5817949bccf0713dc3821eef7f8eb341",
+      "bytes": 186,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Deserialize/DeserializeSkeleton.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Factories/UEFAnimFactory.cpp",
+      "git_blob_sha1": "91b5b76a6d4dcb998000c3e3264bb9e36b409c66",
+      "sha256": "fccc5a6ca9138652c9eeed511eb6651e143ae6264dea64f1ef236a1620f13fdb",
+      "bytes": 5212,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Factories/UEFAnimFactory.cpp"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Factories/UEFModelFactory.cpp",
+      "git_blob_sha1": "70e35ff6be334576b81fb322091613acf3191683",
+      "sha256": "2c46c99d8ad0405bc9fbee318f1b5bc049cc294cb93706e6e0f1b4b9ef12fc4a",
+      "bytes": 11561,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Factories/UEFModelFactory.cpp"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/Chunks.h",
+      "git_blob_sha1": "164d296b17a3c805ad8881dbbf3e1eead3673e89",
+      "sha256": "9b367970bcc26b8226c893b4cf63c1de7414ff06e05c17009bc344a6771f15d2",
+      "bytes": 453,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/Chunks.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/LegacyAnim.cpp",
+      "git_blob_sha1": "6ec1784605adce37c36fb9926cabc0f20b4133d9",
+      "sha256": "bd1ef63f3ae4a6b62400e1d1b8593fd71039c668fa71a60e7e015528b9318799",
+      "bytes": 2403,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/LegacyAnim.cpp"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/LegacyAnim.h",
+      "git_blob_sha1": "556a91999f147eadc0b7595c716befe16a15defb",
+      "sha256": "bbc4ca3629e3836f33176d593b4ef2913f41e91c3711528ae0420fe37a37f1fd",
+      "bytes": 168,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/LegacyAnim.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/LegacyLOD.cpp",
+      "git_blob_sha1": "4304736456c83dda56d00bda3a7b5b17ba02fbe3",
+      "sha256": "992d08d0854c3d1fdc98d29065e2b5e897f5502ff2b684a4e93a61618a7da4d7",
+      "bytes": 2933,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/LegacyLOD.cpp"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/LegacyLOD.h",
+      "git_blob_sha1": "bd66fa02185d219820bdb58c254d2426a00facee",
+      "sha256": "966d5670596e7ab32fc874a78771083d67bc6eadef8b93f69a5b691b21b954b2",
+      "bytes": 166,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/LegacyLOD.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/LegacyModel.cpp",
+      "git_blob_sha1": "0f74bc436aec8573b8ea67e53bab6bb31ce7ac17",
+      "sha256": "fc4315c871e405d55533a881054be77d275dfc356ef931208f6013b82f03c174",
+      "bytes": 821,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/LegacyModel.cpp"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/LegacyModel.h",
+      "git_blob_sha1": "d8515723ca30f5ea1fcfb7074a8b6764c133f4ee",
+      "sha256": "ec769287f6e321033083bef00359558651d2b24f5f00274a4fa286cb88bf32ee",
+      "bytes": 205,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/LegacyModel.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/LegacySkeleton.cpp",
+      "git_blob_sha1": "7c237310d517f082812bbd96c3f02ffda1bd44b5",
+      "sha256": "df33dd8a344e4a67d80a27a1cd5c8259f092ef4b32c3e27369a29bbfbfee7180",
+      "bytes": 1701,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/LegacySkeleton.cpp"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/LegacySkeleton.h",
+      "git_blob_sha1": "0df1d908c5e70502e509105b975b9b426c23f63a",
+      "sha256": "e48e38ba0f890756ee5fbcc8f9f020d723dc7e1e64fc0e5ca4b8740c0244f85e",
+      "bytes": 181,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Legacy/LegacySkeleton.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Readers/UEFAnimReader.cpp",
+      "git_blob_sha1": "a591b3a7cec8479e4a00ae9aedb0a96713359241",
+      "sha256": "0f826bd0fe8c2e4d51ffc5f9b3cd241b8998ac988950d7297b95e8fa27736fab",
+      "bytes": 900,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Readers/UEFAnimReader.cpp"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Readers/UEFModelReader.cpp",
+      "git_blob_sha1": "c7f9f6824ab89ab3807c75ecd383a6d59635c550",
+      "sha256": "3e70b820ffd36ec9d7fed80eaf10f6f98283efa6d41daa15cbecb9133c05ee98",
+      "bytes": 616,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Readers/UEFModelReader.cpp"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/UEFormat.cpp",
+      "git_blob_sha1": "90dc0756924e9afa242242b9e85772d83413d3d5",
+      "sha256": "2b59461a4dd71e0e0e68cf756dd6b27f5636457e9892fb34ff5123004774b19e",
+      "bytes": 164,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/UEFormat.cpp"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Widgets/Anim/UEFAnimImportOptions.cpp",
+      "git_blob_sha1": "3347ac90b2fcefbe9a9abf7ba63b742ba1886c7a",
+      "sha256": "9bfd7bf87f521138c7175853d6a2280f9bbab7d4e2426198d6286c452f1055c8",
+      "bytes": 118,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Widgets/Anim/UEFAnimImportOptions.cpp"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Private/Widgets/Anim/UEFAnimWidget.cpp",
+      "git_blob_sha1": "1ec5e11ff3bac95433d564109b94f9b1ed0ba712",
+      "sha256": "7c5af9ddf80491fc940edeff5cd1e48557ed4ff685a5820bb65326bf7e9bb4a3",
+      "bytes": 2681,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Private/Widgets/Anim/UEFAnimWidget.cpp"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Public/Archive/UEFormatReader.h",
+      "git_blob_sha1": "ed2d206b307fd14f755801943a1d4ffcf7f69b67",
+      "sha256": "7b30d40989977c101c94a7a76d6f35b5aa118f42357a2e3c6aaceb308772b0fd",
+      "bytes": 1936,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Public/Archive/UEFormatReader.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Public/Data/UEAnimData.h",
+      "git_blob_sha1": "97c910c8ebb2c4ec7fa79d61789b9532d187760c",
+      "sha256": "0b83db890678eb0525ee566e1a60b5ee98f84246d68b2e0ac0d33bcf90c65d57",
+      "bytes": 845,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Public/Data/UEAnimData.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Public/Data/UEFormatHeader.h",
+      "git_blob_sha1": "f8619381804e91dbd14843f48820bf3a9c079c8f",
+      "sha256": "182fc7afb796f7100eef07636aeae26489fa84804453c1585c6f7d23bb360d92",
+      "bytes": 393,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Public/Data/UEFormatHeader.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Public/Data/UEModelData.h",
+      "git_blob_sha1": "b6613faa445d0bca9a34e1b6ea58d3a4503a1be0",
+      "sha256": "955b9c0f55e21d126691b6e030904b6e2f1f126fb5c14b8f17fa8aee64ede94b",
+      "bytes": 1687,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Public/Data/UEModelData.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Public/Factories/UEFAnimFactory.h",
+      "git_blob_sha1": "542de154d5e890931377eb7d696be40ba77c6117",
+      "sha256": "c3fd4b7feab5f5b9ed0e042ea8285fdfd2be999e4d7ceb4d5df5d7614aabc0cd",
+      "bytes": 567,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Public/Factories/UEFAnimFactory.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Public/Factories/UEFModelFactory.h",
+      "git_blob_sha1": "74ed6fbba53a25cb126dde2a0065e6048284eab9",
+      "sha256": "c3f98911a9a38bf0dc827b4062b2a1818d50f1136a9cd95c9df7eee97e153155",
+      "bytes": 1415,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Public/Factories/UEFModelFactory.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Public/Readers/UEFAnimReader.h",
+      "git_blob_sha1": "4b2d5b9ea349c0b0f5e4cfc36479b09bcc6c6fc8",
+      "sha256": "65dabd7e021311503c6a124477ca63f9b971829415a272fc3773c399163fd6d3",
+      "bytes": 530,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Public/Readers/UEFAnimReader.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Public/Readers/UEFModelReader.h",
+      "git_blob_sha1": "87c4470cf6efb3ae47ef486a25e8e1e766c52d34",
+      "sha256": "089f2ed198a278eaeedc0bf4cd9aff59a12f03eb01015a7d1f2bad408f271423",
+      "bytes": 310,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Public/Readers/UEFModelReader.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Public/UEFormat.h",
+      "git_blob_sha1": "d47841523cfd86ae0476b456fc30074d166608be",
+      "sha256": "750406ec9ffd5c11bda68cedc968d2a2ca30efd3a33d48e21334c3bea9ec2dff",
+      "bytes": 216,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Public/UEFormat.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Public/Version/EUEFormatVersion.h",
+      "git_blob_sha1": "aeebfe1f22f3d2f3ef4302c1d62985597f5eaeee",
+      "sha256": "38d456ad7e5ac25097240159e37a2ace2bfc67027a267fc62b7a3e716ff9ef6c",
+      "bytes": 465,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Public/Version/EUEFormatVersion.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Public/Widgets/Anim/UEFAnimImportOptions.h",
+      "git_blob_sha1": "3bc32490260f5fcc1ff8749489a24d45ee5a15e4",
+      "sha256": "5a8adfdd10067d319e6c555771059339c1904d34d34afca5ce3ae557dce54d31",
+      "bytes": 355,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Public/Widgets/Anim/UEFAnimImportOptions.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/Public/Widgets/Anim/UEFAnimWidget.h",
+      "git_blob_sha1": "54da8b0a59fe888ad262cde3fa6a7ea917364a13",
+      "sha256": "865c88eb9ac987f34828e3817f0d9bb5fac3a9900393e5e4ebe0f9fc027e422b",
+      "bytes": 905,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/Public/Widgets/Anim/UEFAnimWidget.h"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/Source/UEFormat/UEFormat.Build.cs",
+      "git_blob_sha1": "22d0f9cf9f5cabfca7dd097cda6e10982a865aa8",
+      "sha256": "75133598ac0e8dbb14a1863f80bce65c28ad5d448c97a9bb5fd00a6400bb1136",
+      "bytes": 1141,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/Source/UEFormat/UEFormat.Build.cs"
+    },
+    {
+      "path": "plugins/unreal/UEFormat/UEFormat.uplugin",
+      "git_blob_sha1": "fe64dcbdce479a3262daa21c39b703871f565873",
+      "sha256": "3def5b7e2afab95e170dd248e61ff05786df585e9491576b49a33b87e801df21",
+      "bytes": 530,
+      "url": "https://github.com/h4lfheart/UEFormat/blob/d858fe38b2b5b8c63ac4b7481b4386ebfabbf935/plugins/unreal/UEFormat/UEFormat.uplugin"
+    }
+  ]
+}

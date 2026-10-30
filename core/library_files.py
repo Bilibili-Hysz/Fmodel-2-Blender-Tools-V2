@@ -9,6 +9,7 @@ import tempfile
 import unicodedata
 import uuid
 
+from .resume import source_content_hash
 from .types import (
     AssetLibraryManifest, BundleRecord, CatalogEntry, LibraryAsset,
 )
@@ -49,10 +50,38 @@ def safe_child_path(directory, filename, label="filename"):
     return path
 
 
+def storage_component(label):
+    """Encode a display label as a stable, portable physical namespace."""
+    if not isinstance(label, str) or not label:
+        raise ValueError("asset label must be a non-empty string")
+    prefix = re.sub(r"[^A-Za-z0-9_]", "_", label)[:16].strip('_') or "asset"
+    return f"{prefix}__id_{hashlib.sha256(label.encode('utf-8')).hexdigest()[:32]}"
+
+
+def library_bundle_base(library_name, skeleton_name, manifest=None):
+    """Use encoded names for new bundles; preserve verified legacy namespaces."""
+    encoded = f"{storage_component(library_name)}_{storage_component(skeleton_name)}"
+    owned = [bundle for bundle in getattr(manifest, "bundles", ()) if bundle.skeletons == [skeleton_name]]
+    if owned:
+        legacy = f"{library_name}_{skeleton_name}"
+        try:
+            validate_filename_component(legacy, "legacy bundle stem")
+        except ValueError:
+            pass
+        else:
+            pattern = rf"{re.escape(legacy)}(?:_Vol_[1-9][0-9]*)?\.blend"
+            if all(re.fullmatch(pattern, bundle.blend_file) for bundle in owned):
+                return legacy
+    return encoded
+
+
+def model_storage_stem(library_name, skeleton_name=None):
+    return storage_component(library_name) if skeleton_name is None else library_bundle_base(library_name, skeleton_name)
+
+
 def staging_chunk_path(directory, skeleton_name, chunk_index):
-    """Return a contained UEAnim staging path derived from a safe skeleton name."""
-    validate_filename_component(skeleton_name, "target skeleton name")
-    filename = f"{skeleton_name}_chunk_{chunk_index:04d}.blend"
+    """Name chunks inside the existing task namespace, independently of labels."""
+    filename = f"actions_chunk_{chunk_index:04d}.blend"
     return safe_child_path(directory, filename, "staging chunk filename")
 
 
@@ -71,7 +100,8 @@ def staging_task_dir(output_dir, task_identity):
 
 def validate_staged_blend_path(task_dir, skeleton_name, staged_blend):
     """Validate a persisted chunk path without opening the referenced file."""
-    validate_filename_component(skeleton_name, "source skeleton")
+    if not isinstance(skeleton_name, str) or not skeleton_name:
+        raise ValueError("source skeleton label is required")
     if not isinstance(staged_blend, str) or not staged_blend:
         raise ValueError("staged blend path must be a non-empty string")
     task_abs = os.path.abspath(task_dir)
@@ -79,8 +109,9 @@ def validate_staged_blend_path(task_dir, skeleton_name, staged_blend):
     staged_abs = os.path.abspath(staged_blend)
     staged_real = os.path.realpath(staged_abs)
     filename = os.path.basename(staged_abs)
+    validate_filename_component(filename, "staging chunk filename")
     expected = re.fullmatch(
-        rf"{re.escape(skeleton_name)}_chunk_[0-9]{{4,}}\.blend", filename
+        r".+_chunk_[0-9]{4,}\.blend", filename
     )
     if (
         os.path.dirname(staged_abs) != task_abs
@@ -92,19 +123,22 @@ def validate_staged_blend_path(task_dir, skeleton_name, staged_blend):
 
 
 def validate_skeleton_output_names(skeleton_names):
-    """Reject skeleton names that resolve to the same portable output stem."""
+    """Validate encoded storage names while leaving display labels independent."""
     seen = {}
     generated_stems = {}
     for skeleton_name in skeleton_names:
-        validate_filename_component(skeleton_name, "source skeleton")
-        output_key = unicodedata.normalize("NFC", skeleton_name).casefold()
+        if not isinstance(skeleton_name, str) or not skeleton_name or '/' in skeleton_name or '\\' in skeleton_name:
+            raise ValueError("source skeleton must be a label without manifest separators")
+        physical_name = storage_component(skeleton_name)
+        validate_filename_component(physical_name, "source skeleton storage name")
+        output_key = physical_name.casefold()
         previous = seen.get(output_key)
         if previous is not None and previous != skeleton_name:
             raise ValueError(
                 f"source skeleton output collision: {previous!r} and {skeleton_name!r}"
             )
         seen[output_key] = skeleton_name
-        for stem in (skeleton_name, f"{skeleton_name}_Vol_2"):
+        for stem in (physical_name, f"{physical_name}_Vol_2"):
             stem_key = unicodedata.normalize("NFC", stem).casefold()
             previous = generated_stems.get(stem_key)
             if previous is not None and previous != skeleton_name:
@@ -116,9 +150,10 @@ def validate_skeleton_output_names(skeleton_names):
 
 def validate_generated_output_filenames(
     library_name, skeleton_names, include_models=False, volume_indices=(1, 2),
+    base_names=None,
 ):
     """Validate every generated Windows filename component before mutation."""
-    validate_filename_component(library_name, "library name")
+    storage_component(library_name)
     skeleton_names = tuple(skeleton_names)
     validate_skeleton_output_names(skeleton_names)
     volume_plan = (
@@ -131,11 +166,11 @@ def validate_generated_output_filenames(
     if include_models:
         multiple = len(skeleton_names) > 1
         for skeleton_name in skeleton_names:
-            model_name = f"{library_name}_{skeleton_name}" if multiple else library_name
+            model_name = model_storage_stem(library_name, skeleton_name if multiple else None)
             validate_filename_component(f"{model_name}_mesh.blend", "model filename")
 
     for skeleton_name in skeleton_names:
-        base_name = f"{library_name}_{skeleton_name}"
+        base_name = base_names[skeleton_name] if base_names is not None else library_bundle_base(library_name, skeleton_name)
         try:
             skeleton_volume_indices = volume_plan[skeleton_name]
         except KeyError:
@@ -144,7 +179,7 @@ def validate_generated_output_filenames(
             if not isinstance(volume_index, int) or volume_index < 1:
                 raise ValueError("volume index must be a positive integer")
             vol_suffix = f"_Vol_{volume_index}" if volume_index > 1 else ""
-            stem = f"{skeleton_name}{vol_suffix}"
+            stem = f"{base_name}{vol_suffix}"
             stem_key = unicodedata.normalize("NFC", stem).casefold()
             previous = generated_stems.get(stem_key)
             if previous is not None and previous != skeleton_name:
@@ -195,10 +230,15 @@ def validate_imported_action_set(imported_actions):
 
 
 def library_index_path(library_path, library_name):
-    """Return a direct-child v2 index path for a safe library name."""
-    validate_filename_component(library_name, "library name")
+    """Preserve usable legacy index paths and encode other display labels."""
+    storage_component(library_name)
+    filename = f"{library_name}__library_manifest.json"
+    try:
+        validate_filename_component(filename, "library index filename")
+    except ValueError:
+        filename = f"{storage_component(library_name)}__library_manifest.json"
     return safe_child_path(
-        library_path, f"{library_name}__library_manifest.json", "library index filename"
+        library_path, filename, "library index filename"
     )
 
 
@@ -719,6 +759,85 @@ def get_manifest_processed_sources(manifest, skeleton):
         if source.startswith(f"{skeleton}::")
         or "::" not in source and len(bundle.skeletons) == 1
     }
+
+
+def library_source_key(skeleton, source_file, source_dir, source_ref=""):
+    value = source_ref
+    if source_file and source_dir:
+        try:
+            value = os.path.relpath(source_file, source_dir).replace('\\', '/')
+        except ValueError:
+            pass
+    return f"{skeleton}::{value}" if skeleton and value else ""
+
+
+def get_manifest_source_versions(manifest, skeleton):
+    versions = {}
+    for bundle in manifest.bundles if manifest is not None else ():
+        if bundle.completion_state != "completed" or skeleton not in bundle.skeletons:
+            continue
+        for source in bundle.processed_sources:
+            key = source if "::" in source else f"{skeleton}::{source}"
+            if not key.startswith(f"{skeleton}::"):
+                continue
+            if "::" not in source and len(bundle.skeletons) != 1:
+                raise ValueError("共享动画包缺少明确的来源身份")
+            if key in versions:
+                raise ValueError(f"资产库存在重复来源: {key}")
+            version = getattr(bundle, "source_versions", {}).get(key, {})
+            if version and (
+                not isinstance(version, dict)
+                or any(not isinstance(version.get(name), str) or not version[name]
+                       for name in ("content_hash", "settings", "target"))
+            ):
+                raise ValueError(f"资产来源版本无效: {key}")
+            versions[key] = version
+    return versions
+
+
+def plan_source_updates(manifest, skeleton, current, force_rebuild=False):
+    previous = get_manifest_source_versions(manifest, skeleton)
+    plan = {key: [] for key in ("new", "unchanged", "changed", "unverified")}
+    for key, version in current.items():
+        status = (
+            "new" if key not in previous else
+            "unverified" if not previous[key] or not version else
+            "unchanged" if previous[key] == version else "changed"
+        )
+        plan[status].append(key)
+    plan["rebuild"] = bool(force_rebuild or plan["changed"] or plan["unverified"])
+    if plan["rebuild"] and manifest is not None:
+        bundles = [bundle for bundle in manifest.bundles if skeleton in bundle.skeletons]
+        if any(bundle.skeletons != [skeleton] for bundle in bundles):
+            raise ValueError(f"拒绝替换共享动画包: {skeleton}")
+        if not force_rebuild:
+            missing = set(previous) - set(current)
+            asset_count = sum(asset.skeleton == skeleton for asset in manifest.assets)
+            if missing or asset_count != len(previous):
+                raise ValueError(
+                    f"更新 {skeleton} 需要完整来源集合，旧库保持不变；"
+                    f"请扫描完整源目录或确认强制重建。缺少来源: {', '.join(sorted(missing))}"
+                )
+    return plan
+
+
+def library_scan_counts(scan, manifest):
+    counts = dict.fromkeys(("new", "unchanged", "changed", "unverified"), 0)
+    previous = {skeleton: get_manifest_source_versions(manifest, skeleton)
+                for skeleton in scan.skeletons}
+    for skeleton, folder, name, entry in scan.get_all_animations():
+        key = library_source_key(skeleton, entry.source_file, scan.source_path,
+                                 f"{skeleton}/{folder or 'Uncategorized'}/{name}")
+        versions = previous[skeleton]
+        if key not in versions:
+            status = "new"
+        elif not versions[key]:
+            status = "unverified"
+        else:
+            status = ("unchanged" if source_content_hash(entry.source_file)
+                      == versions[key]["content_hash"] else "changed")
+        counts[status] += 1
+    return counts
 
 
 def _legacy_tree_actions(tree):

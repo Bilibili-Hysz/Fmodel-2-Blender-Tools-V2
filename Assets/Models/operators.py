@@ -2,6 +2,8 @@
 # 角色模型操作符 — 保存、导入、预览管理
 
 import bpy
+from ...core.workflow import resolve_target
+from ...core.library_files import safe_child_path, storage_component
 import os
 import json
 import shutil
@@ -74,7 +76,10 @@ def export_bone_mapping(armature):
 # 保存模型
 # ============================================================
 
-def save_model_logic(armature, out_dir, model_name, save_preview=True):
+from ...core.model_snapshot import write_model_snapshot
+
+
+def save_model_logic(armature, out_dir, model_name, save_preview=True, *, storage_name=None):
     """保存模型的核心逻辑 — 可被 Pipeline 和操作符调用
 
     返回: True/False
@@ -85,67 +90,40 @@ def save_model_logic(armature, out_dir, model_name, save_preview=True):
     import sys
 
     model_name = model_name or armature.name
+    if storage_name is None:
+        try:
+            safe_child_path(out_dir, f"{model_name}_mesh.blend")
+            storage_name = model_name
+        except ValueError:
+            storage_name = storage_component(model_name)
+    safe_child_path(out_dir, f"{storage_name}_mesh.blend")
     os.makedirs(out_dir, exist_ok=True)
     original_selection = list(bpy.context.selected_objects)
     original_active = bpy.context.view_layer.objects.active
-    coll = None
-
     try:
-        prefix = model_name + "__"
-        coll = bpy.data.collections.new(model_name)
-        bpy.context.scene.collection.children.link(coll)
+        mesh_blend = safe_child_path(out_dir, f"{storage_name}_mesh.blend")
+        snapshot = write_model_snapshot(armature, mesh_blend, model_name)
 
-        bpy.ops.object.select_all(action='DESELECT')
-        armature.select_set(True)
-        bpy.context.view_layer.objects.active = armature
-        bpy.ops.object.duplicate()
-        dup_arm = bpy.context.active_object
-        dup_arm.name = prefix + armature.name
-        dup_arm.data.name = prefix + armature.data.name
-
-        datablocks = {dup_arm, dup_arm.data, coll}
-        coll.objects.link(dup_arm)
-        for collection in list(dup_arm.users_collection):
-            if collection != coll:
-                collection.objects.unlink(dup_arm)
-
-        for child in dup_arm.children:
-            if child.type == 'MESH':
-                child.name = prefix + child.name
-                child.data.name = prefix + child.data.name
-                datablocks.add(child)
-                datablocks.add(child.data)
-                coll.objects.link(child)
-                for collection in list(child.users_collection):
-                    if collection != coll:
-                        collection.objects.unlink(child)
-                for material in child.data.materials:
-                    if material:
-                        material.name = prefix + material.name
-                        datablocks.add(material)
-
-        mesh_blend = os.path.join(out_dir, f"{model_name}_mesh.blend")
-        bpy.data.libraries.write(filepath=mesh_blend, datablocks=datablocks, fake_user=True)
-
-        bone_path = os.path.join(out_dir, f"{model_name}_bones.json")
+        bone_path = safe_child_path(out_dir, f"{storage_name}_bones.json")
         with open(bone_path, 'w', encoding='utf-8') as handle:
             json.dump(export_bone_mapping(armature), handle, ensure_ascii=False, indent=2)
 
         metadata = {
             "name": model_name,
+            "storage_name": storage_name,
             "armature_object": armature.name,
             "armature_data": armature.data.name,
             "bone_count": len(armature.data.bones),
-            "mesh_count": sum(1 for child in armature.children if child.type == 'MESH'),
+            **snapshot,
             "saved_at": __import__('datetime').datetime.now().isoformat(),
         }
-        meta_path = os.path.join(out_dir, f"{model_name}.json")
+        meta_path = safe_child_path(out_dir, f"{storage_name}.json")
         with open(meta_path, 'w', encoding='utf-8') as handle:
             json.dump(metadata, handle, ensure_ascii=False, indent=2)
 
         if save_preview:
             try:
-                bpy.ops.fmodel.capture_model_preview(model_name=model_name, model_dir=out_dir)
+                bpy.ops.fmodel.capture_model_preview(model_name=storage_name, model_dir=out_dir)
             except Exception:
                 pass
         return True
@@ -160,13 +138,6 @@ def save_model_logic(armature, out_dir, model_name, save_preview=True):
             except Exception as error:
                 if cleanup_error is None:
                     cleanup_error = error
-
-        if coll is not None:
-            attempt_cleanup(lambda: bpy.ops.object.select_all(action='DESELECT'))
-            for obj in list(coll.objects):
-                attempt_cleanup(lambda obj=obj: obj.select_set(True))
-            attempt_cleanup(bpy.ops.object.delete)
-            attempt_cleanup(lambda: bpy.data.collections.remove(coll))
 
         attempt_cleanup(lambda: bpy.ops.object.select_all(action='DESELECT'))
         for obj in original_selection:
@@ -189,10 +160,10 @@ class ASSET_OT_SaveModel(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object and context.active_object.type == 'ARMATURE'
+        return resolve_target(context) is not None
 
     def invoke(self, context, event):
-        arm = context.active_object
+        arm = resolve_target(context)
         self.model_name = arm.name
         self.model_dir = get_model_dir(context)
         return context.window_manager.invoke_props_dialog(self)
@@ -212,7 +183,7 @@ class ASSET_OT_SaveModel(bpy.types.Operator):
                     layout.label(text=f"资产库: {lib.name}", icon='LINKED')
 
     def execute(self, context):
-        arm = context.active_object
+        arm = resolve_target(context)
         if not arm or arm.type != 'ARMATURE':
             self.report({'ERROR'}, "请选中骨架")
             return {'CANCELLED'}
@@ -419,7 +390,7 @@ class ASSET_OT_OpenModelSelector(bpy.types.Operator):
             # 信息
             col_info = row.column()
             col_info.scale_y = 0.85
-            col_info.label(text=model["name"], icon='OUTLINER_OB_ARMATURE')
+            col_info.label(text=model.get("display_name", model["name"]), icon='OUTLINER_OB_ARMATURE')
             if meta:
                 parts = []
                 if meta.get("bone_count"): parts.append(f"{meta['bone_count']}骨")
@@ -496,6 +467,7 @@ def _scan_model_dir(model_dir):
                     pass
             models.append({
                 "name": name,
+                "display_name": meta.get("name", name),
                 "path": model_dir,
                 "meta": meta,
                 "preview": preview_path,
@@ -550,7 +522,7 @@ class FMODEL_MT_ModelBrowser(bpy.types.Menu):
 
             op = layout.operator(
                 "fmodel.import_model_from_browser",
-                text=f"{model['name']}{desc}",
+                text=f"{model.get('display_name', model['name'])}{desc}",
                 icon_value=icon_id if icon_id else 0
             )
             op.model_name = model["name"]

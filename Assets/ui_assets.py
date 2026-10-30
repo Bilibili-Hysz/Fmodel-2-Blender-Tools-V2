@@ -17,6 +17,11 @@ def _draw_indent(row, depth, factor=1.0):
 # 资产库树状 UIList（供资产库设置面板使用）
 # ============================================================
 
+class ASSETS_UL_ProjectLibraries(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        layout.label(text=item.name or "未命名资产库", icon='FILE_BLEND' if (item.path or "").lower().endswith('.blend') else 'FILE_FOLDER')
+
+
 class ASSETS_UL_LibraryTree(bpy.types.UIList):
     """资产库树状列表 — 显示 LIBRARY、ANIM_LIB、VOLUME、MODEL"""
     def filter_items(self, context, data, propname):
@@ -36,6 +41,7 @@ class ASSETS_UL_LibraryTree(bpy.types.UIList):
             if item.item_type == 'ANIM_LIB' and not item.is_expanded and item.volume_count > 1:
                 collapsed_anims.add(item.node_id)
 
+        by_identity = {(item.skeleton, item.node_id): item for item in items}
         for item in items:
             flag = 0
             if item.item_type == 'LIBRARY':
@@ -46,9 +52,10 @@ class ASSETS_UL_LibraryTree(bpy.types.UIList):
             elif item.item_type == 'MODEL':
                 if item.parent_id not in collapsed:
                     flag = self.bitflag_filter_item
-            elif item.depth == 2 and item.item_type not in ('FOLDER',):
+            elif item.item_type == 'VOLUME':
                 # VOLUME 条目
-                if item.parent_id not in collapsed and item.parent_id not in collapsed_anims:
+                if not any(parent.node_id in collapsed or parent.node_id in collapsed_anims
+                           for parent in ui_custom_grid.ancestor_items(item, by_identity)):
                     flag = self.bitflag_filter_item
             flt_flags.append(flag)
         return flt_flags, flt_neworder
@@ -121,33 +128,22 @@ class ASSETS_UL_AnimTree(bpy.types.UIList):
 
         collapsed = set()
         for item in items:
-            if ((item.item_type == 'ANIM_LIB' and item.volume_count > 1
-                 and not item.is_expanded)
-                    or (item.item_type == 'FOLDER' and not item.is_expanded)):
+            if item.item_type == 'FOLDER' and not item.is_expanded:
                 collapsed.add((item.skeleton, item.node_id))
 
         # Folder IDs can be shared by multiple skeletons, so resolve ancestors
         # using the current skeleton first and fall back to library-level nodes.
         by_identity = {(item.skeleton, item.node_id): item for item in items}
 
-        def has_collapsed_ancestor(item):
-            parent_id = item.parent_id
-            while parent_id:
-                parent = by_identity.get((item.skeleton, parent_id))
-                if parent is None:
-                    parent = by_identity.get(("", parent_id))
-                if parent is None:
-                    return False
-                if parent.item_type == 'LIBRARY' and not parent.is_expanded:
-                    return True
-                if parent.item_type == 'ANIM_LIB' and parent.volume_count > 1 and not parent.is_expanded:
-                    return True
-                if parent.item_type == 'FOLDER' and not parent.is_expanded:
-                    return True
-                parent_id = parent.parent_id
-            return False
+        matching = set(ui_custom_grid.visible_animation_indices(manager)) if search_str else set()
+        ancestors = {(parent.skeleton, parent.node_id) for index in matching
+                     for parent in ui_custom_grid.ancestor_items(items[index], by_identity)}
 
-        for item in items:
+        def has_collapsed_ancestor(item):
+            return any(parent.item_type == 'FOLDER' and not parent.is_expanded
+                       for parent in ui_custom_grid.ancestor_items(item, by_identity))
+
+        for index, item in enumerate(items):
             flag = 0
 
             # 跳过 LIBRARY/MODEL/ANIM_LIB（这些是库设置用的层级节点）
@@ -158,6 +154,9 @@ class ASSETS_UL_AnimTree(bpy.types.UIList):
                 # 骨架过滤
                 if active_skel not in ("ALL", "NONE") and item.skeleton != active_skel:
                     flag = 0
+                elif search_str:
+                    if (item.skeleton, item.node_id) in ancestors or search_str in item.name.lower():
+                        flag = self.bitflag_filter_item
                 elif has_collapsed_ancestor(item):
                     flag = 0
                 elif (item.skeleton, item.parent_id) in collapsed:
@@ -167,20 +166,15 @@ class ASSETS_UL_AnimTree(bpy.types.UIList):
 
             elif item.item_type == 'ANIM':
                 # depth 2+ 的 ANIM 是实际动画条目
-                if item.depth < 2:
+                if active_skel not in ("", "ALL", "NONE") and item.skeleton != active_skel:
                     flag = 0
-                elif has_collapsed_ancestor(item):
-                    flag = 0
-                elif active_skel not in ("ALL", "NONE") and item.skeleton != active_skel:
-                    flag = 0
-                else:
-                    if search_str:
-                        if search_str in item.name.lower():
-                            flag = self.bitflag_filter_item
-                    else:
+                elif search_str:
+                    if index in matching:
                         flag = self.bitflag_filter_item
+                elif not has_collapsed_ancestor(item):
+                    flag = self.bitflag_filter_item
 
-            flt_flags.append(flag)
+            flt_flags.append(flag if ui_custom_grid.in_library_scope(manager, item) else 0)
         return flt_flags, flt_neworder
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
@@ -201,21 +195,6 @@ class ASSETS_UL_AnimTree(bpy.types.UIList):
             else:
                 row.label(text=item.name, icon='ANIM_DATA')
 
-            row_ops = row.row(align=True)
-            op_preview = row_ops.operator("fmodel.preview_anim", text="", icon='RESTRICT_VIEW_OFF', emboss=False)
-            op_preview.target_node_id = item.node_id
-            op_preview.target_skeleton = item.skeleton
-            op_preview.source_key = item.source_key
-            op_apply = row_ops.operator("fmodel.apply_anim", text="", icon='IMPORT', emboss=False)
-            op_apply.target_node_id = item.node_id
-            op_apply.target_skeleton = item.skeleton
-            op_apply.source_key = item.source_key
-            op_apply.apply_method_override = 'REPLACE'
-            op_nla = row_ops.operator("fmodel.apply_anim", text="", icon='NLA', emboss=False)
-            op_nla.target_node_id = item.node_id
-            op_nla.target_skeleton = item.skeleton
-            op_nla.source_key = item.source_key
-            op_nla.apply_method_override = 'APPEND_NLA'
 
 
 class ASSETS_UL_FolderTree(bpy.types.UIList):
@@ -225,6 +204,7 @@ class ASSETS_UL_FolderTree(bpy.types.UIList):
         active_skel = manager.active_skeleton
         search_str = manager.search_filter.lower().strip()
         
+        by_identity = {(item.skeleton, item.node_id): item for item in items}
         # 搜索模式下：收集匹配的动画/文件夹及其所有祖先。
         # Use skeleton-scoped IDs because different skeletons can share paths.
         visible_ids = set()
@@ -238,37 +218,24 @@ class ASSETS_UL_FolderTree(bpy.types.UIList):
                     if item.item_type == 'FOLDER':
                         visible_ids.add((item.skeleton, item.node_id))
                     # 向上追溯祖先
-                    curr = item.parent_id
-                    while curr:
-                        visible_ids.add((item.skeleton, curr))
-                        curr = curr.rsplit('/', 1)[0] if '/' in curr else ""
+                    for parent in ui_custom_grid.ancestor_items(item, by_identity):
+                        visible_ids.add((parent.skeleton, parent.node_id))
 
         flt_flags = []
         flt_neworder = []
-        by_identity = {(item.skeleton, item.node_id): item for item in items}
-
         def has_collapsed_folder_ancestor(item):
-            parent_id = item.parent_id
-            while parent_id:
-                parent = by_identity.get((item.skeleton, parent_id))
-                if parent is None:
-                    parent = by_identity.get(("", parent_id))
-                if parent is None:
-                    return False
-                if parent.item_type == 'FOLDER' and not parent.is_expanded:
-                    return True
-                parent_id = parent.parent_id
-            return False
+            return any(parent.item_type == 'FOLDER' and not parent.is_expanded
+                       for parent in ui_custom_grid.ancestor_items(item, by_identity))
 
         for item in items:
             flag = 0
             if item.item_type != 'FOLDER':
-                flt_flags.append(flag)
+                flt_flags.append(flag if ui_custom_grid.in_library_scope(manager, item) else 0)
                 continue
 
             # 骨架过滤
             if active_skel not in ("ALL", "NONE") and item.skeleton != active_skel:
-                flt_flags.append(flag)
+                flt_flags.append(flag if ui_custom_grid.in_library_scope(manager, item) else 0)
                 continue
 
             if search_str:
@@ -280,7 +247,7 @@ class ASSETS_UL_FolderTree(bpy.types.UIList):
                 if not has_collapsed_folder_ancestor(item):
                     flag = self.bitflag_filter_item
 
-            flt_flags.append(flag)
+            flt_flags.append(flag if ui_custom_grid.in_library_scope(manager, item) else 0)
         return flt_flags, flt_neworder
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
@@ -298,26 +265,8 @@ class ASSETS_UL_AnimGrid(bpy.types.UIList):
     def filter_items(self, context, data, propname):
         items = getattr(data, propname)
         manager = context.scene.fmodel_anim_manager
-        search_str = manager.search_filter.lower().strip()
-        active_folder_id = ""
-        active_skel = ""
-        
-        if manager.tree_items and manager.active_folder_index < len(manager.tree_items):
-            sel_item = manager.tree_items[manager.active_folder_index]
-            if sel_item.item_type == 'FOLDER':
-                active_folder_id = sel_item.node_id
-                active_skel = sel_item.skeleton
-
-        flt_flags = []
-        flt_neworder = []
-        for item in items:
-            flag = 0
-            if item.item_type == 'ANIM': 
-                if item.parent_id == active_folder_id and item.skeleton == active_skel:
-                    if not search_str or search_str in item.name.lower():
-                        flag = self.bitflag_filter_item
-            flt_flags.append(flag)
-        return flt_flags, flt_neworder
+        visible = set(ui_custom_grid.visible_animation_indices(manager, *ui_custom_grid.selected_folder(manager)))
+        return [self.bitflag_filter_item if index in visible else 0 for index in range(len(items))], []
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
         row = layout.row(align=True)
@@ -325,28 +274,10 @@ class ASSETS_UL_AnimGrid(bpy.types.UIList):
         if icon_id != 0: row.label(text=item.name, icon_value=icon_id)
         else: row.label(text=item.name, icon='ANIM_DATA')
         
-        row_ops = row.row(align=True)
-        op_preview = row_ops.operator("fmodel.preview_anim", text="", icon='RESTRICT_VIEW_OFF', emboss=False)
-        op_preview.target_node_id = item.node_id
-        op_preview.target_skeleton = item.skeleton
-        op_preview.source_key = item.source_key
-        op_apply = row_ops.operator("fmodel.apply_anim", text="", icon='IMPORT', emboss=False)
-        op_apply.target_node_id = item.node_id
-        op_apply.target_skeleton = item.skeleton
-        op_apply.source_key = item.source_key
-        op_apply.apply_method_override = 'REPLACE'
-        op_nla = row_ops.operator("fmodel.apply_anim", text="", icon='NLA', emboss=False)
-        op_nla.target_node_id = item.node_id
-        op_nla.target_skeleton = item.skeleton
-        op_nla.source_key = item.source_key
-        op_nla.apply_method_override = 'APPEND_NLA'
 
-
-# ============================================================
-# 注册（面板已集成到 FModel 主面板 ui.py）
-# ============================================================
 
 def register():
+    bpy.utils.register_class(ASSETS_UL_ProjectLibraries)
     bpy.utils.register_class(ASSETS_UL_LibraryTree)
     bpy.utils.register_class(ASSETS_UL_AnimTree)
     bpy.utils.register_class(ASSETS_UL_FolderTree)
@@ -357,3 +288,4 @@ def unregister():
     bpy.utils.unregister_class(ASSETS_UL_FolderTree)
     bpy.utils.unregister_class(ASSETS_UL_AnimTree)
     bpy.utils.unregister_class(ASSETS_UL_LibraryTree)
+    bpy.utils.unregister_class(ASSETS_UL_ProjectLibraries)

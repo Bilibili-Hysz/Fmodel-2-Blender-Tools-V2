@@ -87,11 +87,8 @@ def cleanup_dynamic_libraries():
     return core_cleanup_dynamic_libraries()
 
 def thumbnail_output_path(action, sk_name):
-    safe_name = "".join(c for c in action.name if c.isalpha() or c.isdigit() or c in (' ', '-', '_')).rstrip()
-    frame_range = getattr(action, "frame_range", (0, 0))
-    hash_input = f"{action.name}_{int(frame_range[0])}_{int(frame_range[1])}"
-    unique_suffix = uuid.uuid5(uuid.NAMESPACE_OID, hash_input).hex[:8]
-    return os.path.join(".thumbnails", sk_name, f"{safe_name}_{unique_suffix}.webp")
+    from ...core.library_files import storage_component
+    return os.path.join(".thumbnails", storage_component(sk_name), storage_component(action.name) + ".webp")
 
 def bake_thumbnail_opengl(target_arm, action, out_dir, sk_name, resolution='256', quality='OPENGL', isolate=True):
     cam_obj = None
@@ -116,17 +113,12 @@ def bake_thumbnail_opengl(target_arm, action, out_dir, sk_name, resolution='256'
         bpy.context.scene.frame_set(frame_to_bake)
         bpy.context.view_layer.update()
 
-        thumb_dir = os.path.join(out_dir, ".thumbnails", sk_name)
+        final_img_path = os.path.join(out_dir, thumbnail_output_path(action, sk_name))
+        thumb_dir = os.path.dirname(final_img_path)
         os.makedirs(thumb_dir, exist_ok=True)
         
-        safe_name = "".join([c for c in action.name if c.isalpha() or c.isdigit() or c in (' ', '-', '_')]).rstrip()
-        # Deterministic hash from action name + frame range — same action always same thumbnail
-        hash_input = f"{action.name}_{int(action.frame_range[0])}_{int(action.frame_range[1])}"
-        unique_suffix = uuid.uuid5(uuid.NAMESPACE_OID, hash_input).hex[:8] 
-        
-        final_img_name = f"{safe_name}_{unique_suffix}.webp"
-        tmp_prefix = os.path.join(thumb_dir, f"{safe_name}_{unique_suffix}_tmp_")
-        final_img_path = os.path.join(thumb_dir, final_img_name)
+        safe_name = os.path.splitext(os.path.basename(final_img_path))[0]
+        tmp_prefix = os.path.join(thumb_dir, f"{safe_name}_tmp_")
 
         area = next((a for a in bpy.context.screen.areas if a.type == 'VIEW_3D'), None)
         if not area:
@@ -210,7 +202,7 @@ def bake_thumbnail_opengl(target_arm, action, out_dir, sk_name, resolution='256'
         # 防弹机制：模糊匹配查找 _tmp_ 文件
         saved_file = None
         for f in os.listdir(thumb_dir):
-            if f.startswith(f"{safe_name}_{unique_suffix}_tmp_"):
+            if f.startswith(f"{safe_name}_tmp_"):
                 saved_file = f
                 break
                 

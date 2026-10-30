@@ -289,14 +289,16 @@ class NativeUEFormatScanTests(unittest.TestCase):
             asset_dir.mkdir(parents=True)
             (asset_dir / "Legacy.ueanim").write_bytes(_legacy_ueanim_bytes(self.reader))
 
-            context = _FakeContext({"source_skeleton": "Content"})
+            context = _FakeContext({})
             stage = self.stages.DictionaryAcquisitionStage()
 
-            self.assertFalse(stage._process_fmodel_raw_files(context, str(source_root)))
-            self.assertFalse(context.dictionary_manifest)
-            message = context.logs[-1][2]
-            self.assertIn("发现 1 个 UEANIM/UEPOSE 文件，但 0 个包含", message)
-            self.assertIn("missing=1, invalid=0", message)
+            self.assertTrue(stage._process_fmodel_raw_files(context, str(source_root)))
+            entries = self.core.DictionaryManifest.from_dict(context.dictionary_manifest).get_all_animations()
+            self.assertEqual(len(entries), 1)
+            skeleton, _folder, _name, entry = entries[0]
+            self.assertEqual(skeleton, "Unspecified")
+            self.assertIsNone(entry.metadata["fmodel_skeleton_identity"])
+            self.assertEqual(entry.metadata["skeleton_identity_state"], "legacy")
 
     def test_missing_identity_and_invalid_files_have_precise_counts(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -310,9 +312,13 @@ class NativeUEFormatScanTests(unittest.TestCase):
             context = _FakeContext({"source_skeleton": "SK_Hero_Skeleton"})
             stage = self.stages.DictionaryAcquisitionStage()
 
-            self.assertFalse(stage._process_fmodel_raw_files(context, str(source_root)))
-            message = context.logs[-1][2]
-            self.assertIn("missing=3, invalid=1", message)
+            self.assertTrue(stage._process_fmodel_raw_files(context, str(source_root)))
+            entries = self.core.DictionaryManifest.from_dict(context.dictionary_manifest).get_all_animations()
+            self.assertEqual(len(entries), 3)
+            self.assertTrue(all(skeleton == "SK_Hero_Skeleton" for skeleton, *_ in entries))
+            messages = "\n".join(message for _level, _stage, message in context.logs)
+            self.assertIn("missing=3", messages)
+            self.assertIn("invalid=1", messages)
 
     def test_strict_identity_filter_mismatch_is_not_reported_as_no_files(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -324,8 +330,53 @@ class NativeUEFormatScanTests(unittest.TestCase):
 
             self.assertFalse(stage._process_fmodel_raw_files(context, str(source_root)))
             message = context.logs[-1][2]
-            self.assertIn("1 个带内嵌身份", message)
+            self.assertIn("1 个可读取的", message)
             self.assertIn("mismatch=1, missing=0, invalid=0", message)
+
+    def test_pose_resources_are_discovered_without_becoming_actions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Idle.ueanim").write_bytes(_native_ueanim_bytes(self.reader))
+            pose = root / "Expressions.uepose"
+            pose.write_bytes(_native_ueanim_bytes(self.reader).replace(
+                _fstring("UEANIM"), _fstring("UEPOSE"), 1,
+            ))
+            context = _FakeContext({"source_dir": directory})
+
+            self.assertTrue(self.stages.DictionaryAcquisitionStage().execute(context))
+            manifest = self.core.DictionaryManifest.from_dict(context.dictionary_manifest)
+            self.assertEqual(len(manifest.get_all_animations()), 1)
+            self.assertEqual(len(manifest.pose_resources), 1)
+            self.assertEqual(manifest.pose_resources[0]["source_file"], str(pose))
+            self.assertEqual(
+                self.core.DictionaryManifest.from_dict(manifest.to_dict()).pose_resources,
+                manifest.pose_resources,
+            )
+
+    def test_pose_only_folder_has_no_animation_tasks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "Expressions.uepose").write_bytes(
+                _native_ueanim_bytes(self.reader).replace(
+                    _fstring("UEANIM"), _fstring("UEPOSE"), 1,
+                )
+            )
+            context = _FakeContext({"source_dir": directory})
+            self.assertTrue(self.stages.DictionaryAcquisitionStage().execute(context))
+            manifest = self.core.DictionaryManifest.from_dict(context.dictionary_manifest)
+            self.assertEqual(manifest.get_all_animations(), [])
+            self.assertEqual(manifest.skeletons, {})
+            self.assertEqual(len(manifest.pose_resources), 1)
+
+    def test_extension_must_match_native_resource_kind(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "Disguised.ueanim").write_bytes(
+                _native_ueanim_bytes(self.reader).replace(
+                    _fstring("UEANIM"), _fstring("UEPOSE"), 1,
+                )
+            )
+            context = _FakeContext({"source_dir": directory})
+            self.assertFalse(self.stages.DictionaryAcquisitionStage().execute(context))
+            self.assertIn("invalid=1", context.logs[-1][2])
 
     def test_empty_tree_reports_no_animation_resources(self):
         with tempfile.TemporaryDirectory() as directory:

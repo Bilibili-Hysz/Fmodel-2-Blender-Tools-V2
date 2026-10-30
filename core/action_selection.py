@@ -54,6 +54,7 @@ def resolve_imported_action(bpy, imported_action, staged_validator=None):
         action for action in bpy.data.actions
         if action.name == action_name
         or _property(action, "Pipeline_RequestedActionName") == action_name
+        or _property(action, "Pipeline_SourceBundleActionName") == action_name
     ]
 
     # Linked actions cannot safely receive custom provenance properties. Their

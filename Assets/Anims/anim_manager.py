@@ -6,16 +6,19 @@ import os
 import json
 import re
 from ...core.i18n import t
+from ...core.workflow import resolve_target
+from ...core.skeleton_compatibility import validate_library_action
 from bpy.app.handlers import persistent
 import bpy.utils.previews
 from .library_scanner import (
     _load_bundle_tree, _load_library_index, repair_library_metadata, retained_bundle_files,
 )
 from .animation_source import build_source_key, parse_source_key, select_existing_action
+from . import ui_custom_grid
 from ...core.action_safety import (
     animation_state, append_nla_strip, append_nla_strip_to_new_track, assign_action,
     get_or_create_nla_track, overwrite_nla_strip, remove_owned_action, replace_action,
-    restore_animation_state,
+    restore_animation_state, datablock_identity,
 )
 
 
@@ -138,6 +141,13 @@ class SkeletonItem(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty()
 
 
+_SKELETON_ENUM_ITEMS = {}
+
+
+def _reset_grid_page(self, context):
+    self.grid_page = 1
+
+
 def get_dynamic_skeletons(self, context):
     """动态获取骨架列表"""
     try:
@@ -150,10 +160,10 @@ def get_dynamic_skeletons(self, context):
         manager = getattr(scene, "fmodel_anim_manager", None)
         if not manager or not manager.skeleton_items:
             return [("NONE", "无资产数据", "")]
-        items = [("ALL", "显示所有骨架", "")]
-        for item in manager.skeleton_items:
-            items.append((item.name, item.name, ""))
-        return items if items else [("NONE", "无资产数据", "")]
+        names = tuple(item.name for item in manager.skeleton_items)
+        if names not in _SKELETON_ENUM_ITEMS:
+            _SKELETON_ENUM_ITEMS[names] = [("ALL", "显示所有骨架", "")] + [(name, name, "") for name in names]
+        return _SKELETON_ENUM_ITEMS[names]
     except Exception:
         return [("NONE", "获取出错", "")]
 
@@ -161,9 +171,21 @@ def get_dynamic_skeletons(self, context):
 class AnimManagerProps(bpy.types.PropertyGroup):
     """动画管理器属性 - 统一的属性组"""
     tree_items: bpy.props.CollectionProperty(type=AnimTreeItem)
+    library_scope: bpy.props.EnumProperty(name="浏览范围", items=[
+        ('ALL', "全部扫描结果", "显示最近一次扫描的全部资产或场景动作"),
+        ('CURRENT', "当前资产库", "仅显示顶部选中的资产库"),
+    ], default='CURRENT', update=_reset_grid_page)
     skeleton_items: bpy.props.CollectionProperty(type=SkeletonItem)
-    active_skeleton: bpy.props.EnumProperty(name="目标骨架", items=lambda s, c: get_dynamic_skeletons(s, c))
-    search_filter: bpy.props.StringProperty(name="搜索", description="全局搜索动作或文件夹名称", default="")
+    active_skeleton: bpy.props.EnumProperty(name="骨架筛选", items=get_dynamic_skeletons, update=_reset_grid_page)
+    search_filter: bpy.props.StringProperty(name="搜索", description="全局搜索动作或文件夹名称", default="", update=_reset_grid_page)
+    skeleton_policy: bpy.props.EnumProperty(
+        name="旧骨架设置",
+        items=[
+            ('strict', "严格身份", "旧设置，应用时不检查骨架身份"),
+            ('bone_names', "按现有骨骼名", "旧设置，应用时不检查轨道覆盖率"),
+        ],
+        default='bone_names', options={'HIDDEN'},
+    )
     
     # 显示模式
     display_mode: bpy.props.EnumProperty(
@@ -191,7 +213,7 @@ class AnimManagerProps(bpy.types.PropertyGroup):
         items=[
             ('END', "末尾追加", "追加到最后一个条带后"),
             ('CURRENT', "当前帧插入", "从当前帧开始插入"),
-            ('OVERWRITE_TRACK', "覆盖当前范围", "在目标轨道删除重叠条带后插入"),
+            ('OVERWRITE_TRACK', "当前帧（检查冲突）", "在最后一条轨道的当前帧插入，重叠时拒绝操作"),
         ],
         default='END'
     )
@@ -214,15 +236,15 @@ class AnimManagerProps(bpy.types.PropertyGroup):
     
     # 网格视图
     show_as_grid: bpy.props.BoolProperty(name="平铺视图", default=False)
-    grid_columns: bpy.props.IntProperty(name="网格列数", default=2, min=1, max=8)
-    grid_row_count: bpy.props.IntProperty(name="网格行数", default=2, min=1, max=8)
+    grid_columns: bpy.props.IntProperty(name="网格列数", default=2, min=1, max=8, update=_reset_grid_page)
+    grid_row_count: bpy.props.IntProperty(name="网格行数", default=2, min=1, max=8, update=_reset_grid_page)
     grid_icon_scale: bpy.props.FloatProperty(name="卡片尺寸", default=6.0, min=3.0, max=15.0)
     grid_page: bpy.props.IntProperty(name="当前页", default=1, min=1)
     
     # 索引
     active_item_index: bpy.props.IntProperty(default=0)
-    active_library_index: bpy.props.IntProperty(default=0)
-    active_folder_index: bpy.props.IntProperty(default=0)
+    active_library_index: bpy.props.IntProperty(default=0, update=lambda self, context: _sync_project_library_index(context))
+    active_folder_index: bpy.props.IntProperty(default=0, update=_reset_grid_page)
     tree_revision: bpy.props.IntProperty(default=0)
 
 
@@ -331,23 +353,59 @@ def _restore_tree_expansion_state(tree_items, expansion_state):
 
 def _sync_manager_library_index(context):
     """Keep the scanned library-tree selection aligned with project libraries."""
-    props = getattr(context.scene, "fmodel_assets", None)
-    manager = getattr(context.scene, "fmodel_anim_manager", None)
+    scene = getattr(context, "scene", None) if context is not None else None
+    props = getattr(scene, "fmodel_assets", None)
+    manager = getattr(scene, "fmodel_anim_manager", None)
     if not props or not manager:
         return
     index = getattr(props, "active_lib_index", -1)
     if not (0 <= index < len(props.project_libs)):
-        manager.active_folder_index = 0
+        manager.active_library_index = -1
         return
     library = props.project_libs[index]
     library_path = os.path.normcase(os.path.abspath(bpy.path.abspath(library.path))) if library.path else ""
     for item_index, item in enumerate(manager.tree_items):
         item_path = os.path.normcase(os.path.abspath(item.blend_path)) if item.blend_path else ""
-        if (item.item_type == 'LIBRARY'
-                and ((library_path and item_path == library_path) or item.name == library.name)):
-            manager.active_folder_index = item_index
+        if item.item_type == 'LIBRARY' and library_path and item_path == library_path:
+            if manager.active_library_index != item_index:
+                manager.active_library_index = item_index
             return
-    manager.active_folder_index = 0
+    manager.active_library_index = -1
+
+
+def _sync_project_library_index(context):
+    scene = getattr(context, "scene", None) if context is not None else None
+    props = getattr(scene, "fmodel_assets", None)
+    manager = getattr(scene, "fmodel_anim_manager", None)
+    if not props or not manager or not 0 <= manager.active_library_index < len(manager.tree_items):
+        return
+    item = manager.tree_items[manager.active_library_index]
+    by_identity = {(node.skeleton, node.node_id): node for node in manager.tree_items}
+    root = item if item.item_type == 'LIBRARY' else next(
+        (node for node in ui_custom_grid.ancestor_items(item, by_identity) if node.item_type == 'LIBRARY'), None,
+    )
+    if root is None or not root.blend_path:
+        return
+    path = os.path.normcase(os.path.abspath(root.blend_path))
+    for index, library in enumerate(props.project_libs):
+        if library.path and os.path.normcase(os.path.abspath(bpy.path.abspath(library.path))) == path:
+            if props.active_lib_index != index:
+                props.active_lib_index = index
+            return
+
+
+def invalidate_library_scan(context):
+    scene = getattr(context, "scene", None) if context is not None else None
+    manager = getattr(scene, "fmodel_anim_manager", None)
+    if manager:
+        manager.active_library_index = -1
+        manager.tree_items.clear()
+        manager.skeleton_items.clear()
+        manager.tree_revision += 1
+        manager.active_item_index = -1
+        manager.active_folder_index = -1
+        manager.grid_page = 1
+        reset_active_skeleton_sync()
 
 
 # ============================================================
@@ -632,7 +690,8 @@ class ANIM_OT_ScanAnims(bpy.types.Operator):
         manager = context.scene.fmodel_anim_manager
         expansion_state = _tree_expansion_state(manager.tree_items)
         manager.active_item_index = 0
-        manager.active_library_index = 0
+        manager.active_library_index = -1
+        manager.grid_page = 1
         manager.active_folder_index = 0
         reset_active_skeleton_sync()
         manager.tree_items.clear()
@@ -659,7 +718,7 @@ class ANIM_OT_ScanAnims(bpy.types.Operator):
                 lib_item.name = lib.name
                 lib_item.item_type = 'LIBRARY'
                 lib_item.lib_type = 'DIRECTORY'
-                lib_item.node_id = f"lib_{lib.name}"
+                lib_item.node_id = f"lib_{os.path.normcase(os.path.abspath(abs_path))}"
                 lib_item.blend_path = abs_path
                 lib_item.depth = 0
                 lib_item.is_expanded = True
@@ -673,12 +732,21 @@ class ANIM_OT_ScanAnims(bpy.types.Operator):
                     entry.name = base_name
                     entry.item_type = 'ANIM_LIB'  # 库设置用
                     entry.lib_type = 'BLEND_ANIM'
-                    entry.node_id = f"anim_{lib.name}_{base_name}"
+                    entry.node_id = f"{lib_item.node_id}/{base_name}"
                     entry.parent_id = lib_item.node_id
                     entry.blend_path = abs_path
                     entry.depth = 1
                     entry.anim_count = anim_count
                     entry.volume_count = len(paths)
+                    if len(paths) > 1:
+                        for path in paths:
+                            volume = manager.tree_items.add()
+                            volume.name = os.path.basename(path)
+                            volume.item_type = 'VOLUME'
+                            volume.parent_id = entry.node_id
+                            volume.node_id = f"{entry.node_id}/{volume.name}"
+                            volume.blend_path = path
+                            volume.depth = 2
 
                     for skel, folder_tree in merged_by_skel.items():
                         if folder_tree:
@@ -702,7 +770,7 @@ class ANIM_OT_ScanAnims(bpy.types.Operator):
                     entry.name = model_name
                     entry.item_type = 'MODEL'
                     entry.lib_type = 'BLEND_MODEL'
-                    entry.node_id = f"model_{lib.name}_{model_name}"
+                    entry.node_id = f"{lib_item.node_id}/{model_name}"
                     entry.parent_id = lib_item.node_id
                     entry.blend_path = model_path
                     entry.depth = 1
@@ -712,16 +780,33 @@ class ANIM_OT_ScanAnims(bpy.types.Operator):
                 is_model = abs_path.endswith('_mesh.blend')
                 lib_item = manager.tree_items.add()
                 lib_item.name = lib.name
-                lib_item.item_type = 'MODEL' if is_model else 'ANIM'
+                lib_item.item_type = 'LIBRARY'
                 lib_item.lib_type = 'BLEND_MODEL' if is_model else 'BLEND_ANIM'
-                lib_item.node_id = f"lib_{lib.name}"
+                lib_item.node_id = f"lib_{os.path.normcase(os.path.abspath(abs_path))}"
                 lib_item.blend_path = abs_path
                 lib_item.depth = 0
+                lib_item.is_expanded = True
                 if not is_model:
-                    lib_item.anim_count = _scan_single_blend(abs_path, lib.name)
+                    try:
+                        with bpy.data.libraries.load(abs_path, link=True) as (data_from, data_to):
+                            names = list(data_from.actions)
+                        index, level = _load_library_index(os.path.dirname(abs_path), lib.name)
+                        tree, recovery = _load_bundle_tree(abs_path, index, names, level)
+                        merged = {}
+                        merge_dict(merged, tree, abs_path)
+                        for skel, folder_tree in merged.items():
+                            traverse_tree(skel, lib_item.node_id, folder_tree, 1, manager,
+                                          lib.name, library_path=abs_path)
+                            if skel not in skeleton_tree:
+                                manager.skeleton_items.add().name = skel
+                                skeleton_tree[skel] = True
+                        lib_item.anim_count = sum(_count_actions_recursive(value) for value in tree.values())
+                    except (OSError, RuntimeError, ValueError) as exc:
+                        self.report({'WARNING'}, f"无法扫描 {lib.name}: {exc}")
 
         manager.active_folder_index = next((i for i, item in enumerate(manager.tree_items) if item.item_type == 'FOLDER'), 0)
         _restore_tree_expansion_state(manager.tree_items, expansion_state)
+        _sync_manager_library_index(context)
         return {'FINISHED'}
 
 
@@ -735,13 +820,15 @@ class ANIM_OT_ScanLocalAnims(bpy.types.Operator):
         manager = context.scene.fmodel_anim_manager
         expansion_state = _tree_expansion_state(manager.tree_items)
         manager.active_item_index = 0
-        manager.active_library_index = 0
+        manager.active_library_index = -1
+        manager.grid_page = 1
         manager.active_folder_index = 0
         reset_active_skeleton_sync()
         manager.tree_items.clear()
         manager.skeleton_items.clear()
         manager.tree_revision += 1
         
+        manager.library_scope = 'ALL'
         global_tree = {}
         action_count = 0
         
@@ -811,7 +898,7 @@ class ANIM_OT_SelectGridItem(bpy.types.Operator):
 
 
 class _AnimationTransaction:
-    def __init__(self, arm, scene):
+    def __init__(self, arm, scene, baseline_actions=None):
         self.arm = arm
         self.scene = scene
         self.had_animation_data = arm.animation_data is not None
@@ -819,25 +906,23 @@ class _AnimationTransaction:
         self.action = self.anim_data.action if self.anim_data else None
         self.action_slot = getattr(self.anim_data, "action_slot", None) if self.anim_data else None
         self.scene_range = (scene.frame_start, scene.frame_end, scene.frame_current)
-        self.existing_actions = {id(action) for action in bpy.data.actions}
+        self.existing_actions = {
+            datablock_identity(action)
+            for action in (bpy.data.actions if baseline_actions is None else baseline_actions)
+        }
+        self.active_track = getattr(self.anim_data.nla_tracks, "active", None) if self.anim_data else None
         self.nla = self._snapshot_nla()
 
     def _snapshot_nla(self):
         if not self.anim_data:
-            return []
-        snapshot = []
-        for track in self.anim_data.nla_tracks:
-            strips = []
-            for strip in track.strips:
-                strips.append((
-                    strip.name, float(strip.frame_start), strip.action,
-                    getattr(strip, "select", False),
-                ))
-            snapshot.append((
-                track.name, getattr(track, "select", False),
-                getattr(track, "mute", False), getattr(track, "lock", False), strips,
-            ))
-        return snapshot
+            return {}
+        return {
+            datablock_identity(track): (
+                {name: getattr(track, name) for name in ("name", "select", "mute", "lock")},
+                {datablock_identity(strip): strip.select for strip in track.strips},
+            )
+            for track in self.anim_data.nla_tracks
+        }
 
     def rollback(self):
         anim_data = self.arm.animation_data
@@ -848,20 +933,25 @@ class _AnimationTransaction:
                 anim_data.action = self.action
                 if hasattr(anim_data, "action_slot"):
                     anim_data.action_slot = self.action_slot
-                for track in reversed(anim_data.nla_tracks):
-                    anim_data.nla_tracks.remove(track)
-                for name, select, mute, lock, strips in self.nla:
-                    track = anim_data.nla_tracks.new()
-                    track.name = name
-                    track.select = select
-                    track.mute = mute
-                    track.lock = lock
-                    for strip_name, frame_start, action, strip_select in strips:
-                        strip = track.strips.new(strip_name, frame_start, action)
-                        strip.select = strip_select
+                for track in reversed(list(anim_data.nla_tracks)):
+                    previous = self.nla.get(datablock_identity(track))
+                    if previous is None:
+                        anim_data.nla_tracks.remove(track)
+                        continue
+                    properties, strips = previous
+                    for name, value in properties.items():
+                        setattr(track, name, value)
+                    for strip in reversed(list(track.strips)):
+                        identity = datablock_identity(strip)
+                        if identity not in strips:
+                            track.strips.remove(strip)
+                        else:
+                            strip.select = strips[identity]
+                if hasattr(anim_data.nla_tracks, "active"):
+                    anim_data.nla_tracks.active = self.active_track
         self.scene.frame_start, self.scene.frame_end, self.scene.frame_current = self.scene_range
         for action in list(bpy.data.actions):
-            if id(action) not in self.existing_actions:
+            if datablock_identity(action) not in self.existing_actions:
                 bpy.data.actions.remove(action)
 
 
@@ -869,7 +959,7 @@ class ANIM_OT_PreviewAnim(bpy.types.Operator):
     """预览动画"""
     bl_idname = "fmodel.preview_anim"
     bl_label = "预览动作"
-    bl_description = "将所选动画设为活动骨架的当前动作"
+    bl_description = "将所选动画设为工作目标骨架的当前动作"
     bl_options = {'REGISTER', 'UNDO'}
     target_node_id: bpy.props.StringProperty(default="")
     target_skeleton: bpy.props.StringProperty(default="")
@@ -896,9 +986,9 @@ class ANIM_OT_PreviewAnim(bpy.types.Operator):
         if not selected or selected.item_type != 'ANIM':
             return {'CANCELLED'}
         
-        target_arm = context.active_object
+        target_arm = resolve_target(context)
         if not target_arm or target_arm.type != 'ARMATURE':
-            self.report({'WARNING'}, t("请先在 3D 视图中选中目标骨架！"))
+            self.report({'WARNING'}, t("请在顶部指定目标骨架"))
             return {'CANCELLED'}
         
         for i, item in enumerate(manager.tree_items):
@@ -912,7 +1002,7 @@ class ANIM_OT_PreviewAnim(bpy.types.Operator):
         arm_name = target_arm.name
         baseline_actions = list(bpy.data.actions)
         transaction_type = globals().get("_AnimationTransaction")
-        transaction = transaction_type(target_arm, context.scene) if transaction_type else None
+        transaction = None
         action = None
         
         try:
@@ -932,6 +1022,11 @@ class ANIM_OT_PreviewAnim(bpy.types.Operator):
                     transaction.rollback()
                 self.report({'ERROR'}, t("预览动作加载失败"))
                 return {'CANCELLED'}
+            warning = validate_library_action(action, arm)
+            if warning:
+                self.report({'WARNING'}, warning)
+            if transaction_type:
+                transaction = transaction_type(arm, context.scene, baseline_actions)
             if action:
                 try:
                     assign_action(arm, action)
@@ -1007,7 +1102,7 @@ class ANIM_OT_ApplyAnim(bpy.types.Operator):
     """应用动画"""
     bl_idname = "fmodel.apply_anim"
     bl_label = "应用动作"
-    bl_description = "将所选动画应用到活动骨架"
+    bl_description = "将所选动画应用到工作目标骨架"
     bl_options = {'REGISTER', 'UNDO'}
     target_node_id: bpy.props.StringProperty(default="")
     target_skeleton: bpy.props.StringProperty(default="")
@@ -1039,11 +1134,11 @@ class ANIM_OT_ApplyAnim(bpy.types.Operator):
         context.scene.frame_end = max(context.scene.frame_end, int(strip.frame_end))
 
     def execute(self, context):
-        target_arm = context.active_object
+        target_arm = resolve_target(context)
         manager = context.scene.fmodel_anim_manager
 
         if not target_arm or target_arm.type != 'ARMATURE':
-            self.report({'WARNING'}, "请先在 3D 视图中选中目标骨架！")
+            self.report({'WARNING'}, "请在顶部指定目标骨架")
             return {'CANCELLED'}
         
         selected = None
@@ -1066,10 +1161,15 @@ class ANIM_OT_ApplyAnim(bpy.types.Operator):
             self.report({'WARNING'}, t("请先选择有效的动画"))
             return {'CANCELLED'}
         
+        if (hasattr(manager, "library_scope")
+                and manager.active_item_index not in ui_custom_grid.visible_animation_indices(manager)
+                and not self.target_node_id):
+            self.report({'WARNING'}, "当前动画不在筛选结果中，请重新选择")
+            return {'CANCELLED'}
         use_link = (manager.import_mode == 'LINK')
         baseline_actions = list(bpy.data.actions)
         transaction_type = globals().get("_AnimationTransaction")
-        transaction = transaction_type(target_arm, context.scene) if transaction_type else None
+        transaction = None
         action = None
         try:
             try:
@@ -1081,6 +1181,11 @@ class ANIM_OT_ApplyAnim(bpy.types.Operator):
                     transaction.rollback()
                 self.report({'ERROR'}, t("动作加载失败"))
                 return {'CANCELLED'}
+            warning = validate_library_action(action, target_arm)
+            if warning:
+                self.report({'WARNING'}, warning)
+            if transaction_type:
+                transaction = transaction_type(target_arm, context.scene, baseline_actions)
         except Exception as e:
             if transaction:
                 transaction.rollback()
@@ -1176,7 +1281,7 @@ class ANIM_OT_GridPagePrev(bpy.types.Operator):
     bl_label = "上一页"
     
     def execute(self, context):
-        context.scene.fmodel_anim_manager.grid_page -= 1
+        ui_custom_grid.change_grid_page(context.scene.fmodel_anim_manager, -1)
         return {'FINISHED'}
 
 
@@ -1186,7 +1291,7 @@ class ANIM_OT_GridPageNext(bpy.types.Operator):
     bl_label = "下一页"
     
     def execute(self, context):
-        context.scene.fmodel_anim_manager.grid_page += 1
+        ui_custom_grid.change_grid_page(context.scene.fmodel_anim_manager, 1)
         return {'FINISHED'}
 
 
@@ -1208,7 +1313,7 @@ def auto_sync_active_skeleton(scene, depsgraph):
     """自动同步活动骨架"""
     global _last_synced_armature
     try:
-        obj = bpy.context.active_object
+        obj = resolve_target(bpy.context)
         if not obj or obj.type != 'ARMATURE':
             _last_synced_armature = None
             return
@@ -1406,17 +1511,16 @@ classes = (
 _manager_backup = None  # 跨重载持久化资产库数据
 
 
-def register():
+def restore_manager_backup():
+    """Restore saved library rows only after addon registration restrictions end."""
     global _manager_backup
-    for cls in classes:
-        bpy.utils.register_class(cls)
-    
-    bpy.types.Scene.fmodel_anim_manager = bpy.props.PointerProperty(type=AnimManagerProps)
-
     # Restore asset library data from previous session
     if _manager_backup and bpy.context.scene:
         try:
             mgr = bpy.context.scene.fmodel_anim_manager
+            # RNA removal can leave saved ID-property rows intact; replace, do not append.
+            mgr.skeleton_items.clear()
+            mgr.tree_items.clear()
             for sk in _manager_backup.get("skeletons", []):
                 item = mgr.skeleton_items.add()
                 item.name = sk
@@ -1424,9 +1528,19 @@ def register():
                 item = mgr.tree_items.add()
                 for k, v in td.items():
                     setattr(item, k, v)
+            _manager_backup = None
         except Exception:
             _manager_backup = None
     
+    return None
+
+
+def register():
+    for cls in classes:
+        bpy.utils.register_class(cls)
+    
+    bpy.types.Scene.fmodel_anim_manager = bpy.props.PointerProperty(type=AnimManagerProps)
+
     if auto_sync_active_skeleton not in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.append(auto_sync_active_skeleton)
 

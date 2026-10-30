@@ -15,6 +15,7 @@ import importlib
 
 if __package__:
     from . import core
+    from . import workflow_state
     from . import ui
     from . import Fmodel
     from . import Assets
@@ -23,6 +24,7 @@ if __package__:
 
 if __package__ and "bpy" in locals():
     importlib.reload(core)
+    importlib.reload(workflow_state)
     importlib.reload(ui)
     importlib.reload(Fmodel)
     importlib.reload(Assets)
@@ -30,9 +32,16 @@ if __package__ and "bpy" in locals():
     importlib.reload(auto_handlers)
 
 
+def _restore_scene_state():
+    """Restore saved scene state on the lifecycle timer, outside RestrictBlend."""
+    Assets.Anims.anim_manager.restore_manager_backup()
+    workflow_state.restore_workspaces()
+
+
 def register():
     # 模块化注册
     core.register()
+    workflow_state.register()
     ui.register()
     Fmodel.register()
     Assets.register()
@@ -40,6 +49,7 @@ def register():
 
     # 注册自动触发器
     auto_handlers.register_handlers()
+    auto_handlers.defer_workspace_restore(_restore_scene_state)
 
 
 def unregister():
@@ -49,6 +59,7 @@ def unregister():
     Assets.unregister()
     Fmodel.unregister()
     ui.unregister()
+    workflow_state.unregister()
     core.unregister()
 
 

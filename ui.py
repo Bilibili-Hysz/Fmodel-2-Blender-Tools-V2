@@ -8,8 +8,10 @@ import json
 from bpy_extras.io_utils import ExportHelper
 
 from .core.i18n import t
+from .core.workflow import resolve_target
+from .Assets.Anims import ui_custom_grid
 from .Assets.Anims.anim_manager import (
-    _sync_manager_library_index, inspect_action_metadata,
+    _sync_manager_library_index, inspect_action_metadata, invalidate_library_scan,
 )
 
 
@@ -47,7 +49,7 @@ class FMODEL_AddonPreferences(bpy.types.AddonPreferences):
     def draw(self, context):
         layout = self.layout
         layout.label(text=t("FModel Tools Next — UEFormat 原生管线"), icon='INFO')
-        layout.label(text=t("运行时状态见 3D 视图侧栏：FModel 工具箱"), icon='SEQ_PREVIEW')
+        layout.label(text=t("运行时状态见 3D 视图侧栏：设置与诊断"), icon='SEQ_PREVIEW')
 
 
 class FMODEL_CoreProperties(bpy.types.PropertyGroup):
@@ -272,59 +274,115 @@ def _draw_ueformat_runtime_status(layout):
 # 1. 主面板
 # ============================================================
 
+class FMODEL_PT_WorkContext(bpy.types.Panel):
+    bl_label = "当前工作对象"
+    bl_idname = "FMODEL_PT_work_context"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = 'FModel'
+    bl_order = 0
+
+    def draw(self, context):
+        layout = self.layout
+        workspace = context.scene.fmodel_workflow
+        row = layout.row(align=True)
+        row.prop(workspace, "target", text=t("目标骨架"))
+        row.operator("fmodel.set_work_target", text="", icon='EYEDROPPER')
+        if resolve_target(context) is None:
+            layout.label(text=t("请选择目标骨架；姿势源可直接导入"), icon='INFO')
+        props = getattr(context.scene, "fmodel_assets", None)
+        if props is not None:
+            if props.project_libs:
+                layout.label(text=t("当前资产库"), icon='ASSET_MANAGER')
+                layout.template_list("ASSETS_UL_ProjectLibraries", "workspace",
+                                     props, "project_libs", props, "active_lib_index", rows=2)
+                row = layout.row(align=True)
+                row.operator("fmodel.browse_lib_path", text=t("选择库目录"), icon='FILE_FOLDER')
+                row.operator("fmodel.mount_blend_file", text=t("添加库文件"), icon='FILE_BLEND')
+            else:
+                layout.operator("fmodel.add_library", text=t("添加资产库"), icon='ADD')
+        status = _ueformat_runtime_status()
+        if status.get("state") not in {"ready", "observed"}:
+            layout.label(text=t("运行环境需要检查，详见设置与诊断"), icon='INFO')
+        report = _last_operation_report(context)
+        if report and report.available:
+            layout.label(text=(report.summary or report.status)[:64],
+                         icon='ERROR' if report.status in {'failed', 'partial'} else 'INFO')
+
+
 class FMODEL_PT_Toolbox(bpy.types.Panel):
-    bl_label = "FModel 工具箱"
+    bl_label = "导入与建库"
     bl_idname = "FMODEL_PT_toolbox"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'FModel'
+    bl_order = 1
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout
-        props = context.scene.fmodel_core
-
-        row = layout.row(align=True)
-        row.label(text=t("UEFormat 原生管线"), icon='MESH_DATA')
-        status_drawer = globals().get("_draw_ueformat_runtime_status")
-        if callable(status_drawer):
-            status_drawer(layout)
+        layout.label(text=t("快速导入"), icon='IMPORT')
+        layout.operator("fmodel.import_model_uemodel", text=t("模型 (.uemodel)"), icon='MESH_DATA')
+        row = layout.row()
+        row.enabled = resolve_target(context) is not None
+        row.operator("fmodel.import_anim_ueanim", text=t("动画 (.ueanim)"), icon='ANIM_DATA')
+        layout.operator("fmodel.import_anim_uepose", text=t("姿势 (.uepose)"), icon='POSE_HLT')
         layout.separator()
-        layout.label(text=t("动画交接"), icon='ARMATURE_DATA')
-        layout.label(text=t("准备选中的骨架用于动画管线"), icon='INFO')
-        layout.operator(
-            "fmodel.use_active_armature_for_animation",
-            text=t("使用当前骨架"),
-            icon='ARMATURE_DATA',
-        )
-        layout.separator()
-        split = layout.split(factor=0.5, align=True)
-        col_in = split.column(align=True)
-        col_out = split.column(align=True)
-        col_in.operator("fmodel.import_model_uemodel", text=t("模型 (.uemodel)"), icon='MESH_DATA')
-        col_in.operator("fmodel.import_anim_ueanim", text=t("动画 (.ueanim)"), icon='ANIM_DATA')
-        col_in.operator("fmodel.import_anim_uepose", text=t("姿势 (.uepose)"), icon='ARMATURE_DATA')
-        col_out.label(text=t("UEFormat 原生导入；通用格式导出暂不支持"))
+        layout.prop(context.scene.fmodel_workflow, "show_builder", toggle=True, icon='PACKAGE')
 
-        report_header, report_body = layout.panel(
-            'FMODEL_PT_toolbox_last_operation', default_closed=False,
-        )
-        report_header.label(text=t("最近操作"), icon='INFO')
-        if report_body:
-            _draw_last_operation(report_body, context)
+
+class FMODEL_PT_Diagnostics(bpy.types.Panel):
+    bl_label = "设置与诊断"
+    bl_idname = "FMODEL_PT_diagnostics"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = 'FModel'
+    bl_order = 6
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text=t("UEFormat 原生管线"), icon='INFO')
+        _draw_ueformat_runtime_status(layout)
+        header, body = layout.panel('fmodel_operation_details', default_closed=False)
+        header.label(text=t("最近操作"), icon='INFO')
+        if body:
+            _draw_last_operation(body, context)
 
 
 # ============================================================
 # 2. 资产管线 (from backup)
 # ============================================================
 
+def _draw_pipeline_mapping(layout, context, state):
+    if not state.scan_anim_count:
+        return
+    box = layout.box()
+    box.label(text=t("目标骨架"), icon='ARMATURE_DATA')
+    if state.scan_skeleton_count > 1:
+        for mapping in state.skeleton_mappings:
+            entry = box.box()
+            entry.label(text=f"{mapping.source_skeleton} · {mapping.source_count}")
+            entry.prop(mapping, "target_armature", text=t("目标骨架"))
+        missing = sum(1 for item in state.skeleton_mappings if not item.target_armature)
+        if missing:
+            box.label(text=f"{t('未映射')}: {missing}", icon='ERROR')
+    else:
+        target = resolve_target(context)
+        box.label(text=f"{t('目标骨架')}: {target.name if target else t('未指定')}")
+
+
 class FMODEL_PT_Pipeline(bpy.types.Panel):
-    bl_label = "动画管线"
+    bl_label = "批量建立动画库"
     bl_idname = "FMODEL_PT_pipeline"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'FModel'
-    bl_options = {'DEFAULT_CLOSED'}
+    bl_order = 2
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.fmodel_workflow.show_builder
 
     def draw(self, context):
         layout = self.layout
@@ -333,20 +391,18 @@ class FMODEL_PT_Pipeline(bpy.types.Panel):
             return
 
         state = context.scene.pipeline_wizard
-        step = state.current_step
+        step = max(2, state.current_step)
 
         row = layout.row(align=True)
         row.scale_y = 1.2
         steps = [
-            (1, "流程", state.flow_type != ''),
-            (2, "项目", bool(state.source_dir and state.output_dir)),
-            (3, "扫描", state.scan_completed),
-            (4, "导入/打包", state.lib_completed),
+            (2, "来源", bool(state.source_dir and state.output_dir)),
+            (3, "扫描与匹配", state.scan_completed),
+            (4, "建立资产库", state.lib_completed),
         ]
         for num, name, done in steps:
             sub = row.row(align=True)
-            if num == state.current_step:
-                sub.alert = True
+            if num == step:
                 op = sub.operator("pipeline.wizard_goto_step", text=t(name), depress=True)
             elif done:
                 op = sub.operator("pipeline.wizard_goto_step", text=t(name), icon='CHECKMARK')
@@ -356,16 +412,10 @@ class FMODEL_PT_Pipeline(bpy.types.Panel):
 
         layout.separator()
 
-        if step == 1:
-            col = layout.column(align=True)
-            col.scale_y = 1.3
-            op = col.operator("pipeline.wizard_step1", text=t("FModel 流程"), icon='MESH_DATA')
-            op.flow = 'FMODEL'
-
-        elif step == 2:
+        if step == 2:
             col = layout.column(align=True)
             col.label(
-                text=t("Folder 模式：直接扫描动画文件夹"),
+                text=t("选择动画来源和资产库输出"),
                 icon='FILE_FOLDER',
             )
             col.prop(state, "manual_source_dir", text=t("动画文件夹"))
@@ -389,7 +439,7 @@ class FMODEL_PT_Pipeline(bpy.types.Panel):
             source_dir = getattr(state, "manual_source_dir", "")
             can_scan = bool(source_dir and state.output_dir)
             if not can_scan:
-                layout.label(text=t("需先完成步骤2"), icon='ERROR')
+                layout.label(text=t("请先填写来源与输出"), icon='ERROR')
                 return
             if not state.scan_completed:
                 row = layout.row(align=True)
@@ -407,10 +457,21 @@ class FMODEL_PT_Pipeline(bpy.types.Panel):
                 col.label(text=f"{t('骨架')}: {state.scan_skeleton_count}", icon='ARMATURE_DATA')
                 col.label(text=f"{t('动画')}: {state.scan_anim_count}", icon='ANIM_DATA')
                 col.label(text=f"{t('新增')}: {state.scan_new_count}", icon='ADD')
+                col.label(text=f"{t('源未变更')}: {getattr(state, 'scan_existing_count', 0)}")
+                col.label(text=f"{t('源已变更')}: {getattr(state, 'scan_changed_count', 0)}")
+                col.label(text=f"{t('版本待校验')}: {getattr(state, 'scan_unverified_count', 0)}")
+                if getattr(state, "scan_pose_count", 0):
+                    col.label(text=f"{t('姿势资源')}: {state.scan_pose_count}", icon='ARMATURE_DATA')
+                    col.label(text=t("姿势导入到姿势资产库，可应用或烘焙"))
+                    col.operator("fmodel.import_anim_uepose", text=t("导入姿势"), icon='IMPORT')
+                _draw_pipeline_mapping(layout, context, state)
+                layout.operator("pipeline.wizard_step3", text=t("重新扫描"), icon='FILE_REFRESH')
+                if not state.scan_anim_count:
+                    return
                 layout.separator()
                 op = layout.operator(
                     "pipeline.wizard_goto_step",
-                    text=t("下一步: 导入并打包"),
+                    text=t("下一步: 建立资产库"),
                     icon='FORWARD',
                 )
                 op.target_step = 4
@@ -440,12 +501,9 @@ class FMODEL_PT_Pipeline(bpy.types.Panel):
                         text=f"{t('未映射')}: {state.unmapped_skeletons}",
                         icon='ERROR',
                     )
-                row = box.row(align=True)
-                row.operator(
-                    "pipeline.rebake_thumbnails",
-                    text=t("重新生成缩略图"),
-                    icon='RENDER_STILL',
-                )
+                layout.operator("fmodel.open_workflow", text=t("浏览动画资产"), icon='ASSET_MANAGER').destination = 'ASSETS'
+                layout.operator("fmodel.open_workflow", text=t("调整构建设置"), icon='PREFERENCES').destination = 'EDIT_BUILD'
+                layout.operator("pipeline.wizard_step3", text=t("重新扫描"), icon='FILE_REFRESH')
                 layout.operator(
                     "pipeline.wizard_reset",
                     text=t("重新开始"),
@@ -453,15 +511,13 @@ class FMODEL_PT_Pipeline(bpy.types.Panel):
                 )
                 return
 
-            can_import = state.scan_completed
-            obj = context.active_object
-            has_arm = obj is not None and obj.type == 'ARMATURE'
-            stored_target = bpy.data.objects.get(state.import_target_skeleton)
-            has_stored_target = (
-                stored_target is not None and stored_target.type == 'ARMATURE'
-            )
+            can_import = state.scan_completed and state.scan_anim_count > 0
+            obj = resolve_target(context)
+            has_arm = obj is not None
+            stored_target = obj
+            has_stored_target = has_arm
             if not can_import:
-                layout.label(text=t("需先完成步骤3"), icon='ERROR')
+                layout.label(text=t("请先完成扫描与匹配"), icon='ERROR')
                 return
             if has_stored_target:
                 layout.label(text=f"骨架: {stored_target.name}", icon='ARMATURE_DATA')
@@ -471,43 +527,7 @@ class FMODEL_PT_Pipeline(bpy.types.Panel):
                 layout.label(text=t("请选中骨架"), icon='ERROR')
             layout.separator()
 
-            if state.scan_skeleton_count > 1:
-                box_mapping = layout.box()
-                box_mapping.label(text=t("骨架映射"), icon='ARMATURE_DATA')
-                for mapping in state.skeleton_mappings:
-                    row = box_mapping.row(align=True)
-                    row.label(text=f"{mapping.source_skeleton} ({mapping.source_count})")
-                    row.prop(mapping, "target_armature", text="")
-                    row.prop(mapping, "compatibility_mode", text=t("模式"))
-                    row.label(text=mapping.status)
-                if state.unmapped_skeletons:
-                    box_mapping.label(
-                        text=f"未映射: {state.unmapped_skeletons}", icon='ERROR'
-                    )
-            elif state.scan_skeleton_count == 1:
-                # A one-skeleton scan still needs an explicit compatibility
-                # choice when Base animations are applied to a differently
-                # named/structured character armature.
-                box_mapping = layout.box()
-                box_mapping.label(text=t("骨架目标与兼容策略"), icon='ARMATURE_DATA')
-                mapping = state.skeleton_mappings[0] if state.skeleton_mappings else None
-                if mapping is not None:
-                    row = box_mapping.row(align=True)
-                    row.label(text=f"源: {mapping.source_skeleton} ({mapping.source_count})")
-                    row.label(text=f"目标: {mapping.target_armature.name if mapping.target_armature else '未指定'}")
-                box_mapping.prop(state, "skeleton_compatibility_mode", text=t("兼容策略"))
-
-            if (
-                getattr(state, "skeleton_compatibility_mode", "strict") == "name_retarget"
-                or any(
-                    getattr(mapping, "compatibility_mode", "strict") == "name_retarget"
-                    for mapping in state.skeleton_mappings
-                )
-            ):
-                warning = layout.box()
-                warning.label(text=t("已显式启用按名称兼容"), icon='ERROR')
-                warning.label(text=t("仅绑定同名骨骼；跳过源骨架独有骨骼。"))
-                warning.label(text=t("这不是完整的 Unreal Retarget Manager/参考姿势重定向。"))
+            _draw_pipeline_mapping(layout, context, state)
 
             # Import params
             box_import = layout.box()
@@ -541,7 +561,7 @@ class FMODEL_PT_Pipeline(bpy.types.Panel):
             layout.separator()
             row = layout.row(align=True)
             row.scale_y = 1.3
-            mappings_ready = state.scan_skeleton_count <= 1 or any(
+            mappings_ready = bool(state.skeleton_mappings) and all(
                 mapping.target_armature for mapping in state.skeleton_mappings
             )
             target_ready = (
@@ -550,13 +570,20 @@ class FMODEL_PT_Pipeline(bpy.types.Panel):
             )
             row.enabled = target_ready and not state.lib_completed
             row.operator("pipeline.wizard_step4", text=t("导入并打包"), icon='IMPORT')
-            row = layout.row(align=True)
-            row.scale_y = 1.0
-            row.enabled = state.lib_completed
-            row.operator("pipeline.rebake_thumbnails", text=t("重新生成缩略图"), icon='RENDER_STILL')
 
         layout.separator()
         layout.operator("pipeline.wizard_reset", text=t("重新开始"), icon='FILE_REFRESH')
+
+
+def _load_current_pipeline_context(context):
+    from .core import PipelineContext
+    state = getattr(context.scene, "pipeline_wizard", None)
+    output_dir = getattr(state, "output_dir", "")
+    if output_dir:
+        output_dir = bpy.path.abspath(output_dir)
+        return (PipelineContext.load_from_checkpoint(output_dir)
+                or PipelineContext.load_from_blender_text(output_dir=output_dir))
+    return PipelineContext.load_from_blender_text()
 
 
 class FMODEL_PT_PipelineDebug(bpy.types.Panel):
@@ -565,17 +592,16 @@ class FMODEL_PT_PipelineDebug(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'FModel'
-    bl_parent_id = "FMODEL_PT_pipeline"
+    bl_parent_id = "FMODEL_PT_diagnostics"
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout
-        from .core import PipelineContext
         row_ops = layout.row(align=True)
         row_ops.operator("pipeline.export_context_json", text=t("导出上下文"), icon='EXPORT')
-        row_ops.operator("pipeline.clear_context", text=t("清空上下文"), icon='TRASH')
+        row_ops.operator("pipeline.clear_context", text=t("清除旧版场景缓存"), icon='TRASH')
         layout.separator()
-        ctx = PipelineContext.load_from_blender_text()
+        ctx = _load_current_pipeline_context(context)
         if ctx:
             layout.label(text=f"状态: {ctx.current_stage}")
             if ctx.config and ctx.config.get("source_dir"):
@@ -587,7 +613,8 @@ class FMODEL_PT_PipelineDebug(bpy.types.Panel):
 # ============================================================
 
 class FMODEL_PT_GeneralTools(bpy.types.Panel):
-    bl_label = "拓展工具"
+    bl_label = "辅助工具"
+    bl_order = 5
     bl_idname = "FMODEL_PT_general_tools"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -676,7 +703,7 @@ class FMODEL_PT_Animation(bpy.types.Panel):
         layout = self.layout
 
         box_bake = layout.box()
-        box_bake.label(text=t("烘焙工具"), icon='ARMATURE_DATA')
+        box_bake.label(text=t("动画清理"), icon='ARMATURE_DATA')
         col_bake = box_bake.column(align=True)
         col_bake.scale_y = 1.2
         col_bake.operator("fmodel.clean_all_actions", text=t("清理动画数据"), icon='TRASH')
@@ -688,25 +715,25 @@ class FMODEL_PT_Animation(bpy.types.Panel):
 # ============================================================
 
 class FMODEL_PT_AssetLibrary(bpy.types.Panel):
-    bl_label = "资产库"
+    bl_label = "资产浏览"
+    bl_order = 3
     bl_idname = "FMODEL_PT_asset_library"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'FModel'
-    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
-        pass
+        self.layout.prop(context.scene.fmodel_workflow, "asset_kind", expand=True)
 
 
 class FMODEL_PT_LibrarySettings(bpy.types.Panel):
     """资产库设置"""
-    bl_label = "资产库设置"
+    bl_label = "保存与库管理"
+    bl_order = 4
     bl_idname = "FMODEL_PT_library_settings"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'FModel'
-    bl_parent_id = "FMODEL_PT_asset_library"
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
@@ -723,12 +750,18 @@ class FMODEL_PT_LibrarySettings(bpy.types.Panel):
         props = context.scene.fmodel_assets
         manager = context.scene.fmodel_anim_manager
 
+        publish = layout.box()
+        publish.label(text=t("保存资产"), icon='EXPORT')
+        publish.operator("fmodel.save_model", text=t("保存目标模型"), icon='MESH_DATA')
+        publish.operator("fmodel.save_pose_library", text=t("保存姿势源库"), icon='POSE_HLT')
+        publish.operator("fmodel.open_workflow", text=t("从动画文件夹建立库"), icon='PACKAGE').destination = 'BUILD'
+        layout.separator()
         row = layout.row()
         row.template_list(
-            "ASSETS_UL_LibraryTree", "",
-            manager, "tree_items",
-            manager, "active_library_index",
-            rows=8
+            "ASSETS_UL_ProjectLibraries", "",
+            props, "project_libs",
+            props, "active_lib_index",
+            rows=3
         )
         col_btns = row.column(align=True)
         col_btns.operator("fmodel.add_library", text="", icon='ADD')
@@ -739,6 +772,19 @@ class FMODEL_PT_LibrarySettings(bpy.types.Panel):
         col_btns.separator()
         col_btns.operator("fmodel.open_lib_folder", text="", icon='SCREEN_BACK')
 
+        if 0 <= props.active_lib_index < len(props.project_libs):
+            library = props.project_libs[props.active_lib_index]
+            layout.prop(library, "name", text=t("库名称"))
+            layout.prop(library, "path", text=t("路径"))
+            if not library.path or not os.path.exists(bpy.path.abspath(library.path)):
+                layout.label(text=t("请选择有效的资产库路径"), icon='ERROR')
+        if manager.tree_items:
+            layout.label(text=t("扫描内容"))
+            layout.template_list(
+                "ASSETS_UL_LibraryTree", "", manager, "tree_items",
+                manager, "active_library_index", rows=5,
+            )
+
         layout.separator()
         row_scan = layout.row(align=True)
         row_scan.scale_y = 1.2
@@ -746,12 +792,16 @@ class FMODEL_PT_LibrarySettings(bpy.types.Panel):
         row_scan.operator("fmodel.scan_local_anims", text=t("本地"), icon='FILE_REFRESH')
 
         layout.separator()
-        row_build = layout.row(align=True)
-        row_build.operator("fmodel.build_anim_library", text=t("单骨架快速打包"), icon='PACKAGE')
+        header, maintenance = layout.panel("fmodel_library_maintenance", default_closed=True)
+        header.label(text=t("库维护"), icon='TOOL_SETTINGS')
+        if maintenance is None:
+            return
+        layout = maintenance
 
         repair = layout.row(align=True)
         repair.operator("fmodel.repair_library_metadata", text="修复缺失动画元数据", icon='TOOL_SETTINGS')
-        repair.label(text="不修改 .blend", icon='LOCKED')
+        layout.operator("pipeline.rebake_thumbnails", text=t("重建库与缩略图"), icon='RENDER_STILL')
+        layout.label(text=t("重建会重新发布动画库文件"), icon='INFO')
 
         row_mount = layout.row(align=True)
         row_mount.operator("fmodel.mount_all_libs", text=t("挂载到 Blender"), icon='LINKED')
@@ -773,7 +823,6 @@ def _model_draw_panel(self, context):
     # ── Actions ──
     row = layout.row(align=True)
     row.scale_y = 1.3
-    row.operator("fmodel.save_model", text=t("保存模型"), icon='EXPORT')
     row.operator("fmodel.open_model_selector", text=t("浏览导入"), icon='IMPORT')
     row.operator("fmodel.refresh_model_browser", text="", icon='FILE_REFRESH')
 
@@ -787,7 +836,8 @@ def _model_draw_panel(self, context):
     layout.separator()
 
     # ── Model list ──
-    models = _scan_models(context)
+    layout.prop(props, "search", text="", icon='VIEWZOOM')
+    models = [m for m in _scan_models(context) if props.search.casefold() in m["name"].casefold()]
     if not models:
         layout.label(text=t("未保存模型"), icon='INFO')
         return
@@ -824,12 +874,15 @@ def _model_draw_panel(self, context):
         op_imp = row_ops.operator("fmodel.import_model_from_browser", text=t("导入"), icon='IMPORT')
         op_imp.model_name = selected_model["name"]
         op_imp.model_dir = selected_model["path"]
-        op_del = row_ops.operator("fmodel.delete_model", text=t("删除"), icon='TRASH')
-        op_del.model_name = selected_model["name"]
-        op_del.model_dir = selected_model["path"]
+        header, more = layout.panel("fmodel_model_more", default_closed=True)
+        header.label(text=t("更多操作"))
+        if more:
+            op_del = more.operator("fmodel.delete_model", text=t("删除磁盘模型文件"), icon='TRASH')
+            op_del.model_name = selected_model["name"]
+            op_del.model_dir = selected_model["path"]
 
     # ── Grid ──
-    col_count = 3
+    col_count = max(1, min(3, int(getattr(context.region, "width", 320) / 150)))
     for i in range(0, len(models), col_count):
         row_cards = layout.row(align=True)
         for j in range(col_count):
@@ -855,7 +908,11 @@ class FMODEL_PT_ModelAssets(bpy.types.Panel):
     bl_region_type = 'UI'
     bl_category = 'FModel'
     bl_parent_id = "FMODEL_PT_asset_library"
-    bl_options = {'DEFAULT_CLOSED'}
+    bl_options = {'HIDE_HEADER'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.fmodel_workflow.asset_kind == 'MODEL'
 
     def draw(self, context):
         _model_draw_panel(self, context)
@@ -868,7 +925,11 @@ class FMODEL_PT_AnimationAssets(bpy.types.Panel):
     bl_region_type = 'UI'
     bl_category = 'FModel'
     bl_parent_id = "FMODEL_PT_asset_library"
-    bl_options = {'DEFAULT_CLOSED'}
+    bl_options = {'HIDE_HEADER'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.fmodel_workflow.asset_kind == 'ANIMATION'
 
     def draw(self, context):
         layout = self.layout
@@ -878,6 +939,10 @@ class FMODEL_PT_AnimationAssets(bpy.types.Panel):
             return
 
         manager = context.scene.fmodel_anim_manager
+        row = layout.row(align=True)
+        row.operator("fmodel.scan_anims", text=t("扫描资产库"), icon='VIEWZOOM')
+        row.operator("fmodel.scan_local_anims", text=t("场景动作"), icon='FILE_REFRESH')
+        layout.prop(manager, "library_scope", text=t("浏览范围"))
         anim_count = sum(1 for it in manager.tree_items if it.item_type == 'ANIM')
         if anim_count == 0:
             box = layout.box()
@@ -894,204 +959,189 @@ class FMODEL_PT_AnimationAssets(bpy.types.Panel):
             op.value = ""
 
         if manager.search_filter:
-            count = sum(
-                1 for it in manager.tree_items
-                if it.item_type == 'ANIM' and manager.search_filter.lower() in it.name.lower()
-                and (manager.active_skeleton in ("ALL", "NONE") or it.skeleton == manager.active_skeleton)
-            )
+            count = len(ui_custom_grid.visible_animation_indices(manager))
             layout.label(text=f"{count} 个匹配", icon='INFO')
 
 
-class FMODEL_PT_AnimDisplay(bpy.types.Panel):
-    bl_label = "显示设置"
-    bl_idname = "FMODEL_PT_anim_display"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = 'FModel'
-    bl_parent_id = "FMODEL_PT_animation_assets"
-    bl_options = {'DEFAULT_CLOSED'}
-
-    def draw(self, context):
-        layout = self.layout
-        if not hasattr(context.scene, "fmodel_anim_manager"):
-            return
-        manager = context.scene.fmodel_anim_manager
-        row_mode = layout.row(align=True)
-        row_mode.prop(manager, "display_mode", expand=True)
-        layout.separator()
-        row_method = layout.row(align=True)
-        row_method.prop(manager, "import_mode", text="")
-        row_method.prop(manager, "apply_method", text="")
-        row_view = layout.row(align=True)
-        row_view.prop(manager, "show_as_grid", icon='MESH_GRID', text="卡片视图", toggle=True)
-        row_params = layout.row(align=True)
-        row_params.prop(manager, "list_rows", text="行")
-        row_col = row_params.row(align=True)
-        row_col.enabled = manager.display_mode == 'DETAIL_V' and manager.show_as_grid
-        row_col.prop(manager, "grid_columns", text="列")
-        row_scale = row_params.row(align=True)
-        row_scale.enabled = manager.show_as_grid
-        row_scale.prop(manager, "grid_icon_scale", text="缩放", slider=True)
-        if manager.display_mode == 'DETAIL_H':
-            layout.prop(manager, "split_factor", text="分栏", slider=True)
+        header, body = layout.panel("fmodel_browser_display", default_closed=True)
+        header.label(text=t("显示设置"), icon='PREFERENCES')
+        if body:
+            _draw_animation_display(body, context)
+        _draw_animation_list(layout, context)
+        _draw_animation_detail(layout, context)
+        _draw_animation_actions(layout, context)
 
 
-class FMODEL_PT_AnimList(bpy.types.Panel):
-    """动画列表与播放"""
-    bl_label = "动画列表"
-    bl_idname = "FMODEL_PT_anim_list"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = 'FModel'
-    bl_parent_id = "FMODEL_PT_animation_assets"
-    bl_options = {'DEFAULT_CLOSED'}
+def _draw_animation_actions(layout, context):
+    manager = context.scene.fmodel_anim_manager
+    target = resolve_target(context)
+    box = layout.box()
+    box.label(text=f"{t('目标骨架')}: {target.name if target else t('未指定')}", icon='ARMATURE_DATA')
+    box.prop(manager, "import_mode", text=t("动作数据"))
+    selected = (0 <= manager.active_item_index < len(manager.tree_items)
+                and manager.active_item_index in ui_custom_grid.visible_animation_indices(manager))
+    row = box.row()
+    row.scale_y = 1.25
+    row.enabled = selected and target is not None
+    row.operator("fmodel.apply_anim", text=t("应用到骨架"), icon='IMPORT').apply_method_override = 'REPLACE'
+    header, nla = layout.panel("fmodel_nla_options", default_closed=True)
+    header.label(text=t("插入 NLA"), icon='NLA')
+    if nla:
+        nla.prop(manager, "nla_insert_mode")
+        if manager.nla_insert_mode == 'OVERWRITE_TRACK':
+            nla.label(text=t("已有重叠条带时拒绝插入"), icon='INFO')
+        nla.prop(manager, "nla_auto_focus_new_strip")
+        row = nla.row()
+        row.enabled = selected and target is not None
+        row.operator("fmodel.apply_anim", text=t("插入 NLA"), icon='NLA').apply_method_override = 'APPEND_NLA'
 
-    def draw(self, context):
-        layout = self.layout
-        manager = getattr(context.scene, "fmodel_anim_manager", None)
-        if not manager:
-            return
 
-        self._draw_anim_list(layout, context, manager)
+def _draw_animation_display(layout, context):
+    if not hasattr(context.scene, "fmodel_anim_manager"):
+        return
+    manager = context.scene.fmodel_anim_manager
+    row_mode = layout.row(align=True)
+    row_mode.prop(manager, "display_mode", expand=True)
+    layout.separator()
+    row_view = layout.row(align=True)
+    row_view.enabled = manager.display_mode != 'TREE'
+    row_view.prop(manager, "show_as_grid", icon='MESH_GRID', text="卡片视图", toggle=True)
+    row_params = layout.row(align=True)
+    row_params.prop(manager, "list_rows", text=t("列表行"))
+    row_col = layout.row(align=True)
+    row_col.enabled = manager.display_mode != 'TREE' and manager.show_as_grid
+    row_col.prop(manager, "grid_columns", text="列")
+    row_col.prop(manager, "grid_row_count", text=t("网格行"))
+    row_col.prop(manager, "grid_icon_scale", text="缩放", slider=True)
+    if manager.display_mode == 'DETAIL_H':
+        layout.prop(manager, "split_factor", text="分栏", slider=True)
+    layout.separator()
 
-        layout.separator()
-        row = layout.row(align=True)
-        row.scale_y = 1.2
-        op = row.operator("screen.frame_jump", text="", icon='REW')
-        op.end = False
-        row.operator("screen.animation_play", text="", icon='PAUSE' if context.screen.is_animation_playing else 'PLAY')
-        row.prop(context.scene, "frame_current", text="", slider=True)
 
-        col = layout.column(align=True)
-        col.scale_y = 1.3
-        col.operator("fmodel.apply_anim", text=t("应用到骨架"), icon='IMPORT')
+def _draw_animation_list(layout, context):
+    manager = getattr(context.scene, "fmodel_anim_manager", None)
+    if not manager:
+        return
 
-    def _draw_anim_list(self, layout, context, manager):
-        active_folder_id = ""
-        active_skel = ""
-        if manager.tree_items and manager.active_folder_index < len(manager.tree_items):
-            sel_item = manager.tree_items[manager.active_folder_index]
-            if sel_item.item_type == 'FOLDER':
-                active_folder_id = sel_item.node_id
-                active_skel = sel_item.skeleton
+    _draw_anim_list(layout, context, manager)
 
-        if manager.display_mode == 'TREE':
-            layout.template_list(
-                "ASSETS_UL_AnimTree", "",
+    layout.separator()
+    row = layout.row(align=True)
+    row.scale_y = 1.2
+    op = row.operator("screen.frame_jump", text="", icon='REW')
+    op.end = False
+    row.operator("screen.animation_play", text="", icon='PAUSE' if getattr(context.screen, "is_animation_playing", False) else 'PLAY')
+    row.prop(context.scene, "frame_current", text="", slider=True)
+
+
+
+def _draw_anim_list(layout, context, manager):
+    active_folder_id, active_skel = ui_custom_grid.selected_folder(manager)
+
+    if manager.display_mode == 'TREE':
+        layout.template_list(
+            "ASSETS_UL_AnimTree", "",
+            manager, "tree_items",
+            manager, "active_item_index",
+            rows=manager.list_rows
+        )
+    elif manager.display_mode == 'DETAIL_H':
+        box_split = layout.box()
+        split = box_split.split(factor=manager.split_factor)
+        col_l = split.column()
+        col_l.label(text=t("文件夹"), icon='FILE_FOLDER')
+        col_l.template_list(
+            "ASSETS_UL_FolderTree", "",
+            manager, "tree_items",
+            manager, "active_folder_index",
+            rows=manager.list_rows
+        )
+        col_r = split.column()
+        col_r.label(text=t("动画"), icon='ANIM_DATA')
+        v_idxs = _get_visible_anims(manager, active_folder_id, active_skel)
+        if manager.show_as_grid:
+            ui_custom_grid.FModelCustomGrid.draw(
+                col_r, context, manager, v_idxs,
+                _draw_grid_card, _draw_empty_card
+            )
+        else:
+            col_r.template_list(
+                "ASSETS_UL_AnimGrid", "",
                 manager, "tree_items",
                 manager, "active_item_index",
                 rows=manager.list_rows
             )
-        elif manager.display_mode == 'DETAIL_H':
-            box_split = layout.box()
-            split = box_split.split(factor=manager.split_factor)
-            col_l = split.column()
-            col_l.label(text=t("文件夹"), icon='FILE_FOLDER')
-            col_l.template_list(
-                "ASSETS_UL_FolderTree", "",
-                manager, "tree_items",
-                manager, "active_folder_index",
-                rows=manager.list_rows
+    elif manager.display_mode == 'DETAIL_V':
+        col = layout.column(align=True)
+        col.template_list(
+            "ASSETS_UL_FolderTree", "",
+            manager, "tree_items",
+            manager, "active_folder_index",
+            rows=manager.list_rows
+        )
+        col.separator(factor=1.5)
+        v_idxs = _get_visible_anims(manager, active_folder_id, active_skel)
+        if manager.show_as_grid:
+            ui_custom_grid.FModelCustomGrid.draw(
+                col, context, manager, v_idxs,
+                _draw_grid_card, _draw_empty_card
             )
-            col_r = split.column()
-            col_r.label(text=t("动画"), icon='ANIM_DATA')
-            v_idxs = _get_visible_anims(manager, active_folder_id, active_skel)
-            if manager.show_as_grid:
-                from .Assets.Anims import ui_custom_grid
-                ui_custom_grid.FModelCustomGrid.draw(
-                    col_r, context, manager, v_idxs,
-                    _draw_grid_card, _draw_empty_card
-                )
-            else:
-                col_r.template_list(
-                    "ASSETS_UL_AnimGrid", "",
-                    manager, "tree_items",
-                    manager, "active_item_index",
-                    rows=manager.list_rows
-                )
-        elif manager.display_mode == 'DETAIL_V':
-            col = layout.column(align=True)
-            col.template_list(
-                "ASSETS_UL_FolderTree", "",
-                manager, "tree_items",
-                manager, "active_folder_index",
-                rows=manager.list_rows
-            )
-            col.separator(factor=1.5)
-            v_idxs = _get_visible_anims(manager, active_folder_id, active_skel)
-            if manager.show_as_grid:
-                from .Assets.Anims import ui_custom_grid
-                ui_custom_grid.FModelCustomGrid.draw(
-                    col, context, manager, v_idxs,
-                    _draw_grid_card, _draw_empty_card
-                )
-            else:
-                col.template_list(
-                    "ASSETS_UL_AnimGrid", "",
-                    manager, "tree_items",
-                    manager, "active_item_index",
-                    rows=manager.list_rows
-                )
-
-
-class FMODEL_PT_AnimDetail(bpy.types.Panel):
-    """动画详情"""
-    bl_label = "详情"
-    bl_idname = "FMODEL_PT_anim_detail"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = 'FModel'
-    bl_parent_id = "FMODEL_PT_animation_assets"
-    bl_options = {'DEFAULT_CLOSED'}
-
-    def draw(self, context):
-        layout = self.layout
-        manager = getattr(context.scene, "fmodel_anim_manager", None)
-        if not manager:
-            return
-
-        if not manager.tree_items or manager.active_item_index >= len(manager.tree_items):
-            layout.label(text=t("选择一个动画"), icon='INFO')
-            return
-
-        item = manager.tree_items[manager.active_item_index]
-        if item.item_type != 'ANIM':
-            layout.label(text=t("选择一个动画"), icon='INFO')
-            return
-
-        from .Assets.Anims.anim_manager import get_custom_icon
-
-        # ── Upper: preview image ──
-        box_img = layout.box()
-        col_img = box_img.column(align=True)
-        col_img.scale_y = 1.2
-        icon_id = get_custom_icon(item.thumb_path, item.blend_path)
-        if icon_id:
-            icon_row = col_img.row(align=True)
-            icon_row.alignment = 'CENTER'
-            icon_row.template_icon(icon_value=icon_id, scale=8.0)
         else:
-            icon_row = col_img.row(align=True)
-            icon_row.alignment = 'CENTER'
-            icon_row.label(text=t("无预览图"), icon='IMAGE_DATA')
+            col.template_list(
+                "ASSETS_UL_AnimGrid", "",
+                manager, "tree_items",
+                manager, "active_item_index",
+                rows=manager.list_rows
+            )
 
-        # ── Lower: details ──
-        box_info = layout.box()
-        col_info = box_info.column(align=True)
-        col_info.scale_y = 0.9
-        col_info.label(text=item.name, icon='ANIM_DATA')
 
-        act = inspect_action_metadata(item)
-        if act and act.frame_range:
-            frames = int(act.frame_range[1] - act.frame_range[0])
-            fps = context.scene.render.fps
-            duration = frames / fps if fps > 0 else 0
-            col_info.label(text=f"帧数: {frames} ({duration:.1f}s @ {fps}fps)")
-        col_info.label(text=f"骨架: {item.skeleton}")
+def _draw_animation_detail(layout, context):
+    manager = getattr(context.scene, "fmodel_anim_manager", None)
+    if not manager:
+        return
 
-        if item.blend_path:
-            import os
-            col_info.label(text=f"源: {os.path.basename(item.blend_path)}")
+    if not 0 <= manager.active_item_index < len(manager.tree_items):
+        layout.label(text=t("选择一个动画"), icon='INFO')
+        return
+
+    item = manager.tree_items[manager.active_item_index]
+    if (item.item_type != 'ANIM' or manager.active_item_index not in ui_custom_grid.visible_animation_indices(manager)):
+        layout.label(text=t("选择一个动画"), icon='INFO')
+        return
+
+    from .Assets.Anims.anim_manager import get_custom_icon
+
+    # ── Upper: preview image ──
+    box_img = layout.box()
+    col_img = box_img.column(align=True)
+    col_img.scale_y = 1.2
+    icon_id = get_custom_icon(item.thumb_path, item.blend_path)
+    if icon_id:
+        icon_row = col_img.row(align=True)
+        icon_row.alignment = 'CENTER'
+        icon_row.template_icon(icon_value=icon_id, scale=8.0)
+    else:
+        icon_row = col_img.row(align=True)
+        icon_row.alignment = 'CENTER'
+        icon_row.label(text=t("无预览图"), icon='IMAGE_DATA')
+
+    # ── Lower: details ──
+    box_info = layout.box()
+    col_info = box_info.column(align=True)
+    col_info.scale_y = 0.9
+    col_info.label(text=item.name, icon='ANIM_DATA')
+
+    act = inspect_action_metadata(item)
+    if act and act.frame_range:
+        frames = int(act.frame_range[1] - act.frame_range[0])
+        fps = context.scene.render.fps / max(context.scene.render.fps_base, 0.0001)
+        duration = frames / fps if fps > 0 else 0
+        col_info.label(text=f"帧数: {frames} ({duration:.1f}s @ {fps}fps)")
+    col_info.label(text=f"骨架: {item.skeleton}")
+
+    if item.blend_path:
+        import os
+        col_info.label(text=f"源: {os.path.basename(item.blend_path)}")
 
 
 # ============================================================
@@ -1103,17 +1153,13 @@ _VISIBLE_ANIMS_CACHE = {}
 
 def _get_visible_anims(manager, active_folder_id, active_skel):
     search = manager.search_filter.lower().strip()
-    key = (id(manager), manager.tree_revision, active_folder_id, active_skel, search)
+    key = (id(manager), manager.tree_revision, active_folder_id, active_skel, manager.active_skeleton, search,
+           getattr(manager, "library_scope", "ALL"), getattr(manager, "active_library_index", -1))
     cached = _VISIBLE_ANIMS_CACHE.get(key)
     if cached is not None:
         return cached
 
-    visible = [
-        i for i, it in enumerate(manager.tree_items)
-        if it.item_type == 'ANIM' and it.parent_id == active_folder_id
-        and it.skeleton == active_skel
-        and (not search or search in it.name.lower())
-    ]
+    visible = ui_custom_grid.visible_animation_indices(manager, active_folder_id, active_skel)
     _VISIBLE_ANIMS_CACHE.clear()
     _VISIBLE_ANIMS_CACHE[key] = visible
     return visible
@@ -1134,16 +1180,7 @@ def _draw_grid_card(ctx, col_layout, item, item_idx, is_active, mgr):
     name_row.alignment = 'CENTER'
     op_sel = name_row.operator("fmodel.select_grid_item", text=item.name, emboss=False)
     op_sel.target_index = item_idx
-    ops = card_col.row(align=True)
-    ops.alignment = 'CENTER'
-    op_prev = ops.operator("fmodel.preview_anim", text="预览", icon='RESTRICT_VIEW_OFF')
-    op_prev.target_node_id = item.node_id
-    op_app = ops.operator("fmodel.apply_anim", text="应用", icon='IMPORT')
-    op_prev.target_skeleton = item.skeleton
-    op_prev.source_key = item.source_key
-    op_app.target_node_id = item.node_id
-    op_app.target_skeleton = item.skeleton
-    op_app.source_key = item.source_key
+
 
 
 def _draw_empty_card(ctx, col_layout, mgr):
@@ -1217,6 +1254,7 @@ class FMODEL_OT_RemoveLibrary(bpy.types.Operator):
         props = context.scene.fmodel_assets
         if not (0 <= props.active_lib_index < len(props.project_libs)):
             return {'CANCELLED'}
+        invalidate_library_scan(context)
         props.project_libs.remove(props.active_lib_index)
         props.active_lib_index = min(props.active_lib_index, len(props.project_libs) - 1)
         props.active_lib_index = max(0, props.active_lib_index)
@@ -1226,13 +1264,14 @@ class FMODEL_OT_RemoveLibrary(bpy.types.Operator):
 
 class PIPELINE_OT_ClearContext(bpy.types.Operator):
     bl_idname = "pipeline.clear_context"
-    bl_label = "清空管线上下文"
+    bl_label = "清除旧版场景缓存"
+    bl_description = "仅清除场景内旧版 PipelineContext 文本缓存；磁盘检查点保留"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
         from .core import PipelineContext
         PipelineContext.clear_blender_text()
-        self.report({'INFO'}, "已清空 PipelineContext")
+        self.report({'INFO'}, "已清除旧版场景缓存；磁盘检查点保留")
         return {'FINISHED'}
 
 
@@ -1249,8 +1288,7 @@ class PIPELINE_OT_ExportContextJson(bpy.types.Operator, ExportHelper):
         return super().invoke(context, event)
 
     def execute(self, context):
-        from .core import PipelineContext
-        ctx = PipelineContext.load_from_blender_text()
+        ctx = _load_current_pipeline_context(context)
         if not ctx:
             self.report({'ERROR'}, "没有可导出的 PipelineContext")
             return {'CANCELLED'}
@@ -1281,16 +1319,15 @@ _classes = (
     PIPELINE_OT_ClearContext,
     PIPELINE_OT_ExportContextJson,
     PIPELINE_OT_PickSkeleton,
+    FMODEL_PT_WorkContext,
     FMODEL_PT_Toolbox,
+    FMODEL_PT_Diagnostics,
     FMODEL_PT_Pipeline,
     FMODEL_PT_PipelineDebug,
     FMODEL_PT_AssetLibrary,
     FMODEL_PT_LibrarySettings,
     FMODEL_PT_ModelAssets,
     FMODEL_PT_AnimationAssets,
-    FMODEL_PT_AnimDisplay,
-    FMODEL_PT_AnimList,
-    FMODEL_PT_AnimDetail,
     FMODEL_PT_GeneralTools,
     FMODEL_PT_Mesh,
     FMODEL_PT_Skeleton,

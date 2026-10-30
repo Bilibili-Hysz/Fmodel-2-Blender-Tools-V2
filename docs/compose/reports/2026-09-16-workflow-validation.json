@@ -1,0 +1,47 @@
+{
+  "date": "2026-09-16",
+  "scope": "shared work context and panel workflow",
+  "pytest": {
+    "passed": 546,
+    "subtests": 51,
+    "seconds": 24.27
+  },
+  "final_library_selection_regression": {
+    "passed": 30,
+    "subtests": 3
+  },
+  "blender_workflow": {
+    "status": "pass",
+    "blender": "5.2.1 LTS",
+    "checks": [
+      "fixed_target_survives_selection_and_rename",
+      "cleared_or_deleted_target_never_falls_back",
+      "legacy_target_migration_and_pose_property_bridge",
+      "fresh_relative_path_scan_back_navigation_and_build",
+      "library_apply_uses_fixed_target",
+      "library_switch_clears_stale_folder_selection_and_page",
+      "current_library_scope_respects_path_boundaries",
+      "all_panel_modes_and_steps_resolve_registered_rna",
+      "workspace_survives_scene_reload",
+      "registration_and_handler_cleanup"
+    ]
+  },
+  "blender_pose_regression": "passed in Blender 5.2.1",
+  "runtime_python_syntax_files": 145,
+  "vendor_manifest": {
+    "files": 73,
+    "sha256": "8027d2864a74650ad452d88c3a494876c8c0f4534f6c85772fbfd5d3987279d2"
+  },
+  "installation": "dry-run only; workflow_state.py included",
+  "limitations": [
+    "Panel drawing validates registered RNA with recording layouts; no GUI screenshot acceptance.",
+    "Earlier audit issues outside workflow scope remain; see WORKFLOW_ARCHITECTURE_2026-09-16.md."
+  ],
+  "files": {
+    "core/workflow.py": "0b04b52ceb09725434e7eec5fa636dbb2d8175c09f662dc8c6eb71cfb526287a",
+    "workflow_state.py": "6bdb8358726b25840d828435c5d7f44524eaca2d03a6483a8cf02eabbbba068b",
+    "ui.py": "494db07a25bf6f45c0b68399b9455b258b0e81abdc40ce7478ba85ac172f4d28",
+    "scripts/blender_workflow_smoke.py": "325e0f3b1cc7147bea920109ec6738b7d0531fac16ad0e39e43cea63e32818fc",
+    "Assets/Anims/operators_asset.py": "36015413ee849ca327a2cf5d2b41d5a9d991057294eb63e9f323b08dfea280d8"
+  }
+}

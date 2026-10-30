@@ -1,0 +1,387 @@
+{
+  "date": "2026-09-27",
+  "purpose": "Read-only diagnosis of reported dictionary scan failures against local R63 exports",
+  "original_checkpoint": {
+    "path": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Edited_UEformat_Release_2026-09-13_NEWPIPELINE-CANDIDATE-R63_Windows-x64\\Output\\Exports\\WickedIsland\\Assets\\.fmodel_pipeline_checkpoint.json",
+    "sha256": "31e670bf2f03fef85719c67ea4d63a4d1ed87baa0de3b19495b03317f5e5b302",
+    "created_at": "2026-09-27T19:03:54.944788",
+    "config": {
+      "source_dir": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Edited_UEformat_Release_2026-09-13_NEWPIPELINE-CANDIDATE-R63_Windows-x64\\Output\\Exports\\WickedIsland\\",
+      "output_dir": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Edited_UEformat_Release_2026-09-13_NEWPIPELINE-CANDIDATE-R63_Windows-x64\\Output\\Exports\\WickedIsland\\Assets\\",
+      "target_armature": "SM_OgreMale_3_LOD0_Skeleton",
+      "skeleton_filter": "SKEL_Ogre.SKEL_Ogre"
+    },
+    "stage_status": {
+      "dictionary_acquisition": "completed",
+      "format_conversion": "completed",
+      "asset_import": "pending",
+      "library_building": "pending",
+      "finalization": "pending"
+    },
+    "logs": [
+      {
+        "timestamp": "2026-09-27T19:03:54.945002",
+        "stage": "dictionary_acquisition",
+        "level": "info",
+        "message": "开始执行阶段: dictionary_acquisition"
+      },
+      {
+        "timestamp": "2026-09-27T19:03:56.319365",
+        "stage": "dictionary_acquisition",
+        "level": "error",
+        "message": "发现 577 个带内嵌身份的 UEANIM/UEPOSE 文件，但 0 个匹配骨架筛选 'Andariel_LOD0_Skeleton'。mismatch=577, missing=0, invalid=0"
+      },
+      {
+        "timestamp": "2026-09-27T19:03:56.319387",
+        "stage": "dictionary_acquisition",
+        "level": "error",
+        "message": "阶段 dictionary_acquisition 失败"
+      },
+      {
+        "timestamp": "2026-09-27T19:06:27.110316",
+        "stage": "context",
+        "level": "info",
+        "message": "管线配置已更改，已清除过期的执行状态"
+      },
+      {
+        "timestamp": "2026-09-27T19:06:27.110506",
+        "stage": "dictionary_acquisition",
+        "level": "info",
+        "message": "开始执行阶段: dictionary_acquisition"
+      },
+      {
+        "timestamp": "2026-09-27T19:06:28.402048",
+        "stage": "dictionary_acquisition",
+        "level": "info",
+        "message": "成功扫描 4 个 FModel 动画文件；discovered=577, strict=577, mismatch=573, missing=0, invalid=0"
+      },
+      {
+        "timestamp": "2026-09-27T19:06:28.402069",
+        "stage": "dictionary_acquisition",
+        "level": "info",
+        "message": "阶段 dictionary_acquisition 完成"
+      },
+      {
+        "timestamp": "2026-09-27T19:06:28.409551",
+        "stage": "format_conversion",
+        "level": "info",
+        "message": "开始执行阶段: format_conversion"
+      },
+      {
+        "timestamp": "2026-09-27T19:06:28.409561",
+        "stage": "format_conversion",
+        "level": "info",
+        "message": "UEFormat格式无需中转，直接使用"
+      },
+      {
+        "timestamp": "2026-09-27T19:06:28.409565",
+        "stage": "format_conversion",
+        "level": "info",
+        "message": "阶段 format_conversion 完成"
+      },
+      {
+        "timestamp": "2026-09-27T19:09:14.463902",
+        "stage": "context",
+        "level": "info",
+        "message": "管线配置已更改，已清除过期的执行状态"
+      },
+      {
+        "timestamp": "2026-09-27T19:09:14.464100",
+        "stage": "dictionary_acquisition",
+        "level": "info",
+        "message": "开始执行阶段: dictionary_acquisition"
+      },
+      {
+        "timestamp": "2026-09-27T19:09:15.769197",
+        "stage": "dictionary_acquisition",
+        "level": "info",
+        "message": "成功扫描 23 个 FModel 动画文件；discovered=577, strict=577, mismatch=554, missing=0, invalid=0"
+      },
+      {
+        "timestamp": "2026-09-27T19:09:15.769222",
+        "stage": "dictionary_acquisition",
+        "level": "info",
+        "message": "阶段 dictionary_acquisition 完成"
+      },
+      {
+        "timestamp": "2026-09-27T19:09:15.776958",
+        "stage": "format_conversion",
+        "level": "info",
+        "message": "开始执行阶段: format_conversion"
+      },
+      {
+        "timestamp": "2026-09-27T19:09:15.776969",
+        "stage": "format_conversion",
+        "level": "info",
+        "message": "UEFormat格式无需中转，直接使用"
+      },
+      {
+        "timestamp": "2026-09-27T19:09:15.776972",
+        "stage": "format_conversion",
+        "level": "info",
+        "message": "阶段 format_conversion 完成"
+      }
+    ]
+  },
+  "real_export_identity_probe": {
+    "counts": {
+      "version=10;compressed=True;strict_identity=True": 577
+    },
+    "skeleton_counts": {
+      "/Game/Models/Nightmare/SKEL_Nightmare.SKEL_Nightmare": 23,
+      "/Game/_Game/Models/Dicks/Dog/DogDickRig_Skeleton.DogDickRig_Skeleton": 1,
+      "/Game/_Game/Models/Dicks/Horse/Horse_Dick_ready_Skeleton.Horse_Dick_ready_Skeleton": 1,
+      "/Game/_Game/Models/Character/Tentacle/TentacleMonster_Skeleton.TentacleMonster_Skeleton": 3,
+      "/Game/_Game/Models/Character/Werebear/SKEL_Werebear.SKEL_Werebear": 22,
+      "/Game/_Game/Models/Character/Wereboar/SKEL_Wereboar.SKEL_Wereboar": 17,
+      "/Game/_Game/Models/Character/Wolves/Meshes/Wolf_Realistic_Skeleton.Wolf_Realistic_Skeleton": 21,
+      "/Game/_Game/Models/Character/WildlingMale/SKEL_HumanMale.SKEL_HumanMale": 14,
+      "/Game/_Game/Models/Character/Werewolf/SKEL_Werewolf.SKEL_Werewolf": 27,
+      "/Game/_Game/Models/Character/Vampire/Mesh/SK_HarpyVampire_Skeleton.SK_HarpyVampire_Skeleton": 7,
+      "/Game/_Game/Models/Character/UnkaDragon/Meshes/UnkaDragon/SKEL_Dragon.SKEL_Dragon": 12,
+      "/Game/_Game/Models/Character/Troll/SKEL_Troll.SKEL_Troll": 22,
+      "/Game/_Game/Models/Character/Scorpion/InsectBeast2/SkeletalMeshes/Cockroach1_Skeleton.Cockroach1_Skeleton": 6,
+      "/Game/Models/Blender/Male/SKEL_UE4_Male_Satyr.SKEL_UE4_Male_Satyr": 22,
+      "/Game/_Game/Models/Character/RipperGhost/Mesh/SK_RipperGhost_Skeleton.SK_RipperGhost_Skeleton": 6,
+      "/Game/_Game/Models/Character/Reaper/Meshes/SKEL_Reaper.SKEL_Reaper": 18,
+      "/Game/_Game/Models/Character/Rabbit/Mesh/SK_Rabbit_Skeleton.SK_Rabbit_Skeleton": 8,
+      "/Game/_Game/Models/Character/Ogre/SKEL_Ogre.SKEL_Ogre": 23,
+      "/Game/_Game/Models/Character/Minotaur/SKEL_Minotaur.SKEL_Minotaur": 27,
+      "/Game/_Game/Models/Character/Ibex/Meshes/SK_Ibex.SK_Ibex": 3,
+      "/Game/_Game/Models/Character/GiantWasp/AngryWasp/Mesh/CH_AngryWasp.CH_AngryWasp": 4,
+      "/Game/_Game/Models/Character/Drake/drake_dicked_Skeleton.drake_dicked_Skeleton": 28,
+      "/Game/_Game/Models/Character/Boar/Meshes/SK_Boar_Skeleton.SK_Boar_Skeleton": 4,
+      "/Game/_Game/Models/Character/BearMale/Meshes/Skeleton_BearMale.Skeleton_BearMale": 18,
+      "/Game/_Game/Models/Character/BaseFemale/UE5/SKEL_BaseFemale_UE5.SKEL_BaseFemale_UE5": 191,
+      "/Game/_Game/Models/Character/Archdemon/Meshes/SK_Demon_from_Hell_1.SK_Demon_from_Hell_1": 22,
+      "/Game/_Game/Models/Character/AnimalVarietyPack/Pig/Meshes/SK_Pig_Skeleton.SK_Pig_Skeleton": 5,
+      "/Game/_Game/Models/Character/AnimalVarietyPack/DeerStagAndDoe/Meshes/SK_DeerDoe_Skeleton.SK_DeerDoe_Skeleton": 7,
+      "/Game/_Game/Models/Character/AnimalVarietyPack/DeerStagAndDoe/Meshes/SK_DeerStag_Skeleton.SK_DeerStag_Skeleton": 8,
+      "/Game/DazToUnreal/Andariel/Andariel_Skeleton.Andariel_Skeleton": 4,
+      "/Game/Models/Blender/Male/Human/SKEL_BaseMale.SKEL_BaseMale": 3
+    }
+  },
+  "source_comparison": {
+    "core/ueformat_identity_reader.py": {
+      "workspace_sha256": "3825af1b310b1dafc348529ab09b22302ad9de41adb158dbd3a0643351bb455c",
+      "installed_sha256": "3825af1b310b1dafc348529ab09b22302ad9de41adb158dbd3a0643351bb455c"
+    },
+    "core/context.py": {
+      "workspace_sha256": "441bcf05d561865d9103f15ff512ebec0c14dac425804b57e25fd8faf25f4328",
+      "installed_sha256": "441bcf05d561865d9103f15ff512ebec0c14dac425804b57e25fd8faf25f4328"
+    },
+    "Fmodel/Pipeline/steps/step3_scan.py": {
+      "workspace_sha256": "46e87a518a5e8065709a9ad1aa00221af887edb2cfd9faf136dd7219718f8c74",
+      "installed_sha256": "7dd691a17038f41dd5ac6f433be1aac4ec3547ad64480590f9146cc279638d0b"
+    }
+  },
+  "blender_reproductions": [
+    {
+      "label": "installed",
+      "addon_root": "C:\\Users\\86177\\AppData\\Roaming\\Blender Foundation\\Blender\\5.2\\scripts\\addons\\FModel_Tools",
+      "source_root": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Edited_UEformat_Release_2026-09-13_NEWPIPELINE-CANDIDATE-R63_Windows-x64\\Output\\Exports\\WickedIsland",
+      "temporary_output": "C:\\Users\\86177\\AppData\\Local\\Temp\\fmodel-scan-diagnosis-installed-teche1en",
+      "blender": "5.2.1 LTS",
+      "checks": [
+        {
+          "filter": "Andariel_LOD0_Skeleton",
+          "operator_error": "Error: 扫描失败：字典阶段未通过\n",
+          "stage_status": {
+            "dictionary_acquisition": "failed",
+            "format_conversion": "pending",
+            "asset_import": "pending",
+            "library_building": "pending",
+            "finalization": "pending"
+          },
+          "scan_completed": false,
+          "ui_animation_count": 0,
+          "has_legacy_text": false,
+          "disk_animation_count": 0,
+          "latest_logs": [
+            {
+              "timestamp": "2026-09-27T19:16:07.790789",
+              "stage": "dictionary_acquisition",
+              "level": "info",
+              "message": "开始执行阶段: dictionary_acquisition"
+            },
+            {
+              "timestamp": "2026-09-27T19:16:10.083893",
+              "stage": "dictionary_acquisition",
+              "level": "error",
+              "message": "发现 577 个带内嵌身份的 UEANIM/UEPOSE 文件，但 0 个匹配骨架筛选 'Andariel_LOD0_Skeleton'。mismatch=577, missing=0, invalid=0"
+            },
+            {
+              "timestamp": "2026-09-27T19:16:10.083914",
+              "stage": "dictionary_acquisition",
+              "level": "error",
+              "message": "阶段 dictionary_acquisition 失败"
+            }
+          ]
+        },
+        {
+          "filter": "SKEL_Ogre.SKEL_Ogre",
+          "operator_error": "Error: 扫描失败：未生成字典清单\n",
+          "stage_status": {
+            "dictionary_acquisition": "completed",
+            "format_conversion": "completed",
+            "asset_import": "pending",
+            "library_building": "pending",
+            "finalization": "pending"
+          },
+          "scan_completed": false,
+          "ui_animation_count": 0,
+          "has_legacy_text": false,
+          "disk_animation_count": 23,
+          "latest_logs": [
+            {
+              "timestamp": "2026-09-27T19:16:10.096334",
+              "stage": "dictionary_acquisition",
+              "level": "info",
+              "message": "开始执行阶段: dictionary_acquisition"
+            },
+            {
+              "timestamp": "2026-09-27T19:16:11.877817",
+              "stage": "dictionary_acquisition",
+              "level": "info",
+              "message": "成功扫描 23 个 FModel 动画文件；discovered=577, strict=577, mismatch=554, missing=0, invalid=0"
+            },
+            {
+              "timestamp": "2026-09-27T19:16:11.877841",
+              "stage": "dictionary_acquisition",
+              "level": "info",
+              "message": "阶段 dictionary_acquisition 完成"
+            },
+            {
+              "timestamp": "2026-09-27T19:16:11.887339",
+              "stage": "format_conversion",
+              "level": "info",
+              "message": "开始执行阶段: format_conversion"
+            },
+            {
+              "timestamp": "2026-09-27T19:16:11.887350",
+              "stage": "format_conversion",
+              "level": "info",
+              "message": "UEFormat格式无需中转，直接使用"
+            },
+            {
+              "timestamp": "2026-09-27T19:16:11.887354",
+              "stage": "format_conversion",
+              "level": "info",
+              "message": "阶段 format_conversion 完成"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "workspace",
+      "addon_root": "G:\\Blender\\Blender Scripts Github\\FModel-2-Blender-Tools-V2",
+      "source_root": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Edited_UEformat_Release_2026-09-13_NEWPIPELINE-CANDIDATE-R63_Windows-x64\\Output\\Exports\\WickedIsland",
+      "temporary_output": "C:\\Users\\86177\\AppData\\Local\\Temp\\fmodel-scan-diagnosis-workspace-gtfkbvaa",
+      "blender": "5.2.1 LTS",
+      "checks": [
+        {
+          "filter": "Andariel_LOD0_Skeleton",
+          "operator_error": "Error: 扫描失败：字典阶段未通过\n",
+          "stage_status": {
+            "dictionary_acquisition": "failed",
+            "format_conversion": "pending",
+            "asset_import": "pending",
+            "library_building": "pending",
+            "finalization": "pending"
+          },
+          "scan_completed": false,
+          "ui_animation_count": 0,
+          "has_legacy_text": false,
+          "disk_animation_count": 0,
+          "latest_logs": [
+            {
+              "timestamp": "2026-09-27T19:16:24.554222",
+              "stage": "dictionary_acquisition",
+              "level": "info",
+              "message": "开始执行阶段: dictionary_acquisition"
+            },
+            {
+              "timestamp": "2026-09-27T19:16:26.414818",
+              "stage": "dictionary_acquisition",
+              "level": "error",
+              "message": "发现 577 个带内嵌身份的 UEANIM/UEPOSE 文件，但 0 个匹配骨架筛选 'Andariel_LOD0_Skeleton'。mismatch=577, missing=0, invalid=0"
+            },
+            {
+              "timestamp": "2026-09-27T19:16:26.414842",
+              "stage": "dictionary_acquisition",
+              "level": "error",
+              "message": "阶段 dictionary_acquisition 失败"
+            }
+          ]
+        },
+        {
+          "filter": "SKEL_Ogre.SKEL_Ogre",
+          "operator_result": [
+            "FINISHED"
+          ],
+          "stage_status": {
+            "dictionary_acquisition": "completed",
+            "format_conversion": "completed",
+            "asset_import": "pending",
+            "library_building": "pending",
+            "finalization": "pending"
+          },
+          "scan_completed": true,
+          "ui_animation_count": 23,
+          "has_legacy_text": false,
+          "disk_animation_count": 23,
+          "latest_logs": [
+            {
+              "timestamp": "2026-09-27T19:16:26.428835",
+              "stage": "dictionary_acquisition",
+              "level": "info",
+              "message": "开始执行阶段: dictionary_acquisition"
+            },
+            {
+              "timestamp": "2026-09-27T19:16:28.170139",
+              "stage": "dictionary_acquisition",
+              "level": "info",
+              "message": "成功扫描 23 个 FModel 动画文件，0 个姿势资源（通过独立姿势入口导入）；discovered=577, strict=577, mismatch=554, missing=0, invalid=0"
+            },
+            {
+              "timestamp": "2026-09-27T19:16:28.170163",
+              "stage": "dictionary_acquisition",
+              "level": "info",
+              "message": "阶段 dictionary_acquisition 完成"
+            },
+            {
+              "timestamp": "2026-09-27T19:16:28.179290",
+              "stage": "format_conversion",
+              "level": "info",
+              "message": "开始执行阶段: format_conversion"
+            },
+            {
+              "timestamp": "2026-09-27T19:16:28.179300",
+              "stage": "format_conversion",
+              "level": "info",
+              "message": "UEFormat格式无需中转，直接使用"
+            },
+            {
+              "timestamp": "2026-09-27T19:16:28.179304",
+              "stage": "format_conversion",
+              "level": "info",
+              "message": "阶段 format_conversion 完成"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "pytest": {
+    "command": "python -m pytest tests/test_ueformat_identity_reader.py tests/test_pipeline_native_ueformat_scan.py tests/test_pipeline_runner_resume.py -q",
+    "passed": 60,
+    "subtests_passed": 10
+  },
+  "scope_limits": [
+    "No exporter or installed addon files were changed.",
+    "All new Blender scan output was written to separate temporary directories.",
+    "No live scene or preferences were saved.",
+    "Full action import/library publication and GUI rendering were not exercised."
+  ]
+}

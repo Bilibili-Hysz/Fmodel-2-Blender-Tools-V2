@@ -1,0 +1,77 @@
+{
+  "blender": "5.2.1 LTS",
+  "checks": {
+    "register": {
+      "state": "ready",
+      "module_id": "io_scene_ueformat",
+      "source": "bundled",
+      "source_path": "G:\\Blender\\Blender Scripts Github\\FModel-2-Blender-Tools-V2\\vendor\\io_scene_ueformat\\__init__.py",
+      "version": "0.10.0",
+      "capabilities": [
+        "uemodel",
+        "ueanim",
+        "uepose",
+        "fmodel_materials",
+        "fmodel_textures",
+        "strict_animation_skeleton",
+        "strict_pose_skeleton"
+      ],
+      "tree_sha256": "8027d2864a74650ad452d88c3a494876c8c0f4534f6c85772fbfd5d3987279d2",
+      "tree_file_count": 73,
+      "message": "Bundled UEFormat runtime ready"
+    },
+    "skeleton_without_mesh": {
+      "bones": 3,
+      "mesh_count": 0,
+      "outcome": "AssertionError"
+    },
+    "multiple_meshes": {
+      "source_pose_names": [
+        "BonePose"
+      ],
+      "mesh_results": {
+        "MultipleMesh_Mesh": [
+          "Basis",
+          "BonePose"
+        ],
+        "MultipleMesh_Second": []
+      },
+      "armature_actions": []
+    },
+    "unweighted_bone_pose": {
+      "input_bones": [
+        "helper"
+      ],
+      "returned": null,
+      "shape_keys": [
+        "Basis"
+      ],
+      "actions_created": []
+    },
+    "mixed_bones_and_curves": {
+      "source_pose_count": 1,
+      "source_curve_mapping": {
+        "Smile": 0.75
+      },
+      "shape_keys": [
+        "Basis",
+        "Smile",
+        "Expression",
+        "curve_Expression"
+      ],
+      "mesh_custom_properties": [],
+      "shape_key_datablock_properties": []
+    },
+    "unmatched_curve_operator": {
+      "operator": [
+        "FINISHED"
+      ],
+      "input_curve": "MaterialParameter",
+      "shape_keys": [
+        "Basis"
+      ],
+      "actions": []
+    },
+    "unregister": "completed"
+  }
+}

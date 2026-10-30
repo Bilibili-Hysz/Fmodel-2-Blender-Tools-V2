@@ -59,6 +59,43 @@ def test_automatic_handoff_forces_fmodel_defaults_and_clears_once():
     assert_cleared(state)
 
 
+def test_canonical_skeleton_path_overrides_stale_display_alias():
+    state_module = load_state()
+    state_module.skeleton_provenance_from_owner = lambda armature: types.SimpleNamespace(
+        is_strict=True, is_legacy=False,
+        identity={"skeleton_path": "/Game/Characters/Andariel_Skeleton.Andariel_Skeleton"},
+    )
+    state = completed_state()
+    armature = types.SimpleNamespace(
+        name="Andariel_LOD0_Skeleton", type="ARMATURE",
+        get=lambda key, default="": "Andariel_LOD0_Skeleton" if key == "FModel_Skeleton" else default,
+    )
+
+    assert state_module.handoff_armature(state, armature, "C:/Project", automatic=True)
+    assert state.skeleton_filter == "Andariel_Skeleton.Andariel_Skeleton"
+    assert state.import_target_skeleton == "Andariel_LOD0_Skeleton"
+    assert state.library_name == "Andariel_Skeleton.Andariel_Skeleton"
+
+
+def test_unknown_or_invalid_identity_never_uses_object_name_as_source_filter():
+    state_module = load_state()
+    state = completed_state()
+    armature = types.SimpleNamespace(
+        name="DisplayRig", type="ARMATURE", get=lambda key, default="": default,
+    )
+    assert state_module.handoff_armature(state, armature, "C:/Project", automatic=True)
+    assert state.skeleton_filter == ""
+    assert state.library_name == "DisplayRig"
+    assert state.output_dir == os.path.join("C:/Project", ".fmodel", "animation-libraries", "DisplayRig")
+
+    state_module.skeleton_provenance_from_owner = lambda selected: types.SimpleNamespace(
+        is_strict=False, is_legacy=False, identity=None,
+    )
+    armature.get = lambda key, default="": "StaleAlias" if key == "FModel_Skeleton" else default
+    assert state_module.handoff_armature(state, armature, "C:/Project", automatic=True) is False
+    assert state.skeleton_filter == ""
+
+
 def test_source_or_skeleton_input_reset_clears_all_derived_results():
     state_module = load_state()
     state = completed_state()

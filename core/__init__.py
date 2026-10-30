@@ -15,7 +15,7 @@ from .enums import (
     ItemType, ApplyMethod,
     UEFORMAT_SOURCE_TYPE, UEFORMAT_IMPORT_MODE, UEFORMAT_IMPORT_MODES,
     normalize_ueformat_pipeline_config,
-    SKELETON_COMPATIBILITY_STRICT, SKELETON_COMPATIBILITY_NAME_RETARGET,
+    SKELETON_COMPATIBILITY_UEFORMAT, SKELETON_COMPATIBILITY_STRICT, SKELETON_COMPATIBILITY_NAME_RETARGET,
     SKELETON_COMPATIBILITY_MODES, SKELETON_COMPATIBILITY_ITEMS,
     skeleton_names_match, normalize_skeleton_compatibility_mode,
     is_name_based_compatibility,
@@ -62,6 +62,7 @@ from .resume import (
     armature_identity, build_settings_fingerprint, import_settings_fingerprint,
     make_batch_identity, make_manifest_source, manifest_sources,
     reconcile_resume_state, reusable_import_results, source_revision,
+    source_content_hash, make_library_source_version,
 )
 
 from .multi_import import (
@@ -81,8 +82,10 @@ from .utils import (
 
 from .library_files import (
     library_index_path,
+    storage_component, library_bundle_base, model_storage_stem,
     load_complete_v2_manifest, migrate_verified_legacy_manifest,
-    get_manifest_processed_sources,
+    get_manifest_processed_sources, get_manifest_source_versions,
+    library_source_key, library_scan_counts, plan_source_updates,
     manifest_with_bundle,
     replace_manifest_skeleton,
     publish_bundle_pair,

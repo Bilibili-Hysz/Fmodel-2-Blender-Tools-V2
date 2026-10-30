@@ -42,8 +42,7 @@ def source_revision(path: str, content_hash: str = "") -> str:
     if content_hash:
         return _digest({"path": normalized, "hash": content_hash})
     try:
-        stat = os.stat(_filesystem_path(path))
-        revision = {"path": normalized, "size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+        revision = {"path": normalized, "hash": source_content_hash(path)}
     except OSError:
         revision = {"path": normalized, "missing": True}
     return _digest(revision)
@@ -56,6 +55,22 @@ def _filesystem_path(path: str) -> str:
     if os.name != "nt" or not os.path.isabs(value) or value.startswith("\\\\?\\"):
         return value
     return "\\\\?\\UNC\\" + value[2:] if value.startswith("\\\\") else "\\\\?\\" + value
+
+
+def source_content_hash(path: str) -> str:
+    with open(_filesystem_path(path), "rb") as handle:
+        return hashlib.file_digest(handle, "sha256").hexdigest()
+
+
+def make_library_source_version(path: str, config: dict, task_identity: dict) -> dict:
+    return {
+        "content_hash": source_content_hash(path),
+        "settings": import_settings_fingerprint(config),
+        "target": _digest({
+            "structure": task_identity.get("target_identity", {}).get("structure_revision"),
+            "provenance": task_identity.get("target_skeleton_provenance", {}),
+        }),
+    }
 
 
 def make_manifest_source(index: int, skeleton: str, folder: str, name: str,
@@ -150,6 +165,12 @@ def reconcile_resume_state(state: dict, import_fingerprint: str,
         config["import_checkpoint"] = {}
     elif build_changed:
         state["library_manifest"] = None
+        checkpoint = state.get("multi_import_checkpoint") or {}
+        for plan in (state.get("multi_import_plan"), checkpoint.get("plan")):
+            for task in (plan or {}).get("tasks", []):
+                task.update(status="pending", progress=0.0)
+        if checkpoint:
+            checkpoint["current_task_index"] = 0
         for stage in (PipelineStage.LIBRARY_BUILDING, PipelineStage.FINALIZATION):
             statuses[stage.value] = StageStatus.PENDING.value
 

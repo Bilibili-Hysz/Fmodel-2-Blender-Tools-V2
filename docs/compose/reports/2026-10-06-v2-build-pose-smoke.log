@@ -1,0 +1,76 @@
+00:03.359  reports          | WARNING Path 'G:\Blender\Software\blender-5.2.1-windows-x64\5.2\datafiles\assets\brushes\essentials_brushes-gp_draw.blend' cannot be made relative for Material 'Dots Stroke'
+Blender 5.2.1 LTS (hash 9e2066aef7ef built 2026-08-25 02:38:20)
+00:03.359  reports          | WARNING Path 'G:\Blender\Software\blender-5.2.1-windows-x64\5.2\datafiles\assets\brushes\essentials_brushes-gp_draw.blend' cannot be made relative for Material 'Material'
+00:03.375  blend            | Read blend: "C:\Users\86177\AppData\Local\Temp\fmodel-pose-acceptance-_90v0xg7\PoseScene.blend"
+[FModel Auto] 自动触发器已注册
+[FModel] io_scene_ueformat 以 headless 模式注册（不创建 canonical 面板）
+[FModel] io_scene_ueformat 内置副本已注册 (version 0.10.0, cache=C:\Users\86177\AppData\Local\Temp\fmodel-rebuild-20261006-e_aaro2r\pose-user\config\FModel Tools\vendor-cache\io_scene_ueformat\0.10.0\cp313-win_amd64\1f830a0dac88719af0ae43b8b2d6aef487d437036468ef3c2ea59c51f9d55fd5)
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting Expression
+Info: 已保存 1 个姿势源、1 个姿势、1 个曲线影响；可在姿势资产面板应用或烘焙
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting Helper
+[36m[UEFORMAT] [0mImporting Helper
+[36m[UEFORMAT] [0mImporting Helper
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting Expression
+[FModel Auto] 检测到新导入对象: {'Face.001'}
+[FModel Auto] 检测到新导入对象: {'Body.001'}
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting Helper
+[36m[UEFORMAT] [0mImporting Expression
+Info: Expression：匹配 1 个骨骼、2 个曲线绑定
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting Helper
+Info: 已更新源姿势解释设置；已有烘焙结果需重新烘焙
+[36m[UEFORMAT] [0mImporting Expression
+[FModel Auto] 检测到新导入对象: {'Face.001'}
+[FModel Auto] 检测到新导入对象: {'Body.001'}
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting Expression
+[FModel Auto] 检测到新导入对象: {'Face.001'}
+[36m[UEFORMAT] [0mImporting UnknownCurve
+[36m[UEFORMAT] [0mImporting UnknownCurve
+[36m[UEFORMAT] [0mImporting UnknownCurve
+[FModel Auto] 检测到新导入对象: {'Face.001'}
+[36m[UEFORMAT] [0mImporting UnknownCurve
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting UnknownCurve
+[36m[UEFORMAT] [0mImporting Helper
+Info: 已保存 3 个姿势源；无需原 UEPOSE 文件即可重新加载
+[36m[UEFORMAT] [0mImporting Helper
+[36m[UEFORMAT] [0mImporting UnknownCurve
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting Helper
+[36m[UEFORMAT] [0mImporting UnknownCurve
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting Helper
+[36m[UEFORMAT] [0mImporting UnknownCurve
+Info: 已加载 3 个姿势源
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting Helper
+[36m[UEFORMAT] [0mImporting UnknownCurve
+[36m[UEFORMAT] [0mImporting Helper
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting UnknownCurve
+[36m[UEFORMAT] [0mImporting Helper
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting UnknownCurve
+[36m[UEFORMAT] [0mImporting Expression
+[36m[UEFORMAT] [0mImporting Helper
+[36m[UEFORMAT] [0mImporting UnknownCurve
+Info: 已加载 3 个姿势源
+Error: 不支持的姿势资产记录
+Info: Saved as "PoseScene.blend"
+[36m[UEFORMAT] [0mImporting Expression
+POSE_ACCEPTANCE_PASSED {"library": "C:\\Users\\86177\\AppData\\Local\\Temp\\fmodel-pose-acceptance-_90v0xg7\\Poses.blend", "sources": 3, "baked_meshes": 2}
+[FModel] io_scene_ueformat 内置副本已注销
+[FModel Auto] 自动触发器已注销
+
+Blender quit

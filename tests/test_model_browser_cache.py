@@ -8,6 +8,8 @@ directory content changes or the cache is invalidated.
 from __future__ import annotations
 
 import importlib.util
+from unittest.mock import patch
+import core
 import json
 import os
 import sys
@@ -39,10 +41,11 @@ def load_operators():
     sys.modules["bpy"] = fake_bpy
     try:
         spec = importlib.util.spec_from_file_location(
-            "model_operators_test_module", MODULE_PATH)
+            "model_cache_test.Assets.Models.operators", MODULE_PATH)
         module = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
+        with patch.dict(sys.modules, {"model_cache_test.core": core}):
+            spec.loader.exec_module(module)
     finally:
         if previous is None:
             sys.modules.pop("bpy", None)

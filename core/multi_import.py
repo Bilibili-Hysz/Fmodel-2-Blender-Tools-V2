@@ -6,7 +6,7 @@ from .types import MultiImportCheckpoint, MultiImportPlan, MultiImportTask
 from .library_files import validate_skeleton_output_names
 from .resume import make_batch_identity, make_manifest_source
 from .skeleton_compatibility import (
-    SKELETON_COMPATIBILITY_STRICT,
+    SKELETON_COMPATIBILITY_UEFORMAT,
     normalize_skeleton_compatibility_mode,
 )
 
@@ -56,7 +56,7 @@ def build_multi_import_plan(
     target_armature_identities: Optional[Mapping[str, dict]] = None,
     target_armature_provenances: Optional[Mapping[str, dict]] = None,
     skeleton_compatibility_modes: Optional[Mapping[str, str]] = None,
-    default_compatibility_mode: str = SKELETON_COMPATIBILITY_STRICT,
+    default_compatibility_mode: str = SKELETON_COMPATIBILITY_UEFORMAT,
 ) -> Tuple[MultiImportPlan, list[str]]:
     """Build tasks only for explicit mappings; single-source keeps active-armature behavior."""
     skeletons = (manifest_data or {}).get("skeletons", {})

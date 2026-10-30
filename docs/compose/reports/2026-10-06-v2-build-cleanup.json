@@ -1,0 +1,82 @@
+{
+  "operationDate": "2026-10-06",
+  "timezone": "Asia/Shanghai",
+  "releaseRoot": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release",
+  "archiveRoot": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup",
+  "status": "ARCHIVED_OUTSIDE_RELEASE_AND_VERIFIED",
+  "fileCount": 12,
+  "files": [
+    {
+      "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R64_2026-10-01.zip",
+      "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R64_2026-10-01.zip",
+      "bytes": 2079001,
+      "sha256": "1b4013d97f65e3262513fdc2dcbe0c23af883002851f159dbd5cb4fab6880ade"
+    },
+    {
+      "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R64_SOURCE.json",
+      "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R64_SOURCE.json",
+      "bytes": 30359,
+      "sha256": "04c178a8dea580ab38703bf772e55a1d93734e686d77bda7ce13394206db1375"
+    },
+    {
+      "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_2026-10-01.zip",
+      "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_2026-10-01.zip",
+      "bytes": 2079001,
+      "sha256": "1b4013d97f65e3262513fdc2dcbe0c23af883002851f159dbd5cb4fab6880ade"
+    },
+    {
+      "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_INSTALLFIX1_2026-10-01.zip",
+      "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_INSTALLFIX1_2026-10-01.zip",
+      "bytes": 2076886,
+      "sha256": "620116dcc909fcf3ab3212a0cd0a5386de4e712260a1ebada63426023aa5eb07"
+    },
+    {
+      "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_INSTALLFIX1_SOURCE.json",
+      "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_INSTALLFIX1_SOURCE.json",
+      "bytes": 31871,
+      "sha256": "69579def5b51f358606584ad7c793bade0133da27e766bf003ae562367ca8a60"
+    },
+    {
+      "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_INSTALLFIX2_2026-10-01.zip",
+      "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_INSTALLFIX2_2026-10-01.zip",
+      "bytes": 2076993,
+      "sha256": "d834ecc68b18ca29bf7da32c4b667cee6228ab0e5a1e879d32fc8205dce8989c"
+    },
+    {
+      "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_INSTALLFIX2_SOURCE.json",
+      "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_INSTALLFIX2_SOURCE.json",
+      "bytes": 31509,
+      "sha256": "054d2019a9bbf29d51bdbf7e5a3300632f9600342649d1032c331141a3fc5480"
+    },
+    {
+      "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_INSTALLFIX3_2026-10-01.zip",
+      "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_INSTALLFIX3_2026-10-01.zip",
+      "bytes": 2077139,
+      "sha256": "24b7f1398ccbe8f834fd5957d6fe1e6c6cbb08f798fc2564de17fe6854c4eb67"
+    },
+    {
+      "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_INSTALLFIX3_SOURCE.json",
+      "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_INSTALLFIX3_SOURCE.json",
+      "bytes": 31509,
+      "sha256": "f026953ed632a1e7fc0dd0ad8d47824832ecc7b1b19a369d897fd44e0bcdbfa6"
+    },
+    {
+      "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_INSTALLFIX4_2026-10-01.zip",
+      "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_INSTALLFIX4_2026-10-01.zip",
+      "bytes": 2077192,
+      "sha256": "6eb98a3e85221696d916e699f016738ff7beda6301b688dafea5825db998ee2d"
+    },
+    {
+      "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_INSTALLFIX4_SOURCE.json",
+      "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_INSTALLFIX4_SOURCE.json",
+      "bytes": 31509,
+      "sha256": "e8c7ff1bf152a3ed9b8803a9b5d92437224ac5623f755cfc000ca453f80c7064"
+    },
+    {
+      "source": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\Release\\FModel_Tools_V2_R65_SOURCE.json",
+      "archivedPath": "D:\\~Vibe-Coding\\Projects\\Fmodel_Edited_UEformat\\backups\\2026-10-06-v2-build-cleanup\\FModel_Tools_V2_R65_SOURCE.json",
+      "bytes": 30536,
+      "sha256": "0e8a0f5d15437ae4797690a78eba828527ce0c6cbc763ce08729c5b9264c00c1"
+    }
+  ]
+}

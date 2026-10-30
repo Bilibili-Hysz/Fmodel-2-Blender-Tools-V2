@@ -3,16 +3,36 @@
 import bpy
 import os
 import uuid
+from ...core.workflow import resolve_target
 from ...Fmodel.Pipeline.manager import PipelineManager
 from ...core import (
     PipelineConfig, PipelineContext, PipelineStage,
     SourceType, ImportMode,
 )
 
+def _library_changed(self, context):
+    if context is not None and getattr(context, "scene", None) is not None:
+        from .anim_manager import invalidate_library_scan
+        invalidate_library_scan(context)
+
+
+def _library_selected(self, context):
+    if context is not None and getattr(context, "scene", None) is not None:
+        from .anim_manager import _sync_manager_library_index
+        manager = getattr(context.scene, "fmodel_anim_manager", None)
+        if manager is not None:
+            # A folder/selection from the previous library must not hide the
+            # new library or leave an invisible action ready to apply.
+            manager.active_folder_index = -1
+            manager.active_item_index = -1
+            manager.grid_page = 1
+        _sync_manager_library_index(context)
+
+
 class FMODEL_ProjectAssetLib(bpy.types.PropertyGroup):
-    name: bpy.props.StringProperty(name="库名称") # type: ignore
+    name: bpy.props.StringProperty(name="库名称", update=_library_changed) # type: ignore
     library_id: bpy.props.StringProperty(name="库标识") # type: ignore
-    path: bpy.props.StringProperty(name="目录路径") # type: ignore
+    path: bpy.props.StringProperty(name="目录路径", update=_library_changed) # type: ignore
 
 class FMODEL_AssetProperties(bpy.types.PropertyGroup):
     source_dir: bpy.props.StringProperty(name="源目录", subtype='DIR_PATH', default="") # type: ignore
@@ -36,7 +56,7 @@ class FMODEL_AssetProperties(bpy.types.PropertyGroup):
     force_rebuild: bpy.props.BoolProperty(name="强制重建", default=False, description="无视增量更新，删除该骨架的旧库文件并全量重新打包") # type: ignore
     
     project_libs: bpy.props.CollectionProperty(type=FMODEL_ProjectAssetLib) # type: ignore
-    active_lib_index: bpy.props.IntProperty(default=0) # type: ignore
+    active_lib_index: bpy.props.IntProperty(default=0, update=_library_selected) # type: ignore
 
 class FMODEL_OT_build_anim_library(bpy.types.Operator):
     bl_idname = "fmodel.build_anim_library"
@@ -85,12 +105,12 @@ class FMODEL_OT_build_anim_library(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        obj = context.active_object
+        obj = resolve_target(context)
         return obj is not None and obj.type == 'ARMATURE'
 
     def invoke(self, context, event):
         props = context.scene.fmodel_assets
-        active_obj = context.active_object
+        active_obj = resolve_target(context)
         ue_sk_name = active_obj.get("FModel_Skeleton", "")
         
         if ue_sk_name: props.skeleton_filter = str(ue_sk_name)
@@ -174,7 +194,7 @@ class FMODEL_OT_build_anim_library(bpy.types.Operator):
             else:
                 self.report({'WARNING'}, "工程未保存，部分功能可能受限")
         
-        target_arm = context.active_object
+        target_arm = resolve_target(context)
         props = context.scene.fmodel_assets 
         
         src_dir = bpy.path.abspath(props.source_dir)

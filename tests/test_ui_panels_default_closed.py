@@ -25,7 +25,7 @@ def _class_assignments(class_node):
 
 
 class FModelSidebarPanelDefaultsTests(unittest.TestCase):
-    def test_all_fmodel_view3d_sidebar_panels_default_closed(self):
+    def test_daily_workspace_open_and_secondary_panels_closed(self):
         tree = ast.parse(UI_PATH.read_text(encoding="utf-8"))
         scoped_panels = []
 
@@ -43,9 +43,14 @@ class FModelSidebarPanelDefaultsTests(unittest.TestCase):
         self.assertTrue(scoped_panels, "expected at least one FModel View3D sidebar panel")
         for class_name, options in scoped_panels:
             with self.subTest(panel=class_name):
+                if class_name in {"FMODEL_PT_WorkContext", "FMODEL_PT_AssetLibrary", "FMODEL_PT_Pipeline"}:
+                    self.assertIsNone(options)
+                    continue
                 self.assertIsInstance(options, (ast.Set, ast.Tuple, ast.List))
                 self.assertIn(
-                    "DEFAULT_CLOSED",
+                    "HIDE_HEADER" if class_name in {
+                        "FMODEL_PT_ModelAssets", "FMODEL_PT_AnimationAssets", "FMODEL_PT_Pipeline"
+                    } else "DEFAULT_CLOSED",
                     {_literal_string(element) for element in options.elts},
                 )
 

@@ -38,6 +38,7 @@ def test_runtime_file_selection_excludes_caches_and_backups():
         selected = {path.relative_to(source).as_posix() for path in iter_runtime_files(source)}
 
     assert "__init__.py" in selected
+    assert "workflow_state.py" in selected
     assert "vendor/runtime.txt" in selected
     assert all("__pycache__" not in path for path in selected)
     assert all("Backup" not in path for path in selected)
@@ -90,7 +91,7 @@ def test_sync_replaces_stale_target_and_keeps_a_backup():
         assert (target / "vendor" / "runtime.txt").exists()
         assert not (target / "vendor" / "__pycache__").exists()
         assert not (target / "Shaders" / "Backup").exists()
-        assert result.file_count == 3 + len(RUNTIME_DIRECTORIES) * 2
+        assert result.file_count == len(RUNTIME_FILES) + len(RUNTIME_DIRECTORIES) * 2
 
 
 def test_sync_refuses_a_target_outside_the_addons_directory():

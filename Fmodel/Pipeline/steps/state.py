@@ -7,15 +7,14 @@ import bpy
 try:
     from ....core import (
         SKELETON_COMPATIBILITY_ITEMS,
-        SKELETON_COMPATIBILITY_STRICT,
+        SKELETON_COMPATIBILITY_UEFORMAT,
+        skeleton_provenance_from_owner,
     )
 except (ImportError, AttributeError):
     # Keep isolated unit-test imports and older checkpoints loadable.
-    SKELETON_COMPATIBILITY_STRICT = "strict"
-    SKELETON_COMPATIBILITY_ITEMS = (
-        ("strict", "严格身份", "要求 UEFormat 骨架身份完全一致"),
-        ("name_retarget", "按名称兼容", "显式绑定同名骨骼"),
-    )
+    SKELETON_COMPATIBILITY_UEFORMAT = "ueformat"
+    SKELETON_COMPATIBILITY_ITEMS = (("ueformat", "UEFormat 原版绑定", "绑定同名骨骼，跳过未匹配轨道"),)
+    skeleton_provenance_from_owner = None
 
 
 _handoff_in_progress = set()
@@ -50,6 +49,9 @@ def clear_workflow_results(state):
     state.scan_anim_count = 0
     state.scan_new_count = 0
     state.scan_existing_count = 0
+    state.scan_pose_count = 0
+    state.scan_changed_count = 0
+    state.scan_unverified_count = 0
     mappings = getattr(state, "skeleton_mappings", None)
     if mappings is not None:
         mappings.clear()
@@ -62,7 +64,18 @@ def handoff_armature(state, armature, project_root="", automatic=False):
     """Apply one armature selection atomically and reset stale derived results."""
     if armature is None or getattr(armature, "type", None) != "ARMATURE":
         return False
-    skeleton_name = str(armature.get("FModel_Skeleton", armature.name) or armature.name)
+    provenance = (
+        skeleton_provenance_from_owner(armature)
+        if skeleton_provenance_from_owner else None
+    )
+    if provenance and provenance.is_strict:
+        skeleton_name = provenance.identity["skeleton_path"].rsplit("/", 1)[-1]
+    elif provenance and not provenance.is_legacy:
+        skeleton_name = ""
+    else:
+        legacy_name = armature.get("FModel_Skeleton", "")
+        skeleton_name = legacy_name.strip() if isinstance(legacy_name, str) else ""
+    library_name = skeleton_name or armature.name
     root = project_root.strip() if project_root else ""
     desired = {
         "flow_type": "FMODEL" if automatic else getattr(state, "flow_type", "FMODEL"),
@@ -75,9 +88,9 @@ def handoff_armature(state, armature, project_root="", automatic=False):
             "manual_source_dir": root,
             "source_dir": root,
             "output_dir": __import__("os").path.join(
-                root, ".fmodel", "animation-libraries", skeleton_name
+                root, ".fmodel", "animation-libraries", library_name
             ),
-            "library_name": skeleton_name,
+            "library_name": library_name,
         })
     changed = any(getattr(state, name, None) != value for name, value in desired.items())
     if not changed:
@@ -102,8 +115,8 @@ class WizardSkeletonMapping(bpy.types.PropertyGroup):
         name="Target armature", type=bpy.types.Object, poll=_armature_poll
     )
     compatibility_mode: bpy.props.EnumProperty(
-        name="兼容策略", items=SKELETON_COMPATIBILITY_ITEMS,
-        default=SKELETON_COMPATIBILITY_STRICT,
+        name="Legacy compatibility", items=SKELETON_COMPATIBILITY_ITEMS, options={"HIDDEN"},
+        default=SKELETON_COMPATIBILITY_UEFORMAT,
     )
     source_count: bpy.props.IntProperty(name="动画", default=0)
     status: bpy.props.StringProperty(name="状态", default="pending")
@@ -111,7 +124,8 @@ class WizardSkeletonMapping(bpy.types.PropertyGroup):
 
 class WizardState(bpy.types.PropertyGroup):
     """向导状态"""
-    current_step: bpy.props.IntProperty(name="当前步骤", default=1, min=1, max=4)
+    # Persisted step numbers stay stable; legacy step 1 is displayed as Sources.
+    current_step: bpy.props.IntProperty(name="当前步骤", default=2, min=1, max=4)
 
     # Step 1: UEFormat-only workflow. The property is retained so older .blend
     # files can be normalized without changing the surrounding wizard schema.
@@ -136,8 +150,8 @@ class WizardState(bpy.types.PropertyGroup):
         name="手动源目录", subtype='DIR_PATH', update=_sync_animation_source
     )
     source_dir: bpy.props.StringProperty(name="动画目录", subtype='DIR_PATH')
-    output_dir: bpy.props.StringProperty(name="输出目录", subtype='DIR_PATH')
-    library_name: bpy.props.StringProperty(name="资产库名称", default="AnimLibrary")
+    output_dir: bpy.props.StringProperty(name="输出目录", subtype='DIR_PATH', update=_sync_animation_source)
+    library_name: bpy.props.StringProperty(name="资产库名称", default="AnimLibrary", update=_sync_animation_source)
     skeleton_filter: bpy.props.StringProperty(
         name="骨架过滤", default="", update=_sync_animation_source
     )
@@ -148,6 +162,9 @@ class WizardState(bpy.types.PropertyGroup):
     scan_anim_count: bpy.props.IntProperty(default=0)
     scan_new_count: bpy.props.IntProperty(default=0)
     scan_existing_count: bpy.props.IntProperty(default=0)
+    scan_pose_count: bpy.props.IntProperty(default=0)
+    scan_changed_count: bpy.props.IntProperty(default=0)
+    scan_unverified_count: bpy.props.IntProperty(default=0)
     skeleton_mappings: bpy.props.CollectionProperty(type=WizardSkeletonMapping)
     unmapped_skeletons: bpy.props.StringProperty(default="")
 
@@ -155,11 +172,11 @@ class WizardState(bpy.types.PropertyGroup):
     import_target_skeleton: bpy.props.StringProperty(name="目标骨架")
     import_completed: bpy.props.BoolProperty(default=False)
     skeleton_compatibility_mode: bpy.props.EnumProperty(
-        name="骨架兼容策略", items=SKELETON_COMPATIBILITY_ITEMS,
-        default=SKELETON_COMPATIBILITY_STRICT,
+        name="Legacy compatibility", items=SKELETON_COMPATIBILITY_ITEMS, options={"HIDDEN"},
+        default=SKELETON_COMPATIBILITY_UEFORMAT,
         description=(
-            "严格身份是默认模式。按名称兼容是"
-            "显式的部分重定向路径，不等同于 Unreal Retarget Manager。"
+            "按 UEFormat 原版绑定同名骨骼；"
+            "骨架标签仅用于动画库检索。"
         ),
     )
 

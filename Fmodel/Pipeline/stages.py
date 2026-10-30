@@ -28,15 +28,17 @@ from ...core import (
     library_index_path, recover_library_transaction,
     validate_generated_output_filenames, validate_imported_action_set,
     validate_skeleton_output_names,
+    library_bundle_base,
     armature_identity, import_settings_fingerprint, make_batch_identity,
     make_manifest_source, reusable_import_results,
     skeleton_identity_fingerprint, skeleton_provenance_from_owner,
-    read_ueformat_identity, strict_skeleton_identity_differences,
-    SKELETON_COMPATIBILITY_STRICT,
-    SKELETON_COMPATIBILITY_NAME_RETARGET,
+    read_ueformat_identity, SKELETON_COMPATIBILITY_UEFORMAT,
     normalize_skeleton_compatibility_mode, skeleton_names_match,
+    source_content_hash, make_library_source_version, plan_source_updates,
+    library_source_key,
 )
 from ...core.action_selection import resolve_imported_action
+from ...core.resource_limits import ResourceLimitError
 from ...core.action_safety import (
     animation_state,
     copy_action_for_pipeline,
@@ -278,7 +280,7 @@ class PipelineStageBase(ABC):
             for index, path in enumerate(context.get_config("source_subset", [])) if path
         ]
         compatibility_mode = normalize_skeleton_compatibility_mode(
-            context.get_config("skeleton_compatibility_mode", SKELETON_COMPATIBILITY_STRICT)
+            context.get_config("skeleton_compatibility_mode", SKELETON_COMPATIBILITY_UEFORMAT)
         )
         target_name = str(context.get_config("target_armature", "") or "")
         objects = getattr(bpy.data, "objects", None)
@@ -339,7 +341,7 @@ class PipelineStageBase(ABC):
         sources = []
         for index, (skeleton, folder, name, entry) in enumerate(manifest.get_all_animations()):
             source_file = entry.source_file
-            if source_skeleton and not self._skeleton_match(skeleton, source_skeleton):
+            if source_skeleton and (skeleton != source_skeleton if source_skeleton in manifest.skeletons else not self._skeleton_match(skeleton, source_skeleton)):
                 continue
             if source_subset and self._normalized_source_path(source_file) not in source_subset:
                 continue
@@ -404,15 +406,28 @@ class PipelineStageBase(ABC):
 # ============================================================
 
 def _probe_native_fmodel_animation_metadata(file_path: str) -> tuple[dict | None, str]:
-    """Classify one UEAnim/UEPose as strict, missing-identity, or invalid."""
+    """Read optional library provenance from a standard UEAnim/UEPose file."""
     try:
-        record = read_ueformat_identity(file_path)
+        record = read_ueformat_identity(file_path, tolerate_identity_errors=True)
+    except ResourceLimitError as error:
+        return {"resource_limit_error": str(error)}, "capacity"
     except (OSError, TypeError, ValueError):
         return None, "invalid"
-    if record.kind not in {"animation", "pose"}:
+    expected_kind = "pose" if file_path.lower().endswith('.uepose') else "animation"
+    if record.kind != expected_kind:
         return None, "invalid"
     if not record.identity:
-        return None, "missing_identity"
+        return {
+            "skeleton_name": "",
+            "skeleton_display_name": "",
+            "skeleton_path": "",
+            "identity": None,
+            "identity_fingerprint": "",
+            "object_name": record.object_name,
+            "identifier": record.identifier,
+            "kind": record.kind,
+            "identity_warnings": list(record.identity_warnings),
+        }, "legacy"
     identity = dict(record.identity)
     skeleton_path = str(identity.get("skeleton_path") or "")
     if not skeleton_path:
@@ -476,7 +491,7 @@ class DictionaryAcquisitionStage(PipelineStageBase):
         processed_count = 0
 
         for root, dirs, files in os.walk(source_dir):
-            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            dirs[:] = [d for d in dirs if d not in {'.git', '.svn', '__pycache__', '.pytest_cache', '.ruff_cache', '_pipeline_tmp', '.thumbnails'}]
 
             for file in files:
                 if not file.lower().endswith(('.ueanim', '.uepose')):
@@ -487,15 +502,21 @@ class DictionaryAcquisitionStage(PipelineStageBase):
                 original_name = os.path.splitext(file)[0]
 
                 native_metadata, classification = _probe_native_fmodel_animation_metadata(file_path)
-                if classification == "missing_identity":
-                    missing_identity_count += 1
+                if classification == "capacity":
+                    context.log_warning(self.get_stage_name(), f"资源超过用户配置的容量预算 {file_path}: {native_metadata['resource_limit_error']}")
                     continue
+                if classification == "legacy":
+                    missing_identity_count += 1
                 if classification == "invalid" or native_metadata is None:
                     invalid_count += 1
                     continue
+                for warning in native_metadata.get("identity_warnings", ()):
+                    context.log_warning(self.get_stage_name(), f"可选骨架身份未用于检索 {file_path}: {warning}")
 
-                strict_identity_count += 1
-                skeleton_name = native_metadata["skeleton_name"]
+                if classification == "strict":
+                    strict_identity_count += 1
+                # Labels organize the library without inventing an identity.
+                skeleton_name = native_metadata["skeleton_name"] or skeleton_filter or "Unspecified"
 
                 if skeleton_filter and not self._skeleton_match(skeleton_name, skeleton_filter):
                     filter_mismatch_count += 1
@@ -507,10 +528,6 @@ class DictionaryAcquisitionStage(PipelineStageBase):
                 else:
                     folder_path = rel_dir
 
-                if skeleton_name not in manifest.skeletons:
-                    manifest.skeletons[skeleton_name] = SkeletonNode(name=skeleton_name)
-
-                folder = manifest.skeletons[skeleton_name].get_or_create_folder(folder_path)
                 anim_entry = AnimationEntry(
                     original_name=original_name,
                     hashed_name=original_name,
@@ -520,14 +537,22 @@ class DictionaryAcquisitionStage(PipelineStageBase):
                         "file_type": "ueanim" if file.lower().endswith('.ueanim') else "uepose",
                         "json_path": "",
                         "native_ueformat": True,
-                        "skeleton_display_name": native_metadata["skeleton_display_name"],
+                        "skeleton_display_name": skeleton_name,
+                        "skeleton_identity_state": classification,
                         "skeleton_path": native_metadata["skeleton_path"],
                         "fmodel_skeleton_identity": native_metadata["identity"],
                         "fmodel_skeleton_identity_fingerprint": native_metadata["identity_fingerprint"],
                         "format_identifier": native_metadata["identifier"],
                         "format_object_name": native_metadata["object_name"],
+                        "identity_warnings": native_metadata.get("identity_warnings", []),
                     }
                 )
+                if native_metadata["kind"] == "pose":
+                    manifest.pose_resources.append(anim_entry.to_dict())
+                    continue
+                if skeleton_name not in manifest.skeletons:
+                    manifest.skeletons[skeleton_name] = SkeletonNode(name=skeleton_name)
+                folder = manifest.skeletons[skeleton_name].get_or_create_folder(folder_path)
                 folder.add_animation(original_name, anim_entry)
                 processed_count += 1
 
@@ -535,19 +560,18 @@ class DictionaryAcquisitionStage(PipelineStageBase):
             context.log_warning(self.get_stage_name(), "未发现 UEANIM/UEPOSE 文件")
             return False
 
-        if strict_identity_count == 0:
+        if strict_identity_count + missing_identity_count == 0:
             context.log_error(
                 self.get_stage_name(),
-                f"发现 {discovered_count} 个 UEANIM/UEPOSE 文件，但 0 个包含 "
-                f"FMODEL_TARGET_SKELETON；请使用修正后的 FModel 重新导出。"
+                f"发现 {discovered_count} 个 UEANIM/UEPOSE 文件，但没有可读取的文件。"
                 f"missing={missing_identity_count}, invalid={invalid_count}",
             )
             return False
 
-        if processed_count == 0:
+        if processed_count == 0 and not manifest.pose_resources:
             context.log_error(
                 self.get_stage_name(),
-                f"发现 {strict_identity_count} 个带内嵌身份的 UEANIM/UEPOSE 文件，"
+                f"发现 {strict_identity_count + missing_identity_count} 个可读取的 UEANIM/UEPOSE 文件，"
                 f"但 0 个匹配骨架筛选 '{skeleton_filter}'。"
                 f"mismatch={filter_mismatch_count}, missing={missing_identity_count}, "
                 f"invalid={invalid_count}",
@@ -557,8 +581,9 @@ class DictionaryAcquisitionStage(PipelineStageBase):
         context.dictionary_manifest = manifest.to_dict()
         context.log_info(
             self.get_stage_name(),
-            f"成功扫描 {processed_count} 个 FModel 动画文件；"
-            f"discovered={discovered_count}, strict={strict_identity_count}, "
+            f"成功扫描 {processed_count} 个 FModel 动画文件，"
+            f"{len(manifest.pose_resources)} 个姿势资源（通过独立姿势入口导入）；"
+            f"discovered={discovered_count}, identified={strict_identity_count}, "
             f"mismatch={filter_mismatch_count}, missing={missing_identity_count}, "
             f"invalid={invalid_count}",
         )
@@ -691,6 +716,27 @@ class AssetImportStage(PipelineStageBase):
             return report_path
         except Exception:
             return ""
+
+    def _restore_published_actions(self, context, imported_actions):
+        """Restore resume actions only from the authoritative completed index."""
+        published = [item for item in imported_actions if item.get("source_bundle")]
+        if not published:
+            return
+        output_dir = bpy.path.abspath(context.get_config("output_dir", ""))
+        library_name = context.get_config("library_name", "Asset_Library")
+        index_path = library_index_path(output_dir, library_name)
+        recover_library_transaction(index_path)
+        manifest = load_complete_v2_manifest(index_path, output_dir)
+        if manifest is None:
+            raise ValueError("断点中的已发布动作缺少完整资产库索引")
+        builder = LibraryBuildingStage()
+        source_dir = bpy.path.abspath(context.get_config("source_dir", ""))
+        for item in published:
+            source_key = builder._source_key_for_imported(item, source_dir)
+            destination = builder._published_bundle_for_source(output_dir, manifest, source_key)
+            if not destination or self._normalized_source_path(item["source_bundle"]) != destination:
+                raise ValueError(f"断点动作不属于当前已发布资产库: {item.get('action_name', '')}")
+        builder._reload_actions_from_blends(output_dir, manifest, published)
     
     def execute(self, context: PipelineContext) -> bool:
         import_mode = context.get_config("import_mode", ImportMode.UEANIM_DIRECT.value)
@@ -707,6 +753,11 @@ class AssetImportStage(PipelineStageBase):
                 persisted, persisted_checkpoint, current_manifest_sources,
             )
         ):
+            try:
+                self._restore_published_actions(context, persisted["imported_actions"])
+            except (OSError, ValueError) as exc:
+                context.log_error(self.get_stage_name(), f"恢复已发布动作失败: {exc}")
+                return False
             resolved = [
                 resolve_imported_action(
                     bpy, item,
@@ -747,12 +798,11 @@ class AssetImportStage(PipelineStageBase):
         task_identity = self._task_identity(context)
         try:
             compatibility_mode = normalize_skeleton_compatibility_mode(
-                context.get_config("skeleton_compatibility_mode", SKELETON_COMPATIBILITY_STRICT)
+                context.get_config("skeleton_compatibility_mode", SKELETON_COMPATIBILITY_UEFORMAT)
             )
         except ValueError as error:
             context.log_error(self.get_stage_name(), str(error))
             return False
-        strict_fmodel_skeleton = compatibility_mode == SKELETON_COMPATIBILITY_STRICT
         collection = ImportedAssetCollection(
             import_mode=ImportMode.UEANIM_DIRECT.value,
             task_identity=task_identity,
@@ -775,65 +825,19 @@ class AssetImportStage(PipelineStageBase):
                 context.imported_assets = collection.to_dict()
                 return False
         else:
-            configured_skeleton = self._source_skeleton(context)
-            if configured_skeleton:
-                exact = []
-                fuzzy = []
-                for obj in bpy.data.objects:
-                    if obj.type != 'ARMATURE':
-                        continue
-                    skeleton_name = str(obj.get("FModel_Skeleton", obj.name))
-                    if skeleton_name == configured_skeleton:
-                        exact.append(obj)
-                    elif self._skeleton_match(skeleton_name, configured_skeleton):
-                        fuzzy.append(obj)
-                candidates = exact or fuzzy
-                if len(candidates) == 1:
-                    target_arm = candidates[0]
-                    context.log_info(
-                        self.get_stage_name(),
-                        f"通过骨架名匹配到目标骨架: {target_arm.name}",
-                    )
-                elif len(candidates) > 1:
-                    context.log_error(
-                        self.get_stage_name(), f"骨架映射不唯一: {configured_skeleton}"
-                    )
-                    context.imported_assets = collection.to_dict()
-                    return False
+            active = getattr(getattr(bpy, 'context', None), 'object', None)
+            if active is not None and getattr(active, 'type', '') == 'ARMATURE':
+                target_arm = active
 
         target_skeleton_name = ""
         if target_arm:
             target_skeleton_metadata = str(target_arm.get("FModel_Skeleton", "") or "")
-            source_skeleton = self._source_skeleton(context)
             provenance_reader = globals().get("skeleton_provenance_from_owner")
             target_provenance = (
                 provenance_reader(target_arm) if callable(provenance_reader) else None
             )
-            strict_target_identity = bool(
-                target_provenance is not None and target_provenance.is_strict
-            )
-            if (
-                target_skeleton_metadata
-                and source_skeleton
-                and not self._skeleton_match(target_skeleton_metadata, source_skeleton)
-                and strict_fmodel_skeleton
-                and not strict_target_identity
-            ):
-                context.log_error(
-                    self.get_stage_name(),
-                    f"目标骨架元数据不匹配: 任务={source_skeleton}, 目标={target_skeleton_metadata}",
-                )
-                context.imported_assets = collection.to_dict()
-                return False
             target_skeleton_name = target_skeleton_metadata or target_arm.name
 
-        if not target_arm and compatibility_mode == SKELETON_COMPATIBILITY_NAME_RETARGET:
-            context.log_error(
-                self.get_stage_name(),
-                "名称兼容模式必须显式指定一个目标骨架对象",
-            )
-            context.imported_assets = collection.to_dict()
-            return False
 
         valid_entries = []
         source_metadata_by_path = {}
@@ -841,14 +845,17 @@ class AssetImportStage(PipelineStageBase):
         task_identity = self._task_identity(context)
         source_subset = set(task_identity["source_subset"])
         for manifest_index, (skel, folder_path, anim_name, anim_entry) in enumerate(manifest.get_all_animations()):
-            if source_skeleton and not self._skeleton_match(skel, source_skeleton):
+            if source_skeleton and (skel != source_skeleton if source_skeleton in manifest.skeletons else not self._skeleton_match(skel, source_skeleton)):
                 continue
             source_file = anim_entry.source_file
-            if not source_file or not os.path.exists(source_file):
-                continue
-            if not source_file.lower().endswith('.ueanim'):
-                continue
             if source_subset and self._normalized_source_path(source_file) not in source_subset:
+                continue
+            if not source_file or not os.path.isfile(source_file) or not source_file.lower().endswith('.ueanim'):
+                context.log_error(
+                    self.get_stage_name(),
+                    f"动作清单包含缺失或非 UEANIM 资源，请重新扫描；姿势需独立导入: {source_file}",
+                )
+                collection.failed_imports.append({"source_file": source_file, "error": "源文件缺失或不是 UEANIM，请重新扫描"})
                 continue
             source_identity = make_manifest_source(
                 manifest_index, skel, folder_path, anim_name, source_file,
@@ -864,65 +871,6 @@ class AssetImportStage(PipelineStageBase):
             context.imported_assets = collection.to_dict()
             return False
 
-        # Every entry in a task normally shares one source skeleton identity.
-        # Re-read the authoritative identity from each binary before constructing
-        # the importer.  The manifest is a discovery cache and must not be able
-        # to hide a stale, missing, or forged UEANIM identity.
-        if strict_fmodel_skeleton and target_provenance is not None and target_provenance.is_strict:
-            target_identity = target_provenance.identity
-            preflight_failures = []
-            for _skel, _folder_path, _anim_name, source_file, _source_identity in valid_entries:
-                source_identity = None
-                try:
-                    native_record = read_ueformat_identity(source_file)
-                    if native_record.kind != "animation":
-                        raise ValueError(
-                            f"source file contains {native_record.kind.upper()} data"
-                        )
-                    source_identity = native_record.identity
-                    if source_identity is None:
-                        raise ValueError("source file has no FMODEL_TARGET_SKELETON identity")
-                    differences = strict_skeleton_identity_differences(
-                        source_identity, target_identity
-                    )
-                except (TypeError, ValueError) as error:
-                    differences = (f"source identity cannot be verified ({error})",)
-                if differences:
-                    preflight_failures.append((source_file, differences, source_identity))
-                else:
-                    # Keep downstream action provenance aligned with the same
-                    # bytes used for the strict decision.  This is not the
-                    # authority for the decision; it is only a report cache.
-                    source_metadata = source_metadata_by_path.setdefault(
-                        self._normalized_source_path(source_file), {}
-                    )
-                    source_metadata["fmodel_skeleton_identity"] = source_identity
-                    source_metadata["skeleton_path"] = source_identity["skeleton_path"]
-
-            if preflight_failures:
-                source_file, differences, source_identity = preflight_failures[0]
-                source_hash = str(
-                    (source_identity or {}).get("bone_layout_hash", "") or ""
-                )
-                target_hash = str(target_identity.get("bone_layout_hash", "") or "")
-                message = (
-                    "严格骨架身份预检失败：本任务的 UEANIM 与目标 Armature 不兼容 "
-                    f"({'; '.join(differences)}；受影响文件 {len(preflight_failures)}/{len(valid_entries)}；"
-                    f"source layout={source_hash or 'missing'}；target layout={target_hash or 'missing'})。"
-                    "请选择具有匹配内嵌身份的 UEMODEL，或由用户显式选择 Name-based compatibility；"
-                    "不会自动降级兼容模式。"
-                )
-                collection.failed_imports.append({
-                    "source_file": source_file,
-                    "error": message,
-                })
-                context.set_config("import_checkpoint", {})
-                context.imported_assets = collection.to_dict()
-                context.log_error(self.get_stage_name(), message)
-                report_path = self._write_failure_report(context, collection)
-                if report_path:
-                    context.log_warning(self.get_stage_name(), f"失败报告已导出: {report_path}")
-                return False
 
         try:
             options = UEAnimOptions(
@@ -930,23 +878,16 @@ class AssetImportStage(PipelineStageBase):
                 rotation_only=context.get_config("rotation_only", False),
                 import_curves=context.get_config("import_curves", False),
                 override_skeleton=target_arm,
-                strict_fmodel_skeleton=strict_fmodel_skeleton,
             )
         except TypeError as exc:
             context.log_error(
                 self.get_stage_name(),
-                f"当前 UEFormat 插件无法启用严格动画骨架校验: {exc}",
+                f"当前 UEFormat 插件不支持动画导入参数: {exc}",
             )
             context.imported_assets = collection.to_dict()
             return False
         importer = UEFormatImport(options)
 
-        if compatibility_mode == SKELETON_COMPATIBILITY_NAME_RETARGET:
-            context.log_warning(
-                self.get_stage_name(),
-                "已启用显式名称兼容模式：仅按大小写不敏感的骨骼名绑定，"
-                "源骨架独有骨骼会被跳过；这不是 Unreal Retarget Manager 的完整重定向。",
-            )
 
         resume_enabled = bool(context.get_config("import_resume_enabled", True))
         checkpoint = context.get_config("import_checkpoint", {}) if resume_enabled else {}
@@ -1013,7 +954,7 @@ class AssetImportStage(PipelineStageBase):
                         "failed_imports": fails,
                     })
                     collection.imported_actions.extend(staged_col.imported_actions)
-                    collection.failed_imports.extend(staged_col.failed_imports)
+                    collection.failed_imports.extend(failure for failure in staged_col.failed_imports if failure not in collection.failed_imports)
                     for imported in collection.imported_actions:
                         action_by_imported[id(imported)] = next(
                             (candidate for candidate in bpy.data.actions
@@ -1206,7 +1147,10 @@ class AssetImportStage(PipelineStageBase):
                 processed_in_batch += 1
                 target_state = animation_state(target_arm)
                 try:
+                    source_version = make_library_source_version(source_file, context.config, task_identity)
                     importer.import_file(os.path.normpath(source_file))
+                    if source_content_hash(source_file) != source_version["content_hash"]:
+                        raise ValueError("源文件在导入期间发生变化，请重新扫描")
                     new_actions = owned_actions(list(bpy.data.actions), old_actions)
                     action = None
                     auxiliary = []
@@ -1239,17 +1183,16 @@ class AssetImportStage(PipelineStageBase):
                                 "target_skeleton_path": str(
                                     (target_identity_data or {}).get("skeleton_path", "")
                                 ),
-                                "binding": (
-                                    "casefold_bone_name"
-                                    if not strict_fmodel_skeleton
-                                    else "strict_identity_and_casefold_bone_name"
-                                ),
-                                "strict_identity": strict_fmodel_skeleton,
+                                "binding": "ueformat_bone_name",
+                                "strict_identity": False,
                             },
                             separators=(",", ":"),
                             sort_keys=True,
                         )
                         action["Pipeline_SkeletonCompatibility"] = compatibility_mode
+                        action["Pipeline_TargetSkeletonProvenance"] = json.dumps(
+                            task_identity["target_skeleton_provenance"], sort_keys=True,
+                        )
                         imported = ImportedAction(
                             action_name=action.name,
                             source_manifest_ref=source_ref,
@@ -1257,6 +1200,7 @@ class AssetImportStage(PipelineStageBase):
                             import_status="success",
                             frame_range=tuple(action.frame_range) if action.frame_range else (0, 0),
                             task_id=source_identity["task_id"],
+                            source_version=source_version,
                         )
                         collection.imported_actions.append(imported)
                         action_by_imported[id(imported)] = action
@@ -1343,8 +1287,15 @@ class AssetImportStage(PipelineStageBase):
             cursor += len(batch)
             self._report_progress(context, cursor, total_entries, self.get_stage_name())
         resumed_count = 0
-        if resume_enabled and cursor >= total_entries and not aborted_by_failures and not collection.failed_imports:
+        if resume_enabled and cursor >= total_entries and not aborted_by_failures:
             valid_resumed = []
+            try:
+                self._restore_published_actions(context, collection.to_dict()["imported_actions"])
+            except (OSError, ValueError) as exc:
+                context.log_error(self.get_stage_name(), f"恢复已发布动作失败: {exc}")
+                context.imported_assets = collection.to_dict()
+                self._finish_progress()
+                return False
             for imported_action in collection.to_dict()["imported_actions"]:
                 action, error = resolve_imported_action(
                     bpy, imported_action,
@@ -1360,7 +1311,7 @@ class AssetImportStage(PipelineStageBase):
                 self._finish_progress()
                 return False
             context.set_config("import_checkpoint", {
-                "state": "complete",
+                "state": "partial" if collection.failed_imports else "complete",
                 "task_identity": task_identity,
                 "batch_identity": batch_identity,
                 "expected_task_ids": expected_task_ids,
@@ -1368,8 +1319,10 @@ class AssetImportStage(PipelineStageBase):
                 "cycle_count": cycle_count,
                 "pending_sources": [],
                 "imported_actions": [a.__dict__ for a in collection.imported_actions],
-                "failed_imports": [],
+                "failed_imports": collection.failed_imports,
             })
+            if collection.failed_imports:
+                _persist_checkpoint(total_entries)
         if cursor >= total_entries and not aborted_by_failures:
             self._report_progress(context, total_entries, total_entries, self.get_stage_name())
         else:
@@ -1383,8 +1336,10 @@ class AssetImportStage(PipelineStageBase):
             self.get_stage_name(),
             f"成功导入 {imported_count} 个动画，累计失败 {len(collection.failed_imports)}"
         )
-        if staging_validation_failed or aborted_by_failures or cursor < total_entries or collection.failed_imports:
+        if staging_validation_failed or aborted_by_failures or cursor < total_entries:
             return False
+        if collection.failed_imports:
+            context.log_warning(self.get_stage_name(), "批次部分成功：失败资源已记录，其余动作可继续入库")
         return imported_count + resumed_count > 0
     
 # ============================================================
@@ -1538,8 +1493,13 @@ class LibraryBuildingStage(PipelineStageBase):
             if not manifest.library_id:
                 manifest.library_id = str(uuid.uuid5(uuid.NAMESPACE_URL, os.path.abspath(output_dir)))
             manifest.library_path = output_dir
-        force_rebuild = bool(context.get_config("force_rebuild", False))
         source_dir = bpy.path.abspath(context.get_config("source_dir", ""))
+        try:
+            rebuild_skeletons = self._plan_library_updates(context, manifest, imported_actions, source_dir)
+        except (OSError, ValueError) as exc:
+            context.log_error(self.get_stage_name(), f"资产库更新预检失败: {exc}")
+            return False
+        force_rebuild = bool(rebuild_skeletons)
         recovered_provenance = []
         if authoritative_v2_manifest is not None and not force_rebuild:
             for imported_action in imported_actions:
@@ -1589,7 +1549,7 @@ class LibraryBuildingStage(PipelineStageBase):
                 build_failed = True
                 continue
             try:
-                validate_filename_component(parts[0], "source skeleton")
+                validate_skeleton_output_names([parts[0]])
             except ValueError as exc:
                 context.log_error(self.get_stage_name(), str(exc))
                 build_failed = True
@@ -1606,7 +1566,7 @@ class LibraryBuildingStage(PipelineStageBase):
             return False
         if force_rebuild:
             shared_bundles = [
-                bundle.blend_file for skeleton in skeleton_groups for bundle in manifest.bundles
+                bundle.blend_file for skeleton in rebuild_skeletons for bundle in manifest.bundles
                 if skeleton in bundle.skeletons and len(bundle.skeletons) > 1
             ]
             if shared_bundles:
@@ -1652,8 +1612,10 @@ class LibraryBuildingStage(PipelineStageBase):
                 prebuild_artifact_keys.add(artifact_key)
         try:
             planned_volume_indices = {}
+            bundle_base_names = {}
             for skel_name, actions in skeleton_groups.items():
-                base_name = f"{library_name}_{skel_name}"
+                base_name = library_bundle_base(library_name, skel_name, manifest)
+                bundle_base_names[skel_name] = base_name
                 chunk_count = max(1, (len(actions) + chunk_size - 1) // chunk_size)
                 occupied_slots = self._occupied_bundle_slots(output_dir, base_name)
                 planned_volume_indices[skel_name] = self._plan_bundle_slots(
@@ -1663,6 +1625,7 @@ class LibraryBuildingStage(PipelineStageBase):
                 library_name,
                 skeleton_groups,
                 volume_indices=planned_volume_indices,
+                base_names=bundle_base_names,
             )
         except ValueError as exc:
             context.log_error(self.get_stage_name(), str(exc))
@@ -1674,7 +1637,7 @@ class LibraryBuildingStage(PipelineStageBase):
             return False
         
         for skel_name, actions in skeleton_groups.items():
-            base_name = f"{library_name}_{skel_name}"
+            base_name = bundle_base_names[skel_name]
             existing_sources = set()
             pending_entries = []
             manifest_for_skeleton = manifest
@@ -1684,10 +1647,11 @@ class LibraryBuildingStage(PipelineStageBase):
                     authoritative_v2_manifest, skel_name
                 )
 
-            if force_rebuild:
-                obsolete_files.update(
-                    self._owned_force_rebuild_bundle_files(output_dir, base_name, skel_name)
-                )
+            if skel_name in rebuild_skeletons:
+                if context.get_config("force_rebuild", False):
+                    obsolete_files.update(
+                        self._owned_force_rebuild_bundle_files(output_dir, base_name, skel_name)
+                    )
                 obsolete_files.update(
                     path for bundle in manifest.bundles
                     if bundle.skeletons == [skel_name]
@@ -1700,16 +1664,8 @@ class LibraryBuildingStage(PipelineStageBase):
                 if imp_action.get("source_bundle"):
                     action = localize_action(action)
 
-                source_ref = imp_action.get("source_manifest_ref", "") or action_name
-                source_path = action.get("Pipeline_Source", "")
-                source_key = source_ref
-                if source_path and source_dir:
-                    try:
-                        source_key = os.path.relpath(source_path, source_dir).replace('\\', '/')
-                    except Exception:
-                        source_key = source_ref
-                source_key = f"{skel_name}::{source_key}"
-                if not force_rebuild and source_key in existing_sources:
+                source_key = self._source_key_for_imported(imp_action, source_dir)
+                if skel_name not in rebuild_skeletons and source_key in existing_sources:
                     destination_bundle = self._published_bundle_for_source(
                         output_dir, authoritative_v2_manifest, source_key
                     )
@@ -1729,10 +1685,22 @@ class LibraryBuildingStage(PipelineStageBase):
             if not pending_entries:
                 continue
 
-            chunks = [pending_entries[i:i + chunk_size] for i in range(0, len(pending_entries), chunk_size)]
+            if skel_name in rebuild_skeletons and not context.get_config("force_rebuild", False):
+                try:
+                    chunks = self._stable_update_chunks(
+                        authoritative_v2_manifest, skel_name, pending_entries,
+                        output_dir, base_name, chunk_size,
+                    )
+                except ValueError as exc:
+                    context.log_error(self.get_stage_name(), str(exc))
+                    build_failed = True
+                    continue
+            else:
+                chunks = list(zip(planned_volume_indices[skel_name], (
+                    pending_entries[i:i + chunk_size] for i in range(0, len(pending_entries), chunk_size)
+                )))
 
-            for chunk_idx, chunk_entries in enumerate(chunks):
-                current_vol = planned_volume_indices[skel_name][chunk_idx]
+            for current_vol, chunk_entries in chunks:
                 vol_suffix = f"_Vol_{current_vol}" if current_vol > 1 else ""
                 blend_file_name = f"{base_name}{vol_suffix}.blend"
                 blend_path = os.path.join(output_dir, blend_file_name)
@@ -1783,6 +1751,10 @@ class LibraryBuildingStage(PipelineStageBase):
                     action.asset_data.catalog_id = catalog_uuid
                     action["SA_Group"] = skel_name
                     action["SA_Folder"] = catalog_path
+                    if imp_action.get("skeleton_provenance"):
+                        action["Pipeline_TargetSkeletonProvenance"] = json.dumps(
+                            imp_action["skeleton_provenance"], sort_keys=True,
+                        )
 
                     if generate_thumbnails and arm_obj:
                         try:
@@ -1817,7 +1789,8 @@ class LibraryBuildingStage(PipelineStageBase):
                         catalog_id=catalog_uuid,
                         skeleton=skel_name,
                         blend_file=blend_file_name,
-                        thumbnail_path=rel_thumb_path
+                        thumbnail_path=rel_thumb_path,
+                        source_key=source_key,
                     ))
 
                     current_level = chunk_manifest[skel_name]
@@ -1853,6 +1826,8 @@ class LibraryBuildingStage(PipelineStageBase):
                         skeletons=[skel_name],
                         processed_sources=chunk_manifest["__processed_sources__"],
                         completion_state="completed",
+                        source_versions={key: dict(item.get("source_version", {}))
+                                         for item, _, key in chunk_entries},
                     )
                     candidate_manifest = manifest_with_bundle(
                         manifest_for_skeleton,
@@ -1966,14 +1941,98 @@ class LibraryBuildingStage(PipelineStageBase):
             queue_staged_cleanup(
                 context, committed_staged_blends, self._staging_task_dir(context)
             )
+        if build_failed:
+            context.library_manifest = authoritative_v2_manifest.to_dict() if authoritative_v2_manifest else None
+            context.log_error(self.get_stage_name(), "资产库构建未完成，请检查错误与事务恢复日志")
+            return False
         context.library_manifest = manifest.to_dict()
-        context.log_info(self.get_stage_name(), f"成功构建资产库，包含 {success_count} 个动作")
-        return bool(imported_actions) and not build_failed
+        context.log_info(
+            self.get_stage_name(),
+            f"成功构建资产库，本次发布 {success_count} 个动作，复用 {len(imported_actions) - success_count} 个动作",
+        )
+        return bool(imported_actions)
+
+    def _stable_update_chunks(self, manifest, skeleton, entries, output_dir, base_name, chunk_size):
+        remaining = {key: (item, action, key) for item, action, key in entries}
+        chunks = []
+        for bundle in manifest.bundles:
+            if bundle.skeletons != [skeleton]:
+                continue
+            slot = self._bundle_slot(bundle.blend_file, base_name)
+            assets = [asset for asset in manifest.assets if asset.blend_file == bundle.blend_file]
+            by_source = {asset.source_key: asset for asset in assets}
+            keys = [key if "::" in key else f"{skeleton}::{key}" for key in bundle.processed_sources]
+            suffix = f"_Vol_{slot}" if slot and slot > 1 else ""
+            if (slot is None or bundle.blend_file != f"{base_name}{suffix}.blend"
+                    or not keys or len(by_source) != len(assets)
+                    or set(keys) != set(by_source) or not set(keys) <= remaining.keys()):
+                raise ValueError(
+                    f"旧包缺少可靠来源映射，拒绝自动更新并保留旧库: {bundle.blend_file}；"
+                    "请先备份并确认强制重建"
+                )
+            chunk = []
+            for key in keys:
+                entry = remaining.pop(key)
+                previous = getattr(bundle, "source_versions", {}).get(key, {})
+                if previous.get("target") != entry[0].get("source_version", {}).get("target"):
+                    raise ValueError(
+                        f"目标骨架版本已变化，拒绝覆盖已链接的旧资产: {key}；"
+                        "请选择新资产库，或备份后确认强制重建"
+                    )
+                if entry[1].name != by_source[key].action_name:
+                    raise ValueError(
+                        f"更新会改变已链接的动作名，旧库保持不变: {by_source[key].action_name}；"
+                        "请在无重名动作的场景重新导入，或备份后确认强制重建"
+                    )
+                chunk.append(entry)
+            chunks.append((slot, chunk))
+        additions = list(remaining.values())
+        new_chunks = [additions[i:i + chunk_size] for i in range(0, len(additions), chunk_size)]
+        slots = self._plan_bundle_slots(self._occupied_bundle_slots(output_dir, base_name), len(new_chunks))
+        return chunks + list(zip(slots, new_chunks))
+
+    def _plan_library_updates(self, context, manifest, imported_actions, source_dir):
+        grouped = {}
+        for item in imported_actions:
+            key = self._source_key_for_imported(item, source_dir)
+            skeleton = item["source_manifest_ref"].split("/", 1)[0]
+            versions = grouped.setdefault(skeleton, {})
+            if key in versions:
+                raise ValueError(f"当前任务包含重复来源: {key}")
+            version = item.get("source_version", {})
+            if version and not item.get("source_bundle"):
+                if version["content_hash"] != source_content_hash(item["source_file"]):
+                    raise ValueError(f"源文件在导入后发生变化，请重新扫描: {item['source_file']}")
+                if version["settings"] != import_settings_fingerprint(context.config):
+                    raise ValueError("导入参数已变化，请重新导入动作")
+            versions[key] = version
+        rebuild = set()
+        for skeleton, versions in grouped.items():
+            plan = plan_source_updates(manifest, skeleton, versions,
+                                       context.get_config("force_rebuild", False))
+            if plan["rebuild"]:
+                rebuild.add(skeleton)
+            context.log_info(self.get_stage_name(),
+                             f"{skeleton}: 新增 {len(plan['new'])}，复用 {len(plan['unchanged'])}，"
+                             f"更新 {len(plan['changed'])}，待校验 {len(plan['unverified'])}")
+        return rebuild
 
     def _persist_published_provenance(self, context, published_actions):
         """Checkpoint destination provenance before staging can be deleted."""
+        checkpoint = context.get_config("import_checkpoint", {})
+        staged_records = checkpoint.get("imported_actions", []) if isinstance(checkpoint, dict) else []
         for imported_action, destination_bundle in published_actions:
             imported_action["source_bundle"] = self._normalized_source_path(destination_bundle)
+            # Partial batches may retry after their successful actions have
+            # been published and staging has been cleaned. Resume from that
+            # verified destination instead of a deleted staging file.
+            for staged_record in staged_records:
+                if (staged_record.get("action_name") == imported_action.get("action_name")
+                        and staged_record.get("source_manifest_ref") == imported_action.get("source_manifest_ref")
+                        and self._normalized_source_path(staged_record.get("source_file", "")) == self._normalized_source_path(imported_action.get("source_file", ""))):
+                    staged_record["source_bundle"] = imported_action["source_bundle"]
+        if isinstance(checkpoint, dict) and checkpoint:
+            context.set_config("import_checkpoint", checkpoint)
         context.persist_checkpoint()
 
     def _published_bundle_for_source(self, output_dir: str, manifest, source_key: str) -> str:
@@ -1992,24 +2051,24 @@ class LibraryBuildingStage(PipelineStageBase):
         """Recreate the processed-source key without requiring a live action."""
         source_ref = imported_action.get("source_manifest_ref", "")
         skeleton = source_ref.split("/", 1)[0] if source_ref else ""
-        source_value = source_ref
-        source_file = imported_action.get("source_file", "")
-        if source_file and source_dir:
-            try:
-                source_value = os.path.relpath(source_file, source_dir).replace('\\', '/')
-            except (OSError, ValueError):
-                pass
-        return f"{skeleton}::{source_value}" if skeleton and source_value else ""
+        return library_source_key(skeleton, imported_action.get("source_file", ""),
+                                  source_dir, source_ref)
 
     def _reload_actions_from_blends(self, output_dir: str, manifest, imported_actions=None):
         """从已提交的v2库包恢复动作到 bpy.data，用于重烘焙。"""
         loaded_by_bundle = {}
+        requested_bundles = None if imported_actions is None else {
+            self._normalized_source_path(item["source_bundle"])
+            for item in imported_actions if item.get("source_bundle")
+        }
         imported_actions = imported_actions or []
         if not os.path.isdir(output_dir):
             return loaded_by_bundle
         for bundle in sorted(manifest.bundles, key=lambda item: item.blend_file):
             blend_path = os.path.join(output_dir, bundle.blend_file)
             normalized_bundle = self._normalized_source_path(blend_path)
+            if requested_bundles is not None and normalized_bundle not in requested_bundles:
+                continue
             provenance = {
                 item.get("action_name", ""): item.get("source_manifest_ref", "")
                 for item in imported_actions
@@ -2019,7 +2078,7 @@ class LibraryBuildingStage(PipelineStageBase):
                 existing = {}
                 duplicate_actions = []
                 for action in list(bpy.data.actions):
-                    requested_name = action.get("Pipeline_RequestedActionName", "") or action.name
+                    requested_name = action.get("Pipeline_SourceBundleActionName", "") or action.get("Pipeline_RequestedActionName", "") or action.name
                     if self._normalized_source_path(
                         action.get("Pipeline_SourceBundle", "")
                     ) != normalized_bundle:
@@ -2042,7 +2101,9 @@ class LibraryBuildingStage(PipelineStageBase):
                 with bpy.data.libraries.load(blend_path, link=False) as (df, dt):
                     requested_names = list(df.actions)
                     missing_names = [name for name in requested_names if name not in existing]
-                    dt.actions = missing_names
+                    # Blender replaces this list's strings with loaded IDs.
+                    # Retain independent names for the provenance mapping.
+                    dt.actions = list(missing_names)
                 returned_actions = list(dt.actions)
                 if len(returned_actions) != len(missing_names):
                     continue
@@ -2050,7 +2111,11 @@ class LibraryBuildingStage(PipelineStageBase):
                 for requested_name, action in zip(missing_names, returned_actions):
                     if action is None:
                         continue
-                    action["Pipeline_RequestedActionName"] = requested_name
+                    # Blender can suffix appended names. Keep the original
+                    # staging request and the immutable bundle name separately.
+                    if not action.get("Pipeline_RequestedActionName", ""):
+                        action["Pipeline_RequestedActionName"] = requested_name
+                    action["Pipeline_SourceBundleActionName"] = requested_name
                     action["Pipeline_SourceBundle"] = normalized_bundle
                     if provenance.get(requested_name):
                         action["Pipeline_SourceRef"] = provenance[requested_name]

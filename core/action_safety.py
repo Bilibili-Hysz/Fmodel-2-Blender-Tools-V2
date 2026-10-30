@@ -278,13 +278,4 @@ def restore_nla_mutes(state):
 
 def replace_action(obj, action):
     """Replace the active action without destructively rebuilding NLA tracks."""
-    data = getattr(obj, "animation_data", None)
-    if data is None:
-        create = getattr(obj, "animation_data_create", None)
-        if not callable(create):
-            raise RuntimeError("target has no animation data")
-        data = create()
-    if list(getattr(data, "nla_tracks", ()) or ()):
-        raise RuntimeError("cannot safely replace action while NLA tracks exist")
-    assign_action(obj, action)
-    return data
+    return assign_action(obj, action)
