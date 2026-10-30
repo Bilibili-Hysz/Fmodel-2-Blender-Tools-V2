@@ -2,9 +2,9 @@ schema_version = 1
 vendor_id = "io_scene_ueformat"
 package_name = "io_scene_ueformat"
 version = "0.10.0"
-source_repository = "h4lfheart/UEFormat FModel edition"
-source_commit = "a7462ea7400dea4ac4dbda881b1477385f956d84"
-source_snapshot = "canonical_v10_source_migration_worktree_2026-09-01"
+source_repository = "Bilibili-Hysz/UEFormat (upstream: h4lfheart/UEFormat)"
+source_commit = "921cd07c1d2d059b193d0491000067fc50e37dab"
+source_snapshot = "canonical_v10_asset_guards_worktree_2026-10-11_921cd07c"
 tree_manifest = "vendor_tree_manifest.json"
 registration_mode = "headless"
 blender_min = "4.2.0"
@@ -15,8 +15,6 @@ capabilities = [
   "uepose",
   "fmodel_materials",
   "fmodel_textures",
-  "strict_animation_skeleton",
-  "strict_pose_skeleton",
 ]
 
 [[wheels]]

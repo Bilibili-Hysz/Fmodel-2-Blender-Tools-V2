@@ -3,18 +3,16 @@
   "vendor_id": "io_scene_ueformat",
   "package_name": "io_scene_ueformat",
   "version": "0.10.0",
-  "source_repository": "h4lfheart/UEFormat FModel edition",
-  "source_commit": "a7462ea7400dea4ac4dbda881b1477385f956d84",
-  "source_snapshot": "canonical_v10_source_migration_worktree_2026-09-01",
+  "source_repository": "Bilibili-Hysz/UEFormat (upstream: h4lfheart/UEFormat)",
+  "source_commit": "921cd07c1d2d059b193d0491000067fc50e37dab",
+  "source_snapshot": "canonical_v10_asset_guards_worktree_2026-10-11_921cd07c",
   "registration_mode": "headless",
   "capabilities": [
     "uemodel",
     "ueanim",
     "uepose",
     "fmodel_materials",
-    "fmodel_textures",
-    "strict_animation_skeleton",
-    "strict_pose_skeleton"
+    "fmodel_textures"
   ],
   "root": ".",
   "excluded_globs": [
@@ -24,13 +22,13 @@
     "**/*.pyo",
     "**/*.pyd"
   ],
-  "file_count": 73,
-  "tree_sha256": "8027d2864a74650ad452d88c3a494876c8c0f4534f6c85772fbfd5d3987279d2",
+  "file_count": 74,
+  "tree_sha256": "41b768a1c8c711dcf3c5762aaaac7ea85b1ce1fc6b2824808d62d7cc919e7431",
   "files": [
     {
       "path": "README.md",
-      "size": 3625,
-      "sha256": "d13f7695d13a6b45643fe4f71d4e5f6cb755e201fc212b3faed17d47034db923"
+      "size": 3787,
+      "sha256": "ba7343dd65586b80673225100b9a9ed52a49612f17ca12bc6f9ad707b0634da6"
     },
     {
       "path": "io_scene_ueformat/__init__.py",
@@ -59,8 +57,8 @@
     },
     {
       "path": "io_scene_ueformat/importer/archive/reader.py",
-      "size": 5788,
-      "sha256": "a0879a0328cdb757befcb1ada09f613e2adb9097e8c80ccdd9688dd34411f5db"
+      "size": 5564,
+      "sha256": "d3e91a45f4fbc2545c12163206d6f18a86eb3d276cec60a32f1c31d700f7a17b"
     },
     {
       "path": "io_scene_ueformat/importer/constants.py",
@@ -74,8 +72,8 @@
     },
     {
       "path": "io_scene_ueformat/importer/create/anim.py",
-      "size": 11895,
-      "sha256": "5a75a47b2543f92820b2113153922239b9c981c4781822b51b975978489e451d"
+      "size": 11405,
+      "sha256": "8a89f722a218864bc00d646a691524f57c20bd6dc89cacea0c618240d8a2d272"
     },
     {
       "path": "io_scene_ueformat/importer/create/model.py",
@@ -114,8 +112,8 @@
     },
     {
       "path": "io_scene_ueformat/importer/deserialize/attributes.py",
-      "size": 780,
-      "sha256": "f4e10e73286265a55c503922ef3ef4efbae1633bd90d26f0d9fa65a74b4f71a5"
+      "size": 859,
+      "sha256": "423cab017cc818fef3ef961c1c05a99390f7933646fe3358d204f996e55b1df4"
     },
     {
       "path": "io_scene_ueformat/importer/deserialize/lod.py",
@@ -174,13 +172,13 @@
     },
     {
       "path": "io_scene_ueformat/importer/extensions/fmodel/attributes.py",
-      "size": 3470,
-      "sha256": "ae9e1035a0b879d550b73dc31e41627081510bd7646f18986967a85991789adb"
+      "size": 3469,
+      "sha256": "bd47d2fb2a3ef1dfd53f76336f35e1df23e48f3a8a9732dae5910203904f1172"
     },
     {
       "path": "io_scene_ueformat/importer/extensions/fmodel/contract.py",
-      "size": 1780,
-      "sha256": "569bef8149cc6002c2dcabf84a94bd4b069e9254e5682f42829566808ca11b45"
+      "size": 1825,
+      "sha256": "38aff364b652d627b1049381890d42b48507d61df889ccdb3133fc31379e6cf7"
     },
     {
       "path": "io_scene_ueformat/importer/extensions/fmodel/envelope.py",
@@ -194,8 +192,8 @@
     },
     {
       "path": "io_scene_ueformat/importer/extensions/fmodel/legacy.py",
-      "size": 4579,
-      "sha256": "2aae2c1ce0a6f193b449687161a1482996831d702111f69e32ec86abbf32c5f2"
+      "size": 4807,
+      "sha256": "72087e8e7b8236e132d38dc0e750e21dab8eebc71a8bdcfd8fe2a3bcddf0ef19"
     },
     {
       "path": "io_scene_ueformat/importer/extensions/fmodel/materials.py",
@@ -204,8 +202,8 @@
     },
     {
       "path": "io_scene_ueformat/importer/extensions/fmodel/routing.py",
-      "size": 2095,
-      "sha256": "3ace28402ca1e6829ebb26916edaa2a0acf07b2eb36ffbd07ad1ee4d837ccffc"
+      "size": 2438,
+      "sha256": "16b4c6629bbea2ea03f08ebb928fb9c9f26abd06281da36c852f6b8e1a6c702e"
     },
     {
       "path": "io_scene_ueformat/importer/fmodel_payload.py",
@@ -219,8 +217,8 @@
     },
     {
       "path": "io_scene_ueformat/importer/import_context.py",
-      "size": 16586,
-      "sha256": "ecefb1bfe3b8d14387b32dcb7c3b98fd029cc02454bee090490af706ada76dd2"
+      "size": 15493,
+      "sha256": "7d3e188b91de6a4ba89ec8d262a1b41b105036926ec4630353b16cd8a5155f6e"
     },
     {
       "path": "io_scene_ueformat/importer/legacy/__init__.py",
@@ -283,9 +281,14 @@
       "sha256": "6295daf9dce3818da2d3dae0c0faf41cc91e0aea088b8a44f6516af823500acb"
     },
     {
+      "path": "io_scene_ueformat/importer/resource_limits.py",
+      "size": 1079,
+      "sha256": "261b02068cf830f67feecab8814fbffe48a34406584fb77b9fd042f098100a8b"
+    },
+    {
       "path": "io_scene_ueformat/importer/runtime_fmodel.py",
-      "size": 25726,
-      "sha256": "88c24071f9ba63b31a4d7d82ffdb104415a0a32ca80d1658f3e536329cf729fe"
+      "size": 26328,
+      "sha256": "24106da75366f0886e68d8f346a236cfe451259dadea8b31147ca0a4b372e14b"
     },
     {
       "path": "io_scene_ueformat/importer/runtime_identity.py",
@@ -294,13 +297,13 @@
     },
     {
       "path": "io_scene_ueformat/importer/runtime_material_builder.py",
-      "size": 36438,
-      "sha256": "6b509d36cd24eeec82a5275a61ff6c61a75eeb891383053ee1355b519a306156"
+      "size": 37062,
+      "sha256": "fc3eab6ff4296ab4f522ad08e76deebfce38d7bed0921d85488b82f2f31ad8a8"
     },
     {
       "path": "io_scene_ueformat/importer/runtime_material_images.py",
-      "size": 7444,
-      "sha256": "6731cb2d2816d8b2d5e74d2ed792d9486e6b957eb0f9f810906b13dc249a0be5"
+      "size": 7712,
+      "sha256": "d4a0981c0b9a78ea568b8a7eed6271ddb4e43a8cfe77e0fa3891ce413d2c9620"
     },
     {
       "path": "io_scene_ueformat/importer/runtime_materials.py",
@@ -334,8 +337,8 @@
     },
     {
       "path": "io_scene_ueformat/importer/wire.py",
-      "size": 4376,
-      "sha256": "37aa93911b8a35753a4b5621adc38db174dfa94c52a9cc1f1933f3fcf6de3864"
+      "size": 4404,
+      "sha256": "221fd1e728435d00758174f618b05b508bb52e84cc6dac2619006c415fffe996"
     },
     {
       "path": "io_scene_ueformat/logging.py",
@@ -354,18 +357,18 @@
     },
     {
       "path": "io_scene_ueformat/op/panels.py",
-      "size": 3939,
-      "sha256": "38605d24a47741ad474da93a6bd5deb7561be0ddbc7d0e2cf099ce2e3d6b76a2"
+      "size": 3819,
+      "sha256": "b72ed31f4408bdea75a7a15cfa18fbbb6a159220a726f4d2dcf1c9b26842b2a1"
     },
     {
       "path": "io_scene_ueformat/op/settings.py",
-      "size": 2184,
-      "sha256": "4e3cb0e27fa1ce7339bdfd7140ebcef52db0a361a8cff3683c653603b69352cf"
+      "size": 2174,
+      "sha256": "1301a1b94bb9a94dd1e72796e848ee500c3cf8f66c03ed2db847364dd85978b8"
     },
     {
       "path": "io_scene_ueformat/options.py",
-      "size": 2159,
-      "sha256": "36dcd07794dfdb740fb0d7c22b9ad09cf03f3a64cbf28a5c12709ac26cd1cf18"
+      "size": 2239,
+      "sha256": "6c5febd79777d6edbcaf445b01747582556ad2a04f00f08c1fce32cd375378cf"
     },
     {
       "path": "io_scene_ueformat/typing.py",
@@ -389,8 +392,8 @@
     },
     {
       "path": "vendor_manifest.toml",
-      "size": 1445,
-      "sha256": "c7ad74697666f305af8025acec2058addf4a8f4d404b05b65d55735e53a4fa12"
+      "size": 1464,
+      "sha256": "c1871eccec23b131ce56542e8ab159ce23e4ce552c6061fb21aae186ade4c73a"
     }
   ]
 }

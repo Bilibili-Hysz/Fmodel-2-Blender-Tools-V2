@@ -9,18 +9,20 @@ These third-party Blender plug-ins are shipped as runtime dependencies of
 - **Supported formats:** `.uemodel`, `.ueanim`, `.uepose`
 - **Upstream family:** `h4lfheart/UEFormat` Blender add-on
 - **FModel snapshot:** canonical addon branch `fmodel/material-links-v1`,
-  based on commit `a7462ea7400dea4ac4dbda881b1477385f956d84` plus the verified
-  V10 working-tree overlay synchronized on **2026-09-01**. The commit is the
-  base reference, not a claim that the overlay is committed there.
+  based on commit `921cd07c1d2d059b193d0491000067fc50e37dab` plus the working-tree
+  overlay synchronized on **2026-10-11**. The overlay restores upstream animation
+  binding while preserving the FModel material and texture improvements.
 - **Runtime identity:** 71 UEFormat files, tree SHA-256
-  `bf114da499913048d1cf49b9c477d24b6d30bd7bcc08695bd93744561ad50edd`.
-- **License:** see the canonical addon `blender_manifest.toml` declaration and the\n  repository licensing files.
+  `9bf063fbf9b781e8ddb2f8344376fa33ea8bcb4834141444b61b474b49f30d1f`.
+- **License:** see the canonical addon `blender_manifest.toml` declaration and the
+  repository licensing files.
 
 The snapshot includes the FModel-aware importer surfaces used by V2:
 
 - FModel material-link and texture provenance;
 - external and embedded texture resolution;
-- strict FModel skeleton identity for animation and pose imports;
+- upstream bone-name binding for animation and pose imports;
+- optional FModel skeleton provenance for library grouping and discovery;
 - FModel export-root and bundle-root options;
 - material-slot/topology compatibility fixes for sparse or remapped LOD slots.
 
