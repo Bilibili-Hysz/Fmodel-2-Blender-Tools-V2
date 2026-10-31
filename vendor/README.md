@@ -9,11 +9,11 @@ These third-party Blender plug-ins are shipped as runtime dependencies of
 - **Supported formats:** `.uemodel`, `.ueanim`, `.uepose`
 - **Upstream family:** `h4lfheart/UEFormat` Blender add-on
 - **FModel snapshot:** canonical addon branch `fmodel/material-links-v1`,
-  based on commit `3b6ab93813a474b6a02b031ee1f1d65eddc1e56c` plus the working-tree
+  based on commit `6d812dd38ed79d2ce33c5d6dc33e31b2ab71f45f` plus the working-tree
   overlay synchronized on **2026-10-31**. The overlay restores upstream animation
   binding while preserving the FModel material and texture improvements.
 - **Runtime identity:** 72 UEFormat files, tree SHA-256
-  `8dfac98a065d033d1ac6241c03bb378ce785f6730d78e2e7e8b0b801dbc28639`.
+  `0d5ca81be020b050f689aacb11986285dd4d4f8cca1c7bd25471b8b9aacad26e`.
 - **License:** see the canonical addon `blender_manifest.toml` declaration and the
   repository licensing files.
 

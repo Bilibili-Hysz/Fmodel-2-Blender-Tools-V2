@@ -4,8 +4,8 @@
   "package_name": "io_scene_ueformat",
   "version": "0.10.0",
   "source_repository": "Bilibili-Hysz/UEFormat (upstream: h4lfheart/UEFormat)",
-  "source_commit": "3b6ab93813a474b6a02b031ee1f1d65eddc1e56c",
-  "source_snapshot": "canonical_v10_material_naming_worktree_2026-10-31_3b6ab938",
+  "source_commit": "6d812dd38ed79d2ce33c5d6dc33e31b2ab71f45f",
+  "source_snapshot": "canonical_v10_material_aux_worktree_2026-10-31_6d812dd3",
   "registration_mode": "headless",
   "capabilities": [
     "uemodel",
@@ -23,12 +23,12 @@
     "**/*.pyd"
   ],
   "file_count": 74,
-  "tree_sha256": "25a17a2cd10d5fff3071597e2a59ece822d460a3dbfb413bf1302a641d2f77e7",
+  "tree_sha256": "ac7611c3965790aa001d8c8bd00c09726c118af94e6843772facbff790b31c96",
   "files": [
     {
       "path": "README.md",
       "size": 3787,
-      "sha256": "ab5f1654d39d354fd98a1189e9a3bbd2c6900c58615c72a1bac770f069c6ac70"
+      "sha256": "81ae8954f298f504947d3a72f9a5b37bdb53476771acd56d1db5ab78c40cc82a"
     },
     {
       "path": "io_scene_ueformat/__init__.py",
@@ -77,8 +77,8 @@
     },
     {
       "path": "io_scene_ueformat/importer/create/model.py",
-      "size": 9891,
-      "sha256": "e3347ca91df24ae0bf3315051925a25cc4cafd8f15014b3558a0cfe729f6714c"
+      "size": 9826,
+      "sha256": "b7718e75f2fc9b72292f5a3be47cf338c185d7479ae29d5a3b0e85a4ff31de56"
     },
     {
       "path": "io_scene_ueformat/importer/create/pose.py",
@@ -297,8 +297,8 @@
     },
     {
       "path": "io_scene_ueformat/importer/runtime_material_builder.py",
-      "size": 36871,
-      "sha256": "17db587ea8979040d9ca84149678b238ea2c0786f6d5ec6817258234ba34ba30"
+      "size": 36689,
+      "sha256": "87c450d3d951ca33fb29b430f33738f95ffeb9cccfbcf451145063e4a892e154"
     },
     {
       "path": "io_scene_ueformat/importer/runtime_material_images.py",
@@ -392,8 +392,8 @@
     },
     {
       "path": "vendor_manifest.toml",
-      "size": 1467,
-      "sha256": "2c243a9c1ebd255c6f7468ff85149b09bf9facf1fde6651e7a4fb176f8c63ffb"
+      "size": 1464,
+      "sha256": "b4a4ac723153a70f5d477d8c0b9fd077d6de045d7817e4c9c163fa5c88a5f91e"
     }
   ]
 }
