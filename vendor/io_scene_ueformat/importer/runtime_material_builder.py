@@ -66,10 +66,15 @@ def build_fmodel_materials(
     if not options.import_materials:
         return
     if source_slot_to_blender_index is None:
+        # Defensive default for callers that supply no map. MaterialDto carries no source slot
+        # number, so the dense MATERIALS array's order is the only index information available.
+        # This branch previously read material.source_slot_index, a field the DTO never had.
+        # The importer always passes a map, so the crash that reached users came from
+        # source_slot_mapping_for_lod_materials below, not from here - but the same phantom
+        # field was in both places and both are now position-based.
         source_slot_to_blender_index = {
-            material.source_slot_index: blender_index
-            for blender_index, material in enumerate(lod_materials)
-            if material.source_slot_index is not None
+            blender_index: blender_index
+            for blender_index, _material in enumerate(lod_materials)
         }
     source_slot_to_blender_index = _source_slot_to_blender_indices(
         material_links.slots,
@@ -182,10 +187,10 @@ def source_slot_mapping_for_lod_materials(lod_materials, material_links) -> dict
     ``MATERIALS`` entry.  Falling back to ``slot_index`` preserves v1 and v2
     records that do not carry an original source index.
     """
+    # Same correction: index by position, not by a field that does not exist.
     dense_by_source = {
-        material.source_slot_index: blender_index
-        for blender_index, material in enumerate(lod_materials)
-        if material.source_slot_index is not None
+        blender_index: blender_index
+        for blender_index, _material in enumerate(lod_materials)
     }
     mapping: dict[int, int] = {}
     for slot in material_links.slots:
@@ -503,6 +508,50 @@ def _build_material(material, mesh, slot, images, warn, options) -> None:
             pbr_y -= source_spacing
         else:
             custom_y -= source_spacing
+
+    # Scalar and vector parameters carry real values - Roughness 0.25, Tint (0.1, 0.2, 0.3) - and
+    # the texture loop above skips every one of them because it tests kind != 1. Real exports
+    # always reach this function: the dispatch keys on FMODEL_PBR_INTERFACES, which the V10
+    # contract forbids the producer from writing, so the v2 builder that does handle values never
+    # runs. Without this pass the numbers sit in fmodel_parameter_metadata and never reach a
+    # socket: the imported material keeps Principled's default roughness.
+    _PRINCIPLED_SOCKETS = {
+        "roughness": "Roughness",
+        "metallic": "Metallic",
+        "specular": "Specular IOR Level",
+        "base_color": "Base Color",
+        "emissive": "Emission Color",
+    }
+    value_y = pbr_y
+    for parameter in slot.parameters:
+        if parameter.kind == 1:
+            continue
+        semantic = (parameter.semantic or "").lower()
+        node = nodes.new("ShaderNodeValue" if parameter.kind == 2 else "ShaderNodeRGB")
+        node.name = parameter.name
+        node.label = parameter.name
+        node.parent = frame_for(semantic)
+        node.location = (0, value_y)
+        value_y -= 140
+        try:
+            if parameter.kind == 2:
+                _socket_by_identifier(node.outputs, "Value").default_value = parameter.value
+            else:
+                _socket_by_identifier(node.outputs, "Color").default_value = parameter.value
+        except (TypeError, ValueError) as error:
+            warn(f"FModel parameter {parameter.name!r} has an unusable value: {error}")
+            continue
+
+        socket_name = _PRINCIPLED_SOCKETS.get(semantic)
+        if socket_name is None or socket_name not in principled.inputs:
+            # No socket to drive, but the node still carries the value so nothing is lost.
+            continue
+        if parameter.kind == 2:
+            principled.inputs[socket_name].default_value = parameter.value
+        else:
+            links.new(node.outputs["Color"], principled.inputs[socket_name])
+            if semantic == "emissive" and "Emission Strength" in principled.inputs:
+                principled.inputs["Emission Strength"].default_value = 1.0
 
     # Re-enable frame auto-sizing only after all absolute/local node positions have
     # been assigned. Setting shrink=True before parenting is what caused older

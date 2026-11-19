@@ -10,6 +10,7 @@ import gzip
 import importlib.util
 import os
 from pathlib import Path
+import shutil
 import struct
 import sys
 import tempfile
@@ -187,19 +188,26 @@ class UEFormatIdentityReaderTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "Windows extended-path contract")
     def test_file_probe_reads_windows_path_beyond_max_path(self):
-        with tempfile.TemporaryDirectory() as directory:
+        directory = tempfile.mkdtemp()
+        try:
             parent = Path(directory)
             while len(str(parent / "long.ueanim")) <= 280:
                 parent /= "animation_path_segment"
-            parent.mkdir(parents=True)
+            # Beyond MAX_PATH a plain mkdir fails on machines where
+            # LongPathsEnabled is unset, so create the fixture extended. The
+            # reader itself is the code under test and must handle the path.
+            os.makedirs(self.reader._filesystem_path(parent), exist_ok=True)
             path = parent / "long.ueanim"
-            path.write_bytes(ueformat_file(self.reader, kind="animation"))
+            with open(self.reader._filesystem_path(path), "wb") as stream:
+                stream.write(ueformat_file(self.reader, kind="animation"))
 
             self.assertTrue(self.reader._filesystem_path(path).startswith("\\\\?\\"))
             record = self.reader.read_ueformat_identity(path)
 
             self.assertEqual(record.kind, "animation")
             self.assertTrue(record.has_strict_identity)
+        finally:
+            shutil.rmtree(self.reader._filesystem_path(directory), ignore_errors=True)
 
     def test_reads_gzip_envelope(self):
         record = self.reader.read_ueformat_identity_bytes(

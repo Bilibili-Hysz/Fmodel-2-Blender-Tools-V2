@@ -406,12 +406,46 @@ def _safe_extract(zf: zipfile.ZipFile, destination: Path) -> None:
     zf.extractall(destination)
 
 
+def _filesystem_path(path: str | Path) -> str:
+    """Return a Windows extended path for filesystem calls.
+
+    The Vendor cache lives under the user's local app data directory and embeds
+    the full wheel SHA-256, so lock and staging paths can exceed the legacy
+    MAX_PATH boundary on machines where LongPathsEnabled is unset. Plain
+    os.open/os.makedirs calls fail there with a misleading "file not found";
+    the extended form works regardless of that policy.
+    """
+
+    value = os.fspath(path)
+    if os.name != "nt" or not os.path.isabs(value) or value.startswith("\\\\?\\"):
+        return value
+    return "\\\\?\\UNC\\" + value[2:] if value.startswith("\\\\") else "\\\\?\\" + value
+
+
+def _exists(path: str | Path) -> bool:
+    """Return whether a path exists, tolerating the Windows MAX_PATH boundary."""
+
+    try:
+        return os.path.exists(_filesystem_path(path))
+    except OSError:
+        return False
+
+
+def _is_file(path: str | Path) -> bool:
+    """Return whether a path is a regular file, tolerating the MAX_PATH boundary."""
+
+    try:
+        return os.path.isfile(_filesystem_path(path))
+    except OSError:
+        return False
+
+
 def _acquire_lock(lock_path: Path, *, timeout: float) -> int:
     deadline = time.monotonic() + timeout
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    os.makedirs(_filesystem_path(lock_path.parent), exist_ok=True)
     while True:
         try:
-            descriptor = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            descriptor = os.open(_filesystem_path(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             os.write(descriptor, f"pid={os.getpid()}\n".encode("ascii", "replace"))
             return descriptor
         except FileExistsError:
@@ -430,7 +464,7 @@ def _release_lock(lock_path: Path, descriptor: int) -> None:
         os.close(descriptor)
     finally:
         try:
-            lock_path.unlink()
+            os.unlink(_filesystem_path(lock_path))
         except FileNotFoundError:
             pass
 
@@ -469,43 +503,43 @@ def ensure_wheel_cached(
         / wheel.sha256
     )
     marker = final_dir / ".extracted.ok"
-    if marker.is_file():
+    if _is_file(marker):
         return final_dir
 
     lock_path = final_dir.parent / f".{wheel.sha256}.lock"
     descriptor = _acquire_lock(lock_path, timeout=lock_timeout)
     try:
-        if marker.is_file():
+        if _is_file(marker):
             return final_dir
-        if final_dir.exists():
-            shutil.rmtree(final_dir, ignore_errors=True)
-        final_dir.parent.mkdir(parents=True, exist_ok=True)
+        if _exists(final_dir):
+            shutil.rmtree(_filesystem_path(final_dir), ignore_errors=True)
+        os.makedirs(_filesystem_path(final_dir.parent), exist_ok=True)
         # Keep the staging directory name deliberately short. On Windows the
         # temporary directory path is combined with every wheel member name;
         # embedding the full SHA-256 here can push an otherwise valid cache
         # extraction beyond the legacy MAX_PATH boundary. The wheel hash is
         # already part of ``final_dir`` and the lock protects this short name.
-        partial_dir = Path(tempfile.mkdtemp(prefix=".p-", dir=final_dir.parent))
+        partial_dir = Path(tempfile.mkdtemp(prefix=".p-", dir=_filesystem_path(final_dir.parent)))
         try:
             with zipfile.ZipFile(wheel_path, "r") as archive:
                 _safe_extract(archive, partial_dir)
             marker_tmp = partial_dir / ".extracted.ok.tmp"
-            marker_tmp.write_text(
-                f"vendor_id={spec.vendor_id}\nversion={spec.version_text}\nwheel={wheel.filename}\nsha256={wheel.sha256}\n",
-                encoding="utf-8",
-            )
-            marker_tmp.replace(partial_dir / ".extracted.ok")
+            with open(_filesystem_path(marker_tmp), "w", encoding="utf-8") as marker_stream:
+                marker_stream.write(
+                    f"vendor_id={spec.vendor_id}\nversion={spec.version_text}\nwheel={wheel.filename}\nsha256={wheel.sha256}\n"
+                )
+            os.replace(_filesystem_path(marker_tmp), _filesystem_path(partial_dir / ".extracted.ok"))
             try:
-                partial_dir.replace(final_dir)
+                os.replace(_filesystem_path(partial_dir), _filesystem_path(final_dir))
             except FileExistsError:
-                if not marker.is_file():
+                if not _is_file(marker):
                     raise
-                shutil.rmtree(partial_dir, ignore_errors=True)
+                shutil.rmtree(_filesystem_path(partial_dir), ignore_errors=True)
         except VendorLoadError:
-            shutil.rmtree(partial_dir, ignore_errors=True)
+            shutil.rmtree(_filesystem_path(partial_dir), ignore_errors=True)
             raise
         except (OSError, zipfile.BadZipFile) as exc:
-            shutil.rmtree(partial_dir, ignore_errors=True)
+            shutil.rmtree(_filesystem_path(partial_dir), ignore_errors=True)
             raise VendorLoadError(
                 VendorErrorCode.CACHE_EXTRACT_FAILED,
                 f"Unable to extract Vendor wheel {wheel.filename}: {exc}",

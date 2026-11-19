@@ -4,8 +4,8 @@
   "package_name": "io_scene_ueformat",
   "version": "0.10.0",
   "source_repository": "Bilibili-Hysz/UEFormat (upstream: h4lfheart/UEFormat)",
-  "source_commit": "6d812dd38ed79d2ce33c5d6dc33e31b2ab71f45f",
-  "source_snapshot": "canonical_v10_material_aux_worktree_2026-10-31_6d812dd3",
+  "source_commit": "dea1b5b1dba3f71943ce7102db31148a9914b0a3",
+  "source_snapshot": "canonical_v10_2026-11-20_dea1b5b1",
   "registration_mode": "headless",
   "capabilities": [
     "uemodel",
@@ -23,7 +23,7 @@
     "**/*.pyd"
   ],
   "file_count": 74,
-  "tree_sha256": "ac7611c3965790aa001d8c8bd00c09726c118af94e6843772facbff790b31c96",
+  "tree_sha256": "6cf6014bdae11d8a7007f5ae2f683425838dfc45fcc0d75aeadfa08d32f460cb",
   "files": [
     {
       "path": "README.md",
@@ -87,8 +87,8 @@
     },
     {
       "path": "io_scene_ueformat/importer/create/skeleton.py",
-      "size": 9738,
-      "sha256": "11fee114b856d9d1075fed1244f716c19977285e0301d79cb02228de7314f027"
+      "size": 10244,
+      "sha256": "ae14c9f8c4c90165444e5322bdf30263e3be98301a0b1cced5a7ee89f92797ac"
     },
     {
       "path": "io_scene_ueformat/importer/create/space.py",
@@ -297,8 +297,8 @@
     },
     {
       "path": "io_scene_ueformat/importer/runtime_material_builder.py",
-      "size": 36689,
-      "sha256": "87c450d3d951ca33fb29b430f33738f95ffeb9cccfbcf451145063e4a892e154"
+      "size": 38582,
+      "sha256": "f92549a630e81dd4105280c6a413643f054a15d42d95e1f920cab2da70c8868f"
     },
     {
       "path": "io_scene_ueformat/importer/runtime_material_images.py",
@@ -392,8 +392,8 @@
     },
     {
       "path": "vendor_manifest.toml",
-      "size": 1464,
-      "sha256": "b4a4ac723153a70f5d477d8c0b9fd077d6de045d7817e4c9c163fa5c88a5f91e"
+      "size": 1442,
+      "sha256": "775000091ddf328ae2e7bbcacf2a9f057453642aec59081829bdb1ed6b952e97"
     }
   ]
 }

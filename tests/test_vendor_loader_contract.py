@@ -162,8 +162,19 @@ def test_cache_extraction_uses_short_staging_path_for_long_windows_paths(tmp_pat
     monkeypatch.setattr(vendor_loader.tempfile, "mkdtemp", capture_prefix)
     cache_root = tmp_path / ("cache-" + ("x" * 60))
     cached = ensure_wheel_cached(spec, spec.wheels[0], cache_root=cache_root)
-    assert (cached / ".extracted.ok").is_file()
-    assert (cached / long_member).is_file()
+    # The final cache path is deliberately long enough to cross MAX_PATH here, so
+    # stat it through the loader's own extended-path helpers. A bare is_file()
+    # returns False on such paths and would fail the assertion even though the
+    # extraction succeeded - the exact defect the loader now handles.
+    assert len(str(cached / ".extracted.ok")) > 260
+    assert vendor_loader._is_file(cached / ".extracted.ok")
+    assert vendor_loader._is_file(cached / long_member)
+    assert prefixes == [".p-"]
+
+    # A second call must be a cache hit: the marker is visible, so no new staging
+    # directory is created and the same path is returned.
+    again = ensure_wheel_cached(spec, spec.wheels[0], cache_root=cache_root)
+    assert again == cached
     assert prefixes == [".p-"]
 
 

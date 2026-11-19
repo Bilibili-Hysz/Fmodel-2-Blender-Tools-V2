@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+import shutil
 from types import SimpleNamespace
 import tempfile
 import unittest
@@ -83,20 +84,29 @@ class ResumeIdentityTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "Windows extended-path contract")
     def test_source_revision_tracks_file_beyond_windows_max_path(self):
-        with tempfile.TemporaryDirectory() as directory:
+        directory = tempfile.mkdtemp()
+        try:
             parent = Path(directory)
             while len(str(parent / "long.ueanim")) <= 280:
                 parent /= "animation_path_segment"
-            parent.mkdir(parents=True)
+            # Windows rejects a plain mkdir beyond MAX_PATH on machines where
+            # LongPathsEnabled is unset, which would fail while building the
+            # fixture instead of exercising the product. Create it extended.
+            os.makedirs(_filesystem_path(str(parent)), exist_ok=True)
             source = parent / "long.ueanim"
-            source.write_bytes(b"first")
+            with open(_filesystem_path(str(source)), "wb") as stream:
+                stream.write(b"first")
 
             self.assertTrue(_filesystem_path(str(source)).startswith("\\\\?\\"))
             first = make_manifest_source(0, "SK", "Moves", "Long", str(source))
-            source.write_bytes(b"second-version")
+            with open(_filesystem_path(str(source)), "wb") as stream:
+                stream.write(b"second-version")
             changed = make_manifest_source(0, "SK", "Moves", "Long", str(source))
 
             self.assertNotEqual(first["revision"], changed["revision"])
+        finally:
+            # TemporaryDirectory's plain rmtree cannot descend past MAX_PATH.
+            shutil.rmtree(_filesystem_path(directory), ignore_errors=True)
 
     def test_source_revision_detects_same_size_edits_with_preserved_timestamp(self):
         with tempfile.TemporaryDirectory() as directory:
