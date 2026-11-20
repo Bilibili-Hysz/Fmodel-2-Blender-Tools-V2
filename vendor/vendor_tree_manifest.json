@@ -23,7 +23,7 @@
     "**/*.pyd"
   ],
   "file_count": 74,
-  "tree_sha256": "6cf6014bdae11d8a7007f5ae2f683425838dfc45fcc0d75aeadfa08d32f460cb",
+  "tree_sha256": "80eac324aba9ee4297115b32c4e0319a1b6cc7a63795ca6e63ed9ee94da4b55b",
   "files": [
     {
       "path": "README.md",
@@ -352,8 +352,8 @@
     },
     {
       "path": "io_scene_ueformat/op/import_helpers.py",
-      "size": 6213,
-      "sha256": "f322e87130a5a63a4ca470e4d2c5a2d7b3b3d0c59f902739c981f965fe584dff"
+      "size": 7520,
+      "sha256": "bde192155064af60d29bf268414836c2cd7b7f7b544926886fe9c0624fc95fb8"
     },
     {
       "path": "io_scene_ueformat/op/panels.py",
