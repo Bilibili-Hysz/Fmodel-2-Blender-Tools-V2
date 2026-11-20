@@ -14,6 +14,32 @@
 | 真实 Blender 5.2.3 无头执行 | 操作符、UI 状态、资源泄漏 |
 | 对抗性用例 | 路径逃逸、事务回滚、批量失败隔离、贴图缺失 |
 
+## 2. 修复记录（2026-11-20）
+
+上面那条缺陷已修复，两个仓库各自提交：
+
+| 仓库 | 提交 | 内容 |
+| --- | --- | --- |
+| canonical add-on | `c0e9aa6` | `_require_created_asset` 守卫 + 操作符读取返回值 |
+| V2 主机 | `8645105` | vendor 同步 + 树清单重建 + 回归测试 |
+
+**修复语义**：`import_file` 返回 `None` 时按资产类型区分——
+
+- `UEPoseOptions`：**合法**（姿势就地应用，不建对象）→ 仍然成功
+- `UEModelOptions` / `UEAnimOptions`：**异常**（解析成功但无内容可建）→ 走失败路径并报告原因
+
+**验证**：
+
+- 真实 Blender 5.2.3 实测：零几何 `.uemodel` → `FAILED`，报告含 `LOD` 原因；正常模型 → `SUCCESS`
+- 部署副本（`%APPDATA%` 下的 addons 目录）同样验证通过
+- 反向对照：移除守卫调用 → 新测试变红；恢复 → 变绿
+- 新增 `tests/test_import_result_contract.py`（5 项）
+
+**连带发现并修复**：`scripts/audit_pipeline_failure_boundaries.py` 用固定名单
+从 AST 提取操作符代码，新增的模块级辅助函数不在名单内，导致审计脚本 `NameError`。
+已改为**自动解析 execute() 的依赖闭包**，以后操作符再加辅助函数不会重蹈覆辙。
+反向对照确认审计仍能检出真实缺陷（注入 false-success → `FINDINGS` + `falseSuccessCount: 3`）。
+
 ## 2. 已确认的缺陷
 
 ### 缺陷：零几何文件被报告为导入成功（中等严重）
